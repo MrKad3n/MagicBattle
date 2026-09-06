@@ -33,7 +33,7 @@
 	function builderManaOpts(){
 		return (typeof inventoryManaOpts==='function')
 			? inventoryManaOpts(editingSlot, builderSpell)
-			: { stats: computeStats(), slot: editingSlot, isUltimate: editingSlot===9, mageClass: STATE.mageClass };
+			: { stats: computeStats(), slot: editingSlot, isUltimate: editingSlot===9, mageClass: STATE.mageClass, mageClass2: STATE.mageClass2 };
 	}
 	function displayedCost(spell){
 		if(typeof displayedSpellMana==='function') return displayedSpellMana(spell, builderManaOpts());
@@ -798,6 +798,17 @@
 			return prod * phaseEffectiveCount(ph);
 		}, 1);
 	}
+	function necroSummonSizeCap(ph){
+		const isUlt = editingSlot===9;
+		const isNecro = (typeof STATE!=='undefined') && (STATE.mageClass==='necromancer' || STATE.mageClass2==='necromancer');
+		if(ph && ph.shape==='summon' && isNecro && typeof necroSummonStatCaps==='function'){
+			const t = ph.necroSummonType;
+			const id = (t && t!=='random' && t!=='') ? t : 'imp';
+			return necroSummonStatCaps(id, isUlt).sizeMax;
+		}
+		return 2;
+	}
+
 	function limits(idx){
 		const ph = builderSpell.phases[idx];
 		const isUlt = editingSlot===9;
@@ -807,12 +818,19 @@
 		const transEnhanced = (spellHasTransformation && idx>0) || isTransformLoadout;
 		const isBig = ph.shape==='solidify'||ph.shape==='wall';
 		const rankPowerCap = getRankMaxPower();
-		const basePowerMax = (spellHasDomain && idx>0) ? 10 : transEnhanced ? 15 : (isUlt?20:10);
-		const sizeMax = transEnhanced ? 5.5 : isBig?(isUlt?10:6):(isUlt?8:3);
-		const durMax = (spellHasDomain && idx>0) ? 6 : ((ph.behavior==='stationary'||ph.behavior==='selfCast'||ph.behavior==='ground'||ph.behavior==='control'||ph.shape==='beam'||(ph.effects||[]).includes('solidify'))?30:isUlt?10:5);
+		const isNecro = (typeof STATE!=='undefined') && (STATE.mageClass==='necromancer' || STATE.mageClass2==='necromancer');
+		const necroType = ph.shape==='summon' && isNecro ? (ph.necroSummonType||'imp') : '';
+		const necroCaps = (ph.shape==='summon' && isNecro && typeof necroSummonStatCaps==='function')
+			? necroSummonStatCaps((necroType && necroType!=='random' && necroType!=='') ? necroType : 'imp', isUlt)
+			: null;
+		const basePowerMax = necroCaps ? necroCaps.powerMax : ((spellHasDomain && idx>0) ? 10 : transEnhanced ? 15 : (isUlt?20:10));
+		const sizeMax = ph.shape==='summon' ? (necroCaps ? necroCaps.sizeMax : 2) : (transEnhanced ? 5.5 : isBig?(isUlt?10:6):(isUlt?8:3));
+		const durMax = ph.shape==='summon' ? (necroCaps ? necroCaps.durMax : (isUlt?90:60)) : ((spellHasDomain && idx>0) ? 6 : ((ph.behavior==='stationary'||ph.behavior==='selfCast'||ph.behavior==='ground'||ph.behavior==='control'||ph.shape==='beam'||(ph.effects||[]).includes('solidify'))?30:isUlt?10:5));
+		const speedMax = necroCaps ? necroCaps.speedMax : 10;
 		const others = spellTotalProjectiles(idx);
 		const countMax = (spellHasDomain && idx>0) ? 5 : Math.max(1, Math.floor(spellProjCap() / Math.max(1, others)));
-		return { powerMax: Math.min(basePowerMax, rankPowerCap), sizeMax, durMax, speedMax:10, countMax };
+		const powerMax = necroCaps ? necroCaps.powerMax : Math.min(basePowerMax, rankPowerCap);
+		return { powerMax, sizeMax, durMax, speedMax, countMax };
 	}
 
 	function lockInfo(kind, key, idx){
@@ -850,8 +868,36 @@
 	}
 
 	/* ---------- render ---------- */
+	function captureBuilderScroll(){
+		const body = document.querySelector('#spellModal .modal-body');
+		const editor = document.getElementById('nbEditor');
+		return {
+			winX: window.scrollX || 0,
+			winY: window.scrollY || 0,
+			body: body ? body.scrollTop : 0,
+			editor: editor ? editor.scrollTop : 0,
+			panels: Array.from(document.querySelectorAll('#nbEditor .nb-panel')).map(el => el.scrollTop)
+		};
+	}
+	function restoreBuilderScroll(s){
+		if(!s) return;
+		const apply = () => {
+			window.scrollTo(s.winX, s.winY);
+			const body = document.querySelector('#spellModal .modal-body');
+			if(body) body.scrollTop = s.body;
+			const editor = document.getElementById('nbEditor');
+			if(editor) editor.scrollTop = s.editor;
+			document.querySelectorAll('#nbEditor .nb-panel').forEach((el, i) => {
+				if(s.panels[i] != null) el.scrollTop = s.panels[i];
+			});
+		};
+		apply();
+		requestAnimationFrame(apply);
+	}
+
 	window.renderNewSpellBuilder = function(){
 		if(!builderSpell) return;
+		const savedScroll = captureBuilderScroll();
 		if(selectedPhase >= builderSpell.phases.length) selectedPhase = 0;
 		for(const v of STATE.vows||[]){
 			if(!v) continue;
@@ -861,6 +907,12 @@
 			}
 		}
 		builderSpell.phases.forEach(ph => {
+			if(ph.shape==='summon'){
+				ph.behavior = 'straight';
+				const sizeCap = necroSummonSizeCap(ph);
+				if((ph.width||1) > sizeCap) ph.width = sizeCap;
+				if((ph.height||1) > sizeCap) ph.height = sizeCap;
+			}
 			ph.effects = (ph.effects||[]).filter(fx => {
 				if(fx==='phaseFork') return true;
 				if(EFFECT_ITEM_REQ[fx] && !hasItemEquipped(EFFECT_ITEM_REQ[fx])) return false;
@@ -933,6 +985,7 @@
 
 		renderEditor(selectedPhase);
 		startDoodles();
+		restoreBuilderScroll(savedScroll);
 	};
 
 	function setProp(idx, prop, val, rerender){
@@ -942,7 +995,15 @@
 			const [obj,key]=prop.split('.');
 			if(!ph[obj]) ph[obj]={};
 			ph[obj][key]=val;
-		} else ph[prop]=val;
+		} else {
+			ph[prop]=val;
+			if(prop==='shape' && val==='summon'){
+				ph.behavior='straight';
+				const sizeCap = necroSummonSizeCap(ph);
+				if((ph.width||1)>sizeCap) ph.width=sizeCap;
+				if((ph.height||1)>sizeCap) ph.height=sizeCap;
+			}
+		}
 		if(rerender) renderNewSpellBuilder();
 		else {
 			updateLiveReadouts(idx);
@@ -960,6 +1021,13 @@
 					chips[3].style.color = tot>spellProjCap()?'#e74c3c':'';
 				}
 			}
+			document.querySelectorAll('.nb-phase-box').forEach((box, i) => {
+				const ph = builderSpell.phases[i];
+				if(!ph) return;
+				const spans = box.querySelectorAll('.nb-phase-metrics span');
+				if(spans[0]) spans[0].textContent = 'Mana '+phaseManaShare(builderSpell, i);
+				if(spans[1]) spans[1].textContent = 'Ctrl '+phaseCtrl(ph);
+			});
 		}
 	}
 
@@ -1007,7 +1075,9 @@
 			opt.addEventListener('mousemove', moveTip);
 			opt.addEventListener('mouseleave', hideTip);
 			opt.querySelector('.nb-q').addEventListener('click', ev => { ev.stopPropagation(); openHelp(kind, ent.key); });
-			opt.addEventListener('click', () => {
+			opt.addEventListener('click', ev => {
+				ev.preventDefault();
+				ev.stopPropagation();
 				if(lock) return;
 				if(kind==='shape') setProp(idx,'shape',ent.key,true);
 				else setProp(idx,'behavior',ent.key,true);
@@ -1036,7 +1106,7 @@
 			opt.addEventListener('mouseleave', hideTip);
 			const q = opt.querySelector('.nb-q');
 			if(q) q.addEventListener('click', ev => { ev.stopPropagation(); openHelp(helpKind, ent.key); });
-			opt.addEventListener('click', () => onPick(ent.key));
+			opt.addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); onPick(ent.key); });
 			panel.appendChild(opt);
 		});
 		wrap.querySelector('.nb-dd-btn').addEventListener('click', ev => {
@@ -1047,19 +1117,18 @@
 		return wrap;
 	}
 	function selectRow(label, value, options, onChange){
-		const row = document.createElement('label');
-		row.className = 'nb-toggle';
-		const sel = document.createElement('select');
-		options.forEach(o => {
-			const opt = document.createElement('option');
-			opt.value = o.value; opt.textContent = o.label;
-			if(String(o.value)===String(value)) opt.selected = true;
-			sel.appendChild(opt);
-		});
-		sel.addEventListener('change', e => onChange(e.target.value));
-		row.appendChild(Object.assign(document.createElement('span'), {textContent:label}));
-		row.appendChild(sel);
-		return row;
+		const wrap = document.createElement('div');
+		wrap.className = 'nb-section';
+		const lbl = document.createElement('div');
+		lbl.className = 'nb-section-lbl';
+		lbl.textContent = label;
+		wrap.appendChild(lbl);
+		wrap.appendChild(cosmeticDropdown(
+			String(value),
+			options.map(o => ({ key:String(o.value), label:o.label, icon:o.icon||'' })),
+			k => onChange(k)
+		));
+		return wrap;
 	}
 
 	function sliderRow(idx, prop, label, min, max, step, impactKey){
@@ -1118,18 +1187,57 @@
 		}
 		if(ph.shape==='summon'){
 			if(ph.summonRange==null) ph.summonRange=0;
-			if(ph.summonHealth==null) ph.summonHealth=0;
-			if(ph.summonSpeed==null) ph.summonSpeed=0;
+			if(ph.necroSummonType==null) ph.necroSummonType='random';
+			const isNecro = (typeof STATE!=='undefined') && (STATE.mageClass==='necromancer' || STATE.mageClass2==='necromancer');
+			const isUltSlot = editingSlot===9;
+			if(isNecro && typeof isUltOnlyNecroType==='function' && ph.necroSummonType && isUltOnlyNecroType(ph.necroSummonType) && !isUltSlot){
+				ph.necroSummonType='random';
+			}
+			if(isNecro && typeof getSummonCatalog==='function'){
+				const cat = getSummonCatalog().filter(e => isUltSlot || typeof isUltOnlyNecroType!=='function' || !isUltOnlyNecroType(e.id));
+				host.appendChild(selectRow('Necro Summon', ph.necroSummonType==null?'random':ph.necroSummonType, [
+					{value:'random',label:'Random Summon'},
+					{value:'',label:'Choose on cast'},
+					...cat.map(e => ({value:e.id, label:e.name+'  ('+e.points+' pt'+(e.points===1?'':'s')+')'}))
+				], v => setProp(idx,'necroSummonType', v, true)));
+				const hint = document.createElement('div');
+				hint.className='nb-hint';
+				const cap = (typeof NECRO_POINT_CAP==='number')?NECRO_POINT_CAP:15;
+				const dcap = (typeof NECRO_DOMAIN_POINT_CAP==='number')?NECRO_DOMAIN_POINT_CAP:50;
+				const picked = cat.find(e => e.id===ph.necroSummonType);
+				let manaLine = '';
+				if(picked && editingSlot!==9 && typeof necroRaiseManaCosts==='function'){
+					const opts = Object.assign({}, builderManaOpts(), { spell: builderSpell });
+					const costs = necroRaiseManaCosts(picked.id, opts);
+					if(costs.total > 0) manaLine = '  ·  '+costs.total+' total mana';
+				}
+				hint.textContent = picked
+					? picked.name+' costs '+picked.points+' / '+cap+' points ('+dcap+' in a Domain).'+manaLine
+					: ph.necroSummonType===''
+						? 'Choose a discovered foe when you cast. Raid/secret bosses only from the Ultimate slot.'
+						: cat.length
+							? 'Random Summon picks a discovered foe you can afford. Raid/secret bosses only from the Ultimate slot. Point cap '+cap+' (Domain '+dcap+').'
+							: 'Defeat enemies to unlock necro summons. Random Summon and Choose on cast still work.';
+				host.appendChild(hint);
+			}
 			host.appendChild(sliderRow(idx,'summonRange','+Range',0,10,1,'count'));
-			host.appendChild(sliderRow(idx,'summonHealth','+Health',0,10,1,'count'));
-			host.appendChild(sliderRow(idx,'summonSpeed','+Speed',0,10,1,'count'));
-			host.appendChild(selectRow('Close Range', !!ph.summonClose, [
-				{value:'false',label:'No — stay at range'},
-				{value:'true',label:'Yes — rush enemies'},
+			const statHint = document.createElement('div');
+			statHint.className='nb-hint';
+			const hintType = (ph.necroSummonType && ph.necroSummonType!=='random') ? ph.necroSummonType : 'imp';
+			const caps = (isNecro && typeof necroSummonStatCaps==='function')
+				? necroSummonStatCaps(hintType, isUltSlot)
+				: { sizeMax:2, durMax:isUltSlot?90:60 };
+			statHint.textContent = isNecro
+				? 'Speed moves the summon and slightly raises attack speed. Spell Power sets health and necro damage. Duration max '+caps.durMax+'s for every necro summon. Size scales the body and projectiles (max '+caps.sizeMax+'× here). Ultimate summons under 6 points can be buffed further; raid bosses stay at standard caps. Buff mana scales with point cost.'
+				: 'Speed moves the summon. Spell Power sets health. Duration is lifetime in seconds. Size scales the body up to 2×.';
+			host.appendChild(statHint);
+			host.appendChild(selectRow('Approach', !!ph.summonClose, [
+				{value:'false',label:'Stay at range'},
+				{value:'true',label:'Follow enemy'},
 			], v => setProp(idx,'summonClose', v==='true', true)));
-			host.appendChild(selectRow('Self Reliance', !!ph.summonSelfReliance, [
-				{value:'false',label:'No — follow cursor'},
-				{value:'true',label:'Yes — auto-target enemies'},
+			host.appendChild(selectRow('Orders', !!ph.summonSelfReliance, [
+				{value:'false',label:'Follow cursor'},
+				{value:'true',label:'Lock on to enemy'},
 			], v => setProp(idx,'summonSelfReliance', v==='true', true)));
 		}
 	}
@@ -1267,6 +1375,9 @@
 		if((ph.count||1)>lim.countMax) ph.count=lim.countMax;
 		if((ph.aroundSelfCount||4)>lim.countMax) ph.aroundSelfCount=Math.min(ph.aroundSelfCount, lim.countMax);
 		if((ph.speed||1)>lim.speedMax) ph.speed=lim.speedMax;
+		if((ph.width||1)>lim.sizeMax) ph.width=lim.sizeMax;
+		if((ph.height||1)>lim.sizeMax) ph.height=lim.sizeMax;
+		if((ph.power||1)>lim.powerMax) ph.power=lim.powerMax;
 
 		host.innerHTML = '';
 		const fxPanel = document.createElement('div'); fxPanel.className='nb-panel';
@@ -1370,12 +1481,14 @@
 		const sExtra = document.createElement('div');
 		specialShape(ph, idx, sExtra);
 		rawPanel.appendChild(sExtra);
-		const bLbl = document.createElement('div'); bLbl.className='nb-section-lbl'; bLbl.style.marginTop='10px'; bLbl.textContent='Behavior';
-		rawPanel.appendChild(bLbl);
-		rawPanel.appendChild(dropdown('behavior', idx, ph.behavior, catalogEntries('behavior')));
-		const bExtra = document.createElement('div');
-		specialBeh(ph, idx, bExtra);
-		rawPanel.appendChild(bExtra);
+		if(ph.shape!=='summon'){
+			const bLbl = document.createElement('div'); bLbl.className='nb-section-lbl'; bLbl.style.marginTop='10px'; bLbl.textContent='Behavior';
+			rawPanel.appendChild(bLbl);
+			rawPanel.appendChild(dropdown('behavior', idx, ph.behavior, catalogEntries('behavior')));
+			const bExtra = document.createElement('div');
+			specialBeh(ph, idx, bExtra);
+			rawPanel.appendChild(bExtra);
+		}
 
 		if(isDomain){
 			appendDomainSettings(rawPanel, ph, idx);
@@ -1432,12 +1545,13 @@
 			const extra = document.createElement('div');
 			extra.className='nb-extra';
 			if(idx===0){
-				extra.innerHTML += '<label class="nb-toggle"><span>Hold to release</span><select data-hold><option value="false"'+(ph.holdDown?'':' selected')+'>Off</option><option value="true"'+(ph.holdDown?' selected':'')+'>On</option></select></label>';
+				extra.appendChild(selectRow('Hold to release', !!ph.holdDown, [
+					{value:'false',label:'Off'},{value:'true',label:'On'},
+				], v => setProp(idx,'holdDown', v==='true', true)));
 			}
-			extra.innerHTML += '<label class="nb-toggle"><span>No Hit</span><select data-nohit><option value="false"'+(ph.noHit?'':' selected')+'>Deals damage</option><option value="true"'+(ph.noHit?' selected':'')+'>Harmless</option></select></label>';
-			const hold = extra.querySelector('[data-hold]');
-			if(hold) hold.addEventListener('change', e => setProp(idx,'holdDown', e.target.value==='true', true));
-			extra.querySelector('[data-nohit]').addEventListener('change', e => setProp(idx,'noHit', e.target.value==='true', true));
+			extra.appendChild(selectRow('No Hit', !!ph.noHit, [
+				{value:'false',label:'Deals damage'},{value:'true',label:'Harmless'},
+			], v => setProp(idx,'noHit', v==='true', true)));
 			rawPanel.appendChild(extra);
 		}
 

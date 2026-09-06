@@ -17,7 +17,7 @@
 			rainHeight:150,
 			barrageHeight:200,
 			groundRadius:200, groundAutoLock:true,
-			summonRange:0, summonHealth:0, summonSpeed:0, summonClose:false, summonSelfReliance:false,
+			summonRange:0, summonHealth:0, summonSpeed:0, summonClose:false, summonSelfReliance:false, necroSummonType:'random',
 			effectPower:1, effectDuration:1,
 			randomDelayMax:0.5,
 			evenDelayDuration:0.5,

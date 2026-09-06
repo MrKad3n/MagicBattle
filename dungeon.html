@@ -15,6 +15,9 @@ canvas{display:block}
 #backBtn:hover{background:rgba(255,255,255,.22)}
 #hotbar{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);display:flex;gap:4px;z-index:10;pointer-events:none}
 .hb-slot{width:52px;height:56px;background:rgba(0,0,0,.55);border:2px solid rgba(255,255,255,.2);border-radius:7px;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;transition:border-color .15s,background .15s;overflow:hidden}
+.hb-slot.hb-necro{width:58px;height:72px}
+.hb-raise{font-size:8px;color:#5dade2;line-height:1.15;text-align:center}
+.hb-raise .hb-total{color:#ffcc44}
 .hb-slot.active{border-color:#6c5ce7;background:rgba(108,92,231,.25)}
 .hb-cd-overlay{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.6);pointer-events:none}
 .hb-key{font-size:10px;color:#888;position:absolute;top:2px;left:5px}
@@ -211,6 +214,16 @@ body.ai-chat-open #hud{pointer-events:none;opacity:0.45}
 
 <!-- Interaction Prompt -->
 <div id="interactPrompt">Press <b>E</b> to interact</div>
+<div id="dungeonMeter" style="display:none;position:fixed;top:44px;left:50%;transform:translateX(-50%);z-index:16;background:rgba(0,0,0,0.55);padding:8px 12px;border-radius:8px;border:1px solid rgba(255,120,40,0.35)"></div>
+<div id="dungeonChoice" style="display:none;position:fixed;inset:0;z-index:70;align-items:center;justify-content:center;background:rgba(0,0,0,0.55)">
+</div>
+<style>
+.dch-panel{width:min(460px,92vw);background:#1a0e08;border:2px solid #c45a18;border-radius:12px;padding:18px 20px;color:#f4e0c8}
+.dch-panel h3{margin:0 0 12px;color:#ffaa44}
+.dch-panel button{display:block;width:100%;text-align:left;margin:8px 0;padding:10px 12px;border:none;border-radius:8px;background:#3a1a0c;color:#ffe0b0;cursor:pointer}
+.dch-panel button small{display:block;color:#c9a07a;margin-top:4px}
+.dch-panel .dch-cancel{background:#222}
+</style>
 
 <!-- Notification -->
 <div id="notification"></div>
@@ -243,14 +256,20 @@ body.ai-chat-open #hud{pointer-events:none;opacity:0.45}
 <script src="https://js.puter.com/v2/" onload="try{puter.quiet=true}catch(e){}"></script>
 <script src="conversational-npc.js"></script>
 <script src="npc-profiles.js"></script>
-<script src="scrolls.js?v=1"></script>
-<script src="spell-cost.js?v=2"></script>
+<script src="scrolls.js?v=2"></script>
+<script src="spell-cost.js?v=14"></script>
+<script src="fire-dungeon-world.js?v=4"></script>
+<script src="dungeon-gen.js?v=3"></script>
 <script>
 /* =========================================================
    Magic Battle — Unified Spell Battle Engine
    ========================================================= */
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
+var inventoryOpen = false;
+var dialogueActive = false;
+var necroSelectOpen = false;
+var scrollShopOpen = false;
 let CAMERA_ZOOM = 1.4;
 const CAMERA_ZOOM_SOLO = 1.4;
 function resize(){canvas.width=Math.round(innerWidth*CAMERA_ZOOM);canvas.height=Math.round(innerHeight*CAMERA_ZOOM);canvas.style.width=innerWidth+'px';canvas.style.height=innerHeight+'px'}
@@ -275,6 +294,8 @@ const COOP_SLOT = (function(){
 // Difficulty multipliers: easy / normal / hard
 const DIFF_HP_MULT = DIFFICULTY === 'hard' ? 2 : DIFFICULTY === 'easy' ? 0.6 : 1;
 const DIFF_SIZE_MULT = 1.4; // always use hard-mode size for all difficulties
+const ENEMY_ATK_SCALE = 1.3; // larger enemy projectiles, AOE, and attack range
+function enemyAtkRange(r){ return (r || 0) * ENEMY_ATK_SCALE; }
 const DIFF_DMG_MULT = DIFFICULTY === 'hard' ? 1.5 : DIFFICULTY === 'easy' ? 0.7 : 1;
 const DIFF_CD_MULT = DIFFICULTY === 'hard' ? 0.8 : DIFFICULTY === 'easy' ? 1.5 : 1; // cooldown multiplier (lower = faster attacks)
 
@@ -284,15 +305,66 @@ const SPRITE_COLS = 6, SPRITE_ROWS = 4;
 const SPRITE_ROW = { idle: 0, walk: 1, attack: 2, defeat: 3 };
 const SPRITE_FPS = 8; // game frames per animation frame
 const ATTACK_ANIM_DURATION = SPRITE_FPS * SPRITE_COLS; // 48 frames for full attack cycle
-const SPRITE_SCALE = { imp:3.2, flameSerpent:2.8, emberMage:2.8, magmaGolem:3.0, fireSprite:3.8, fireDragon:1.4, frostWraith:3.2, iceArcher:2.8, snowBeast:3.0, cryoMage:2.8, glacierSentinel:3.0, frostColossus:1.4, rockGolem:3.0, vineCrawler:2.8, caveSpider:2.8, crystalMage:2.8, mudElemental:3.0, earthColossus:1.4, ironSentinel:3.0, forgeDrone:3.5, slagBrute:2.8, ironColossus:1.4, thornWolf:3.0, sporeFungus:2.8, mossWraith:3.2, willowWisp:3.5, glowBeetle:2.8, stalactiteBat:3.2, deepRootHorror:1.8, skyVine:2.8, windSylph:3.2, elderTreant:2.0, stormRaptor:2.0, darkVineCrawler:2.8, darkThornWolf:3.0, darkMossWraith:3.2, boneWraith:3.2, babyDragon:1.8, flameSalamander:3.0, magmaImp:3.2, fireColossus:1.4, abyssalGuardian:2.8, coralSentinel:3.0, depthSerpent:3.0, sandWraith:3.0, tombGuardian:2.8, desertSerpent:3.0, mummyWarrior:2.8, scarabSwarm:3.2, sandstormDjinn:2.6, seraphel:1.6, voidArbiter:2.0, infernalKitten:1.4 };
-const SPRITE_COLS_OVERRIDE = { fireDragon: 4, frostColossus: 4, earthColossus: 4, ironColossus: 4, fireColossus: 4, crystalMage: 7, elderTreant: 4, stormRaptor: 4, deepRootHorror: 4, skyVine: 8, windSylph: 8, darkMossWraith: 8, babyDragon: 4, seraphel: 10, voidArbiter: 4, infernalKitten: 2 };
-const SPRITE_ROWS_OVERRIDE = { infernalKitten: 1 };
+const SPRITE_SCALE = { imp:3.2, flameSerpent:2.8, emberMage:2.8, magmaGolem:3.0, fireSprite:3.8, magmaWarden:1.7, fireDragon:1.4, frostWraith:3.2, iceArcher:2.8, snowBeast:3.0, cryoMage:2.8, glacierSentinel:3.0, frostColossus:1.4, rockGolem:3.0, vineCrawler:2.8, caveSpider:2.8, crystalMage:2.8, mudElemental:3.0, earthColossus:1.4, ironSentinel:3.0, forgeDrone:3.5, slagBrute:2.8, ironColossus:1.4, thornWolf:3.0, sporeFungus:2.8, mossWraith:3.2, willowWisp:3.5, glowBeetle:2.8, stalactiteBat:3.2, deepRootHorror:1.8, skyVine:2.8, windSylph:3.2, elderTreant:2.0, stormRaptor:2.0, darkVineCrawler:2.8, darkThornWolf:3.0, darkMossWraith:3.2, boneWraith:3.2, babyDragon:1.8, flameSalamander:3.0, magmaImp:3.2, fireColossus:1.4, abyssalGuardian:2.8, coralSentinel:3.0, depthSerpent:3.0, sandWraith:3.0, tombGuardian:2.8, desertSerpent:3.0, mummyWarrior:2.8, scarabSwarm:3.2, sandstormDjinn:2.6, seraphel:1.6, voidArbiter:2.0, infernalKitten:1.4, zenith:1.3 };
+const SPRITE_COLS_OVERRIDE = { fireDragon: 4, frostColossus: 4, earthColossus: 4, ironColossus: 4, fireColossus: 4, crystalMage: 7, elderTreant: 4, stormRaptor: 4, deepRootHorror: 4, skyVine: 8, windSylph: 8, darkMossWraith: 8, babyDragon: 4, seraphel: 10, voidArbiter: 4, infernalKitten: 2, zenith: 10 };
+const SPRITE_ROWS_OVERRIDE = { infernalKitten: 1, zenith: 7 };
+const SPRITE_SHEET_META = {
+	imp:             { src:'images/newEnemies/fireImp.png',          cols:10, rows:6 },
+	flameSerpent:    { src:'images/newEnemies/flameSerpent.png',     cols:8,  rows:6 },
+	emberMage:       { src:'images/newEnemies/emberMage.png',        cols:12, rows:6, defeatFrames:10 },
+	magmaGolem:      { src:'images/newEnemies/magmaGolem.png',       cols:10, rows:6 },
+	fireSprite:      { src:'images/newEnemies/fireSprite.png',       cols:10, rows:6 },
+	frostWraith:     { src:'images/newEnemies/frostWraith.png',      cols:10, rows:6, defeatFrames:5 },
+	iceArcher:       { src:'images/newEnemies/iceArcher.png',        cols:10, rows:6, defeatFrames:9 },
+	snowBeast:       { src:'images/newEnemies/snowBeast.png',        cols:8,  rows:6, walkFrames:6 },
+	cryoMage:        { src:'images/newEnemies/cryoMage.png',         cols:10, rows:6 },
+	glacierSentinel: { src:'images/newEnemies/glacierSentinel.png',  cols:10, rows:6 },
+	rockGolem:       { src:'images/newEnemies/rockGolem.png',        cols:10, rows:6 },
+	caveSpider:      { src:'images/newEnemies/caveSpider.png',       cols:10, rows:6 },
+	crystalMage:     { src:'images/newEnemies/crystalMage.png',      cols:10, rows:6 },
+	mudElemental:    { src:'images/newEnemies/mudElemental.png',     cols:10, rows:6 },
+	ironSentinel:    { src:'images/newEnemies/ironSentinel.png',     cols:10, rows:6 },
+	forgeDrone:      { src:'images/newEnemies/forgeDrone.png',       cols:10, rows:6 },
+	slagBrute:       { src:'images/newEnemies/slagBrute.png',        cols:10, rows:6 }
+};
+for(const _sk in SPRITE_SHEET_META){
+	SPRITE_COLS_OVERRIDE[_sk] = SPRITE_SHEET_META[_sk].cols;
+	SPRITE_ROWS_OVERRIDE[_sk] = SPRITE_SHEET_META[_sk].rows;
+}
+function enemySheetMeta(type){
+	return SPRITE_SHEET_META[type] || null;
+}
+function enemySheetUsable(type, row, isDefeat){
+	const meta = enemySheetMeta(type);
+	const cols = (meta && meta.cols) || SPRITE_COLS_OVERRIDE[type] || SPRITE_COLS;
+	const start = (meta && meta.startCol) || 0;
+	if(isDefeat && meta && meta.defeatFrames) return meta.defeatFrames;
+	if(row === SPRITE_ROW.walk && meta && meta.walkFrames) return meta.walkFrames;
+	return Math.max(1, cols - start);
+}
+function enemySheetFrameSize(type){
+	const img = (typeof ENEMY_SPRITE_SHEETS !== 'undefined') ? ENEMY_SPRITE_SHEETS[type] : null;
+	if(!img || !img.naturalWidth) return null;
+	const meta = enemySheetMeta(type);
+	const cols = (meta && meta.cols) || SPRITE_COLS_OVERRIDE[type] || SPRITE_COLS;
+	const rows = (meta && meta.rows) || SPRITE_ROWS_OVERRIDE[type] || SPRITE_ROWS;
+	return { fW: img.naturalWidth / cols, fH: img.naturalHeight / rows };
+}
+function enemySpriteDestSize(en, fW, fH){
+	const type = (en && (en.necroType || en.type)) || '';
+	const s = SPRITE_SCALE[type] || SPRITE_SCALE[en && en.type] || 1.5;
+	const targetW = Math.max(1, (en.w || 32) * s);
+	const targetH = Math.max(1, (en.h || 32) * s);
+	const ratio = (fW > 0 && fH > 0) ? (fW / fH) : 1;
+	if((en.w || 0) >= (en.h || 0)) return { rW: targetW, rH: targetW / ratio };
+	return { rH: targetH, rW: targetH * ratio };
+}
 const SPRITE_NAME_OVERRIDE = { cryoMage: 'cyro-mage', deepRootHorror: 'deep-root-horror', stalactiteBat: 'stalactite-bat', glowBeetle: 'glow-beetle', boneWraith: 'bone-wraith', babyDragon: 'baby-dragon', darkVineCrawler: 'dark-vine-crawler', darkThornWolf: 'dark-thorn-wolf', darkMossWraith: 'dark-moss-wraith', flameSalamander: 'flame-salamander', magmaImp: 'magma-imp', fireColossus: 'fire-colossus', abyssalGuardian: 'abyssal-guardian', coralSentinel: 'coral-sentinel', depthSerpent: 'depth-serpent', sandWraith: 'sand-wraith', tombGuardian: 'tomb-guardian', desertSerpent: 'desert-serpent', mummyWarrior: 'mummy-warrior', scarabSwarm: 'scarab-swarm', sandstormDjinn: 'sandstorm-djinn', seraphel: 'seraphel', voidArbiter: 'void-arbiter', infernalKitten: 'infernal-kitten' };
-// Fire enemies — JPG
+// Fire enemies — regulars use images/newEnemies
 ['imp','flameSerpent','emberMage','magmaGolem','fireSprite','fireDragon'].forEach(key => {
 	const name = key.replace(/([A-Z])/g, '-$1').toLowerCase();
 	const img = new Image();
-	img.src = 'images/enemies/' + name + '-sheet.png';
+	img.src = (SPRITE_SHEET_META[key] && SPRITE_SHEET_META[key].src) || ('images/enemies/' + name + '-sheet.png');
 	ENEMY_SPRITE_SHEETS[key] = img;
 });
 // Infernal Kitten (secret fire boss)
@@ -301,18 +373,18 @@ const SPRITE_NAME_OVERRIDE = { cryoMage: 'cyro-mage', deepRootHorror: 'deep-root
 	img.src = 'images/enemies/infernal-kitten-sheet.png';
 	ENEMY_SPRITE_SHEETS['infernalKitten'] = img;
 }
-// Ice enemies — PNG
+// Ice enemies — regulars use images/newEnemies
 ['frostWraith','iceArcher','snowBeast','cryoMage','glacierSentinel','frostColossus'].forEach(key => {
 	const name = SPRITE_NAME_OVERRIDE[key] || key.replace(/([A-Z])/g, '-$1').toLowerCase();
 	const img = new Image();
-	img.src = 'images/enemies/' + name + '-sheet.png';
+	img.src = (SPRITE_SHEET_META[key] && SPRITE_SHEET_META[key].src) || ('images/enemies/' + name + '-sheet.png');
 	ENEMY_SPRITE_SHEETS[key] = img;
 });
-// Earth enemies — PNG (except earthColossus which is JPG)
+// Earth enemies — regulars with SPRITE_SHEET_META use images/newEnemies
 ['rockGolem','vineCrawler','caveSpider','crystalMage','mudElemental'].forEach(key => {
 	const name = key.replace(/([A-Z])/g, '-$1').toLowerCase();
 	const img = new Image();
-	img.src = 'images/enemies/' + name + '-sheet.png';
+	img.src = (SPRITE_SHEET_META[key] && SPRITE_SHEET_META[key].src) || ('images/enemies/' + name + '-sheet.png');
 	ENEMY_SPRITE_SHEETS[key] = img;
 });
 {
@@ -327,11 +399,11 @@ const SPRITE_NAME_OVERRIDE = { cryoMage: 'cyro-mage', deepRootHorror: 'deep-root
 	img.src = 'images/enemies/' + name + '-sheet.png';
 	ENEMY_SPRITE_SHEETS[key] = img;
 });
-// Iron Forge enemies — PNG
+// Iron Forge enemies — regulars with SPRITE_SHEET_META use images/newEnemies
 ['ironSentinel','forgeDrone','slagBrute','ironColossus'].forEach(key => {
 	const name = key.replace(/([A-Z])/g, '-$1').toLowerCase();
 	const img = new Image();
-	img.src = 'images/enemies/' + name + '-sheet.png';
+	img.src = (SPRITE_SHEET_META[key] && SPRITE_SHEET_META[key].src) || ('images/enemies/' + name + '-sheet.png');
 	ENEMY_SPRITE_SHEETS[key] = img;
 });
 // Corrupted Sylvaris enemies — PNG
@@ -395,6 +467,7 @@ const ZENITH_SHEETS = {};
 	img.src = 'images/enemies/zenith-sheet-' + i + '.png';
 	ZENITH_SHEETS[i] = img;
 });
+ENEMY_SPRITE_SHEETS['zenith'] = ZENITH_SHEETS[1];
 
 // === SERAPHEL ANIMATION STATE MAP ===
 // Maps animation keys to { sheet, row, cols, rows, once, frames }
@@ -733,6 +806,7 @@ const ENEMY_DROPS = {
 	flameSerpent:     [{ id:'ember_shard', chance:0.4, min:1, max:2 }, { id:'serpent_scale', chance:0.25, min:1, max:1 }],
 	emberMage:        [{ id:'ember_shard', chance:0.5, min:1, max:2 }, { id:'arcane_dust', chance:0.35, min:1, max:2 }],
 	magmaGolem:       [{ id:'lava_essence', chance:0.3, min:1, max:1 }, { id:'stone_chip', chance:0.45, min:1, max:2 }, { id:'magma_droplet', chance:0.2, min:1, max:1 }],
+	magmaWarden:      [{ id:'molten_core', chance:1, min:1, max:1 }, { id:'lava_essence', chance:1, min:2, max:4 }, { id:'ember_shard', chance:1, min:4, max:6 }],
 	fireSprite:       [{ id:'ember_shard', chance:0.6, min:1, max:2 }, { id:'spirit_wisp', chance:0.2, min:1, max:1 }],
 	// --- Ice dungeon enemies ---
 	frostWraith:      [{ id:'ice_crystal', chance:0.4, min:1, max:2 }, { id:'spirit_wisp', chance:0.3, min:1, max:1 }],
@@ -799,7 +873,10 @@ function rollEnemyDrops(en){
 	const dropped = [];
 	for(const entry of table){
 		if(Math.random() < entry.chance){
-			const qty = entry.min + Math.floor(Math.random() * (entry.max - entry.min + 1));
+			let qty = entry.min + Math.floor(Math.random() * (entry.max - entry.min + 1));
+			if(typeof DungeonEnv !== 'undefined' && DungeonEnv.lootMultOf){
+				qty = Math.max(1, Math.round(qty * DungeonEnv.lootMultOf()));
+			}
 			const existing = playerData.inventory.find(e => e.itemId === entry.id);
 			if(existing) existing.qty += qty;
 			else playerData.inventory.push({ itemId: entry.id, qty: qty });
@@ -1174,7 +1251,8 @@ function dungeonManaOpts(slot, spell){
 		manaEfficiency: vowManaEfficiency,
 		slot,
 		isUltimate: !!(spell && spell.isUltimate && slot===9),
-		mageClass: activeMageClass
+		mageClass: playerData.mageClass || activeMageClass,
+		mageClass2: playerData.mageClass2 || activeMageClass2
 	};
 }
 
@@ -1196,11 +1274,12 @@ function generateFireDungeon(){
 	function rf(lo,hi){ return lo+rnd()*(hi-lo); }
 	function choice(arr){ return arr[Math.floor(rnd()*arr.length)]; }
 
-	const WORLD_W = 6400, WORLD_H = 9600;
-	const BOSS_X=400, BOSS_Y=8200, BOSS_W=2600, BOSS_H=1100;
-	const PREBOSS_CORRIDOR_X=400, PREBOSS_CORRIDOR_Y=8040, PREBOSS_CORRIDOR_W=2000, PREBOSS_CORRIDOR_H=200;
-	const PLAYER_START_X=180, PLAYER_START_Y=340;
-	const START_ROOM={x:80,y:180,w:580,h:360};
+	const KITTEN_HEADROOM = 1100;
+	const WORLD_W = 6400, WORLD_H = 9600 + KITTEN_HEADROOM;
+	const BOSS_X=400, BOSS_Y=8200 + KITTEN_HEADROOM, BOSS_W=2600, BOSS_H=1100;
+	const PREBOSS_CORRIDOR_X=400, PREBOSS_CORRIDOR_Y=8040 + KITTEN_HEADROOM, PREBOSS_CORRIDOR_W=2000, PREBOSS_CORRIDOR_H=200;
+	const PLAYER_START_X=180, PLAYER_START_Y=340 + KITTEN_HEADROOM;
+	const START_ROOM={x:80,y:180 + KITTEN_HEADROOM,w:580,h:360};
 
 	const corridors = [];
 	const enemies = [];
@@ -1549,15 +1628,14 @@ function generateFireDungeon(){
 const DUNGEONS = {
 /* ======== FIRE DUNGEON — Descending Volcano (Procedurally Generated) ======== */
 fire: (function(){
-	const _fd = generateFireDungeon();
-	return _fd;
+	if(typeof generateFireInfernalDepths === 'function') return generateFireInfernalDepths();
+	if(typeof generateDungeonWorld === 'function') return generateDungeonWorld('fire');
+	return generateFireDungeon();
 })(),
 /* ======== ICE DUNGEON — Long Frozen Passage ======== */
 ice: {
 	name: 'The Frozen Caverns',
-	worldW: 9800, worldH: 2400,
-	name: 'The Frozen Caverns',
-	worldW: 9800, worldH: 2400,
+	worldW: 11600, worldH: 2400,
 	bgColor: '#071225',
 	wallColor: '#173554', wallColor2: '#25507c', wallEdge: '#4e89b6',
 	floorHighlight: '#72b3d8', ceilShadow: '#061020',
@@ -1600,7 +1678,7 @@ ice: {
 
 		/* --- Boss approach + boss room (kept) --- */
 		{ x:8200, y:560, w:440, h:200 },            // Boss corridor
-		{ x:8200, y:400, w:1400, h:700 },           // BOSS ROOM (long flat arena)
+		{ x:8200, y:400, w:3000, h:700 },           // BOSS ROOM (long flat arena)
 	],
 	decorations: [
 		// Ice pools
@@ -1706,7 +1784,7 @@ ice: {
 		{ type:'frostWraith', x:7400, y:700, patrol:[7240,7720] },
 		{ type:'snowBeast', x:7900, y:700, patrol:[7800,8160] },
 		// Boss Room
-		{ type:'frostColossus', x:9000, y:600, patrol:[8300,9500] },
+		{ type:'frostColossus', x:9700, y:600, patrol:[8300,11100] },
 	],
 },
 
@@ -2722,7 +2800,7 @@ const OPENWORLD_CONFIG = {
 const SLIME_TYPE = {
 	name: 'Green Slime', hp: 60, maxHp: 60, damage: 12, speed: 0,
 	w: 36, h: 28, color: '#44cc66', color2: '#66ff88',
-	jumpForce: -10, jumpCooldown: 90, aggroRange: 300,
+	jumpForce: -10, jumpCooldown: 90, aggroRange: 540,
 	xp: 8,
 };
 
@@ -3567,8 +3645,9 @@ const SYLVARIS_CONFIG = {
 		{ x:15400, y:4100, w:300, h:20 },
 		{ x:16000, y:4100, w:300, h:20 },
 		{ x:15700, y:3900, w:250, h:20 },
-		// Corridor 3 connecting platforms
-		{ x:16400, y:3840, w:250, h:20 },
+		// Corridor 3 connecting ledge — must sit below the carved ceiling with room for the player (56px)
+		{ x:16480, y:4000, w:250, h:20 },
+		// Removed x:16400,y:3840 platform (ceiling crush / velocity lock near x~16528)
 		// Removed x:16900 platform (caused standable glitch/phase-to-surface near x~17080)
 	],
 	// Cave tunnel corridors (carved into tilemap as air — curved overlapping segments)
@@ -4777,6 +4856,7 @@ const dungeon = IS_DUNGEON ? (DUNGEONS[DUNGEON_TYPE] || DUNGEONS.fire) : {
 	spawnX: _cfg ? _cfg.playerStart.x : 200,
 	spawnY: _cfg ? _cfg.playerStart.y : 2200,
 };
+if(typeof window !== 'undefined') window.dungeon = dungeon;
 const diffLabel = DIFFICULTY.charAt(0).toUpperCase() + DIFFICULTY.slice(1);
 const diffColors = { easy:'#44dd88', normal:'#66aaff', hard:'#ff5555' };
 
@@ -5057,6 +5137,84 @@ function isSolid(col, row){
 	if(row < 0 || row >= MAP_ROWS || col < 0 || col >= MAP_COLS) return true;
 	return tileMap[row][col] === 0;
 }
+function rectOverlapsSolid(x, y, w, h){
+	const left = Math.floor(x / TILE);
+	const right = Math.floor((x + w - 0.1) / TILE);
+	const top = Math.floor(y / TILE);
+	const bottom = Math.floor((y + h - 0.1) / TILE);
+	for(let r = top; r <= bottom; r++){
+		for(let c = left; c <= right; c++){
+			if(isSolid(c, r)) return true;
+		}
+	}
+	return false;
+}
+function platformStandClear(x, y, w, h, plat){
+	if(!plat) return false;
+	const standY = plat.y - h;
+	return !rectOverlapsSolid(x, standY, w, h);
+}
+function entityInCeilingCrush(ent, x, y){
+	if(!ent || !IS_SYLVARIS || y + ent.h <= SYLVARIS_CONFIG.groundY + 50) return false;
+	if(rectOverlapsSolid(x, y, ent.w, ent.h)) return true;
+	for(const plat of sandboxPlatforms){
+		if(plat.y <= SYLVARIS_CONFIG.groundY) continue;
+		if(x + ent.w > plat.x && x < plat.x + plat.w &&
+		   y + ent.h > plat.y && y < plat.y + plat.h &&
+		   !platformStandClear(x, y, ent.w, ent.h, plat)) return true;
+	}
+	return false;
+}
+function markEntitySafeTilePos(ent){
+	if(!ent || rectOverlapsSolid(ent.x, ent.y, ent.w, ent.h)) return;
+	if(entityInCeilingCrush(ent, ent.x, ent.y)) return;
+	ent._safeX = ent.x;
+	ent._safeY = ent.y;
+}
+function unstuckFromTiles(ent){
+	if(!ent) return false;
+	const crushed = rectOverlapsSolid(ent.x, ent.y, ent.w, ent.h) || entityInCeilingCrush(ent, ent.x, ent.y);
+	if(!crushed){
+		markEntitySafeTilePos(ent);
+		return false;
+	}
+	if(ent._safeX != null && ent._safeY != null && !rectOverlapsSolid(ent._safeX, ent._safeY, ent.w, ent.h) && !entityInCeilingCrush(ent, ent._safeX, ent._safeY)){
+		ent.x = ent._safeX;
+		ent.y = ent._safeY;
+		ent.vx = 0;
+		ent.vy = 0;
+		return true;
+	}
+	const ox = ent.x, oy = ent.y;
+	const dirs = [[0,1],[0,-1],[-1,0],[1,0],[-1,1],[1,1],[-1,-1],[1,-1]];
+	for(let dist = 4; dist <= 280; dist += 4){
+		for(let i = 0; i < dirs.length; i++){
+			const nx = ox + dirs[i][0] * dist;
+			const ny = oy + dirs[i][1] * dist;
+			if(nx < 0 || ny < 0 || nx + ent.w > WORLD_W || ny + ent.h > WORLD_H) continue;
+			if(!rectOverlapsSolid(nx, ny, ent.w, ent.h) && !entityInCeilingCrush(ent, nx, ny)){
+				ent.x = nx;
+				ent.y = ny;
+				ent.vx = 0;
+				ent.vy = 0;
+				markEntitySafeTilePos(ent);
+				return true;
+			}
+		}
+	}
+	ent.x = ox;
+	ent.y = oy;
+	return false;
+}
+function clampFlyingHoverToAir(en){
+	if(!en || enemyPhasesWalls(en)) return;
+	if(!rectOverlapsSolid(en.x, en.y, en.w, en.h)) return;
+	let off = en.flyOffset || 0;
+	while(Math.abs(off) > 0.5 && rectOverlapsSolid(en.x, en.baseY + off, en.w, en.h)) off *= 0.5;
+	if(rectOverlapsSolid(en.x, en.baseY + off, en.w, en.h)) off = 0;
+	en.flyOffset = off;
+	en.y = (en.baseY || 0) + off;
+}
 function projectileUsesTileWalls(x, y){
 	if(IS_DUNGEON) return true;
 	if(IS_SYLVARIS && y > SYLVARIS_CONFIG.groundY) return true;
@@ -5124,17 +5282,12 @@ function checkPlatformLanding(x, y, w, h, vy){
 /* Boss room floating platforms (placed as solid tiles inside carved air) */
 if(IS_DUNGEON && DUNGEON_TYPE === 'fire'){
 	// Position platforms relative to the actual boss room rect so they always land inside it
-	const _br = dungeon._bossRoomRect; // {x:400,y:8200,w:2600,h:1100}
-	const bossPlats = [
-		// Wide center platform (~300 px above floor)
+	const _br = dungeon._bossRoomRect;
+	const bossPlats = dungeon._bossPlatforms || [
 		{ x:_br.x+780,  y:_br.y+800, w:680 },
-		// Upper-left elevated platform (~500 px above floor)
 		{ x:_br.x+100,  y:_br.y+600, w:320 },
-		// Upper-right elevated platform
 		{ x:_br.x+2180, y:_br.y+600, w:320 },
-		// Mid-left (same height as center, bridging gap)
 		{ x:_br.x+460,  y:_br.y+800, w:260 },
-		// Mid-right
 		{ x:_br.x+1860, y:_br.y+800, w:260 },
 	];
 	for(const plat of bossPlats){
@@ -5271,6 +5424,9 @@ addEventListener('keydown', e => {
 		if(scrollShopOpen){ closeScrollShop(); return; }
 		if(dialogueActive){
 			advanceDialogue();
+			return;
+		}
+		if(typeof DungeonEnv !== 'undefined' && DungeonEnv.tryInteract && DungeonEnv.tryInteract()){
 			return;
 		}
 		if(nearbyNpc){
@@ -5528,6 +5684,8 @@ if(IS_RAID){
 const bossTelegraphs = [];
 function spawnTelegraph(x, y, w, h, duration, color, type, label){
 	const d = duration || 60;
+	w = (w || 0) * ENEMY_ATK_SCALE;
+	h = (h || 0) * ENEMY_ATK_SCALE;
 	bossTelegraphs.push({
 		x, y, w, h, timer: 0, duration: d,
 		startTime: Date.now(), durationMs: (d / 60) * 450,
@@ -5600,9 +5758,766 @@ const LIGHT_ANCHOR_DURATION = 3 * FPS; // 3 seconds
 
 /* ===== NECROMANCER SUMMON SELECTION ===== */
 let pendingNecroSummon = null; // set when necro summon fires; triggers selection overlay
-let necroSelectOpen = false;
 let necroSelectEntries = []; // populated from bestiary
 let necroSelectScroll = 0;
+
+function necroPointCost(typeId){
+	return (typeof getSummonPointCost === 'function') ? getSummonPointCost(typeId) : 1;
+}
+function necroPointCap(fromDomain){
+	if(fromDomain) return (typeof NECRO_DOMAIN_POINT_CAP === 'number') ? NECRO_DOMAIN_POINT_CAP : 50;
+	return (typeof NECRO_POINT_CAP === 'number') ? NECRO_POINT_CAP : 15;
+}
+function necroPointsUsed(fromDomain){
+	let n = 0;
+	for(const m of playerMinions){
+		if(!m || !m.isNecroSummon) continue;
+		if(!!m.fromDomain !== !!fromDomain) continue;
+		n += m.summonPoints || necroPointCost(m.necroType);
+	}
+	return n;
+}
+function canAffordNecroSummon(typeId, fromDomain){
+	return necroPointsUsed(fromDomain) + necroPointCost(typeId) <= necroPointCap(fromDomain);
+}
+
+function summonSpellPower(ph, fallback){
+	const n = Number(ph && ph.power);
+	if(Number.isFinite(n) && n > 0) return n;
+	const f = Number(fallback);
+	return Number.isFinite(f) && f > 0 ? f : 1;
+}
+function summonSizeScale(ph, axis){
+	const raw = Number(ph && ph[axis]);
+	const n = Number.isFinite(raw) && raw > 0 ? raw : 1;
+	return Math.max(0.3, Math.min(8, n));
+}
+function summonMoveFromSpeed(ph, et){
+	const spd = Math.max(0.3, Number(ph && ph.speed) || 1);
+	if(et) return Math.min((et.moveSpeed || 1.5) * (0.55 + spd * 0.18), 14);
+	return Math.min(0.7 + spd * 0.45, 14);
+}
+function summonHpFromPower(ph, et, fromDomain, fallbackPower){
+	const p = summonSpellPower(ph, fallbackPower);
+	if(et){
+		const hpMul = fromDomain ? 0.65 : 0.55;
+		return Math.max(8, Math.round(et.hp * hpMul + p * 35));
+	}
+	return Math.max(8, Math.round(20 + p * 20));
+}
+function summonDurationFrames(ph, projMaxAge, isNecro, isUlt){
+	const cap = isNecro ? (isUlt ? 90 : 60) * FPS : Infinity;
+	if(projMaxAge != null && isFinite(projMaxAge) && projMaxAge > 0) return Math.min(projMaxAge, cap);
+	const dur = Math.max(0.3, Number(ph && ph.duration) || 1);
+	return Math.min(Math.round(dur * FPS), cap);
+}
+function necroAttackCdMult(m){
+	const spd = Math.max(0.3, Number(m && m.ph && m.ph.speed) || 1);
+	const isUlt = !!(m && (m.isUltimate || m.sourceSlot === 9));
+	const caps = typeof necroSummonStatCaps === 'function' ? necroSummonStatCaps(m && m.necroType || 'imp', isUlt) : { speedMax: 10 };
+	const sMax = Math.max(1.1, caps.speedMax || 10);
+	const t = Math.max(0, Math.min(1, (spd - 1) / (sMax - 1)));
+	return 1 / (1 + t * 0.80);
+}
+function necroProjSizeScale(m){
+	const ph = m && m.ph;
+	if(!ph) return 1;
+	const body = (summonSizeScale(ph, 'width') + summonSizeScale(ph, 'height')) / 2;
+	return 1 + (body - 1) * 0.25;
+}
+function refundNecroCast(ns){
+	if(!ns || ns._refunded || !(ns.castManaCost > 0)) return;
+	ns._refunded = true;
+	if(ns.castFromTotal){
+		totalMana += ns.castManaCost;
+		updateTotalManaHUD();
+	} else {
+		const cap = (typeof maxMana === 'number' && isFinite(maxMana)) ? maxMana : mana + ns.castManaCost;
+		mana = Math.min(cap, mana + ns.castManaCost);
+		if(typeof updateManaHUD === 'function') updateManaHUD();
+	}
+	if(ns.sourceSlot != null) spellCooldowns[ns.sourceSlot] = 0;
+}
+function adoptNecroSpawnedEnemies(parent){
+	if(typeof window === 'undefined' || window._necroEnemyMarkStart == null) return;
+	const start = window._necroEnemyMarkStart;
+	if(start >= enemies.length) return;
+	const adopted = enemies.splice(start);
+	window._necroEnemyMarkStart = enemies.length;
+	for(const s of adopted){
+		if(!s || s._necroAdopted) continue;
+		s._necroAdopted = true;
+		const typeId = s.type || s.necroType;
+		const et = typeId && ENEMY_TYPES[typeId];
+		playerMinions.push({
+			x:s.x, y:s.y, w:s.w||24, h:s.h||24,
+			vx:0, vy:0,
+			color:(et && et.color) || '#8e44ad',
+			spell:parent.spell, phaseIdx:parent.phaseIdx,
+			sourceSlot:parent.sourceSlot, castId:parent.castId,
+			facing:s.facing || 1,
+			isUltimate:parent.isUltimate,
+			power:parent.power, spellPower:parent.spellPower, ph:parent.ph,
+			hp:s.hp || 20, maxHp:s.maxHp || s.hp || 20,
+			age:0, maxAge:parent.maxAge,
+			fireTimer:0, fireCooldown:Math.round(FPS*2.5),
+			target:null, animTimer:0, attackAnimTimer:0,
+			detectRange:(et && et.detectRange) || 400,
+			moveSpeed:(et && et.moveSpeed) || 2,
+			summonClose:!!parent.summonClose,
+			selfReliance:true,
+			isNecroSummon:true,
+			fromDomain:!!parent.fromDomain,
+			summonPoints:0,
+			necroType:typeId,
+			necroName:(et && et.name) || 'Minion',
+			necroFlies:!!(et && et.flies),
+			spellCooldowns: et && et.spells ? et.spells.map(() => Math.round(FPS)) : [],
+			onGround:false,
+			_necroSpawn:true
+		});
+	}
+}
+function markNecroFriendlyProj(p, m){
+	if(!p || !m) return p;
+	p.necroFriendly = true;
+	if(!p.hitTargets) p.hitTargets = new Set();
+	if(!p._necroDmgScaled){
+		p.power = Math.round((p.power || 0) * necroSummonDmgScale(m));
+		p._necroDmgScaled = true;
+	}
+	if(!p._necroSizeScaled){
+		const sz = necroProjSizeScale(m);
+		p.width = Math.max(4, (p.width || 8) * sz);
+		p.height = Math.max(4, (p.height || 8) * sz);
+		p._necroSizeScaled = true;
+	}
+	return p;
+}
+function tagNecroProjectiles(fromIdx, m){
+	for(let ei = fromIdx; ei < enemyProjectiles.length; ei++){
+		markNecroFriendlyProj(enemyProjectiles[ei], m);
+	}
+}
+function pickRandomNecroType(fromDomain, ns){
+	let bestiary = {};
+	try{ const raw = localStorage.getItem('magicBattle_bestiary'); if(raw) bestiary = JSON.parse(raw); }catch(e){}
+	const ult = !!(ns && (ns.isUltimate || ns.sourceSlot === 9));
+	const ids = [];
+	for(const key in ENEMY_TYPES){
+		if(!bestiary[key]) continue;
+		if(typeof isUltOnlyNecroType === 'function' && isUltOnlyNecroType(key) && !ult) continue;
+		if(!canAffordNecroSummon(key, fromDomain)) continue;
+		ids.push(key);
+	}
+	if(!ids.length) return null;
+	return ids[Math.floor(Math.random() * ids.length)];
+}
+function clampNecroPhaseStats(ph, typeId, isUlt){
+	const caps = typeof necroSummonStatCaps === 'function' ? necroSummonStatCaps(typeId, isUlt) : { sizeMax:2, powerMax:isUlt?20:10, speedMax:10, durMax:isUlt?90:60 };
+	const out = Object.assign({}, ph);
+	if(out.width > caps.sizeMax) out.width = caps.sizeMax;
+	if(out.height > caps.sizeMax) out.height = caps.sizeMax;
+	if(out.power > caps.powerMax) out.power = caps.powerMax;
+	if(out.speed > caps.speedMax) out.speed = caps.speedMax;
+	if(out.duration > caps.durMax) out.duration = caps.durMax;
+	return out;
+}
+function necroSummonDmgScale(m){
+	const pwr = Math.max(0.5, Number(m && m.spellPower) || 1);
+	const dv = (typeof activeDomain !== 'undefined' && activeDomain && activeDomain._dvSummonPow) ? (1 + activeDomain._dvSummonPow * 0.10) : 1;
+	// Spell power 1 = 20% of a real enemy; spell power 5 = full base enemy damage
+	return (pwr / 5) * dv;
+}
+function necroScaleKitDmg(en, dmg){
+	if(!en || !(en.isNecroSummon || en.necroFriendly)) return dmg;
+	const s = necroSummonDmgScale(en);
+	return Math.max(1, Math.round(dmg * s));
+}
+function minionOrderTarget(m){
+	if(!m.selfReliance){
+		return { x: mouseScreenX + camera.x, y: mouseScreenY + camera.y, w: 8, h: 8, _cursor: true };
+	}
+	if(player.lastAttackedEnemy && !player.lastAttackedEnemy.dead){
+		const en = player.lastAttackedEnemy;
+		const dd = Math.hypot(en.x+en.w/2-m.x-m.w/2, en.y+en.h/2-m.y-m.h/2);
+		if(dd < (m.detectRange||600)*2) return en;
+	}
+	let nearest=null, nearDist=m.detectRange||600;
+	for(const en of enemies){
+		if(en.dead) continue;
+		const dd=Math.hypot(en.x+en.w/2-m.x-m.w/2, en.y+en.h/2-m.y-m.h/2);
+		if(dd<nearDist){ nearest=en; nearDist=dd; }
+	}
+	for(const d of dummies){
+		if(d.dead) continue;
+		const dd=Math.hypot(d.x+d.w/2-m.x-m.w/2, d.y+d.h/2-m.y-m.h/2);
+		if(dd<nearDist){ nearest=d; nearDist=dd; }
+	}
+	return nearest;
+}
+function setMinionFacing(m, dx){
+	if(!m.facing) m.facing = 1;
+	if(Math.abs(dx) < 18){
+		m._faceFlip = 0;
+		return;
+	}
+	const want = dx > 0 ? 1 : -1;
+	if(want === m.facing){
+		m._faceFlip = 0;
+		return;
+	}
+	m._faceFlip = (m._faceFlip || 0) + 1;
+	if(m._faceFlip >= 14){
+		m.facing = want;
+		m._faceFlip = 0;
+	}
+}
+function minionHoldSide(m, dx){
+	if(m._lockSide !== 1 && m._lockSide !== -1){
+		m._lockSide = dx >= 0 ? -1 : 1;
+	}
+	return m._lockSide;
+}
+function steerMinionToward(m, tx, ty, stopDist){
+	const dx = tx - m.x - m.w/2;
+	const dy = ty - m.y - m.h/2;
+	const dist2 = Math.hypot(dx, dy) || 1;
+	const speed = m.moveSpeed || 2.5;
+	setMinionFacing(m, dx);
+	if(dist2 <= stopDist){
+		m.vx *= 0.82;
+		if(!(m.isNecroSummon && !m.necroFlies)) m.vy *= 0.82;
+		return;
+	}
+	const hdx = Math.abs(dx) < 16 ? 0 : dx;
+	if(m.isNecroSummon && !m.necroFlies){
+		if(hdx) m.vx += (hdx > 0 ? 1 : -1) * speed * 0.12;
+		if(dy < -40 && m.onGround) m.vy = -10;
+	} else {
+		const nd = Math.hypot(hdx, dy) || 1;
+		m.vx += (hdx / nd) * speed * 0.1;
+		m.vy += (dy / nd) * speed * 0.1;
+	}
+}
+function steerMinionHoldRange(m, tgt, keepDist){
+	const tx = tgt.x + (tgt.w || 0) / 2;
+	const ty = tgt.y + (tgt.h || 0) / 2;
+	const mx = m.x + m.w / 2;
+	const my = m.y + m.h / 2;
+	const dx = tx - mx;
+	const dy = ty - my;
+	const dist = Math.hypot(dx, dy) || 1;
+	const side = minionHoldSide(m, dx);
+	const holdX = tx + side * keepDist;
+	const slop = 36;
+	if(dist > keepDist + slop){
+		steerMinionToward(m, holdX, ty, 18);
+	} else if(dist < keepDist - slop){
+		const awayX = (mx - tx) * side > 0 ? mx + (mx - tx) : holdX;
+		steerMinionToward(m, awayX, my + (my - ty), 0);
+		const closing = (m.vx * dx + m.vy * dy) / dist;
+		if(closing > 0){
+			m.vx -= (dx / dist) * closing * 0.65;
+			m.vy -= (dy / dist) * closing * 0.65;
+		}
+	} else if(Math.abs(mx - holdX) > 22){
+		steerMinionToward(m, holdX, my, 12);
+	}
+	setMinionFacing(m, dx);
+}
+function enemyPhasesWalls(en){
+	const td = en && (en.typeDef || (en.necroType && typeof ENEMY_TYPES !== 'undefined' ? ENEMY_TYPES[en.necroType] : null));
+	if(!td || !td.flies) return false;
+	if(td.isBoss || td.phaseWalls) return true;
+	return false;
+}
+
+function necroCombatRaiseOpts(ns){
+	const slot = ns && ns.sourceSlot != null ? ns.sourceSlot : 0;
+	const spell = ns && ns.spell;
+	const opts = dungeonManaOpts(slot, spell);
+	opts.spell = spell;
+	opts.maxMana = (typeof maxMana === 'number' && isFinite(maxMana)) ? maxMana : 1500;
+	if(ns && (ns.isUltimate || ns.sourceSlot === 9)) opts.isUltimate = true;
+	return opts;
+}
+
+function zenithDeepCopyPool(src){
+	return JSON.parse(JSON.stringify(src || []));
+}
+function initNecroZenith(m){
+	m.zenithWills = zenithDeepCopyPool(ZENITH_WILLS);
+	m.zenithP2 = zenithDeepCopyPool(ZENITH_P2_TEMPLATES);
+	m.zenithP2Ready = false;
+	m.zenithMainPhase = 1;
+	m.zenithWillIndex = 0;
+	m.zenithBattleTimer = 0;
+	m.zenithGlobalCd = 40;
+	m.zenithOutcomes = [];
+	m.zenithTracker = { wallBlocks:0, dispelled:0, shieldHits:0, healEvents:0, dodgeLeft:0, dodgeRight:0, dodgeUp:0, hitsTaken:0, reflects:0 };
+	m.zenithIsDashing = false;
+	m.zenithDashTimer = 0;
+	m.zenithDashMax = 36;
+	m.zenithDashVx = 0;
+	m.zenithDashVy = 0;
+	m.zenithDashPower = 20;
+	m.zenithDashAoe = 55;
+	m.zenithThreatTimer = 0;
+	m._zenithAdaptCtx = function(){
+		return { tracker:m.zenithTracker, pools:[m.zenithWills, m.zenithP2], battleTimer:m.zenithBattleTimer, x:m.x, y:m.y, w:m.w, h:m.h };
+	};
+}
+function necroZenithAim(m, target){
+	const bx = m.x + m.w/2, by = m.y + m.h/2;
+	if(!target) return m.facing >= 0 ? 0 : Math.PI;
+	return Math.atan2(target.y + target.h/2 - by, target.x + target.w/2 - bx);
+}
+function necroZenithAimThreat(m){
+	const bx = m.x + m.w/2, by = m.y + m.h/2;
+	let best = null, bestScore = 0;
+	for(const ep of enemyProjectiles){
+		if(ep.necroFriendly || ep.hasHit) continue;
+		const dx = ep.x - bx, dy = ep.y - by;
+		const dist = Math.hypot(dx, dy);
+		if(dist > 900) continue;
+		const toward = (ep.vx||0)*(-dx) + (ep.vy||0)*(-dy);
+		if(toward <= 0) continue;
+		const score = (ep.power||1) * (1 - dist/900);
+		if(score > bestScore){ bestScore = score; best = ep; }
+	}
+	if(!best) return null;
+	const frames = Math.hypot(best.x - bx, best.y - by) / 9;
+	return Math.atan2(best.y + best.vy * frames * 0.55 - by, best.x + best.vx * frames * 0.55 - bx);
+}
+function necroZenithStamp(p, m, willIdx){
+	if(!p) return null;
+	const sz = typeof necroProjSizeScale === 'function' ? necroProjSizeScale(m) : 1;
+	p.necroFriendly = true;
+	p._necroZenithOwner = m;
+	p._necroZenithWillIdx = willIdx;
+	p.width = Math.max(4, (p.width||8) * sz);
+	p.height = Math.max(4, (p.height||8) * sz);
+	p.power = Math.max(6, Math.round((p.power||10) * (typeof necroSummonDmgScale === 'function' ? necroSummonDmgScale(m) : 1)));
+	if((p.effects||[]).includes('phaseThrough')) p._phaseThruPlatforms = true;
+	return p;
+}
+function necroZenithSpawn(m, ph, willIdx, isP2, target){
+	const pool = isP2 ? m.zenithP2 : m.zenithWills;
+	const will = pool && pool[willIdx];
+	const pwr = Math.round((ph.power||20) * (will && will.data ? (will.data.powerMult||1) : 1));
+	const col = ph.color || '#aaccff', col2 = ph.color2 || '#ffffff';
+	const destroySolid = (ph.effects||[]).includes('destroySolid');
+	const dispelImmune = (ph.effects||[]).includes('dispelImmune');
+	const efx = (ph.effects || []).filter(e => e !== 'destroySolid' && e !== 'dispelImmune');
+	const spd = ph.speed || 5;
+	const w = ph.width || 16, h = ph.height || 16;
+	const count = ph.count || 1;
+	const bx = m.x + m.w/2, by = m.y + m.h/2;
+	const spawned = [];
+	const stamp = (p) => {
+		const s = necroZenithStamp(p, m, willIdx);
+		if(!s) return;
+		if(destroySolid) s._destroysSolid = true;
+		if(dispelImmune){ s.dispelImmune = true; s.dispellable = false; }
+		if(s.effects && s.effects.includes('dispel')) s.reflectImmune = true;
+		if(efx.includes('ricochet')) s._allowBounce = true;
+		spawned.push(s);
+	};
+	const fire = (x, y, vx, vy, extra) => {
+		const p = spawnEnemyProj(x, y, vx, vy, Object.assign({
+			shape:ph.shape||'orb', power:pwr, width:w, height:h,
+			color:col, color2:col2, effects:efx, maxAge:ph.maxAge||160, trail:'magic',
+		}, extra||{}));
+		stamp(p);
+		return p;
+	};
+	if(ph.behavior === 'radial'){
+		const step = (Math.PI*2) / Math.max(count, 1);
+		const start = Math.random() * Math.PI*2;
+		for(let i=0;i<count;i++){
+			const ang = start + i * step;
+			fire(bx, by, Math.cos(ang)*spd, Math.sin(ang)*spd);
+		}
+	} else if(ph.behavior === 'meteor'){
+		const ang = necroZenithAim(m, target) + (Math.random()-0.5)*(ph.spread||0.15);
+		fire(bx, by, Math.cos(ang)*spd, Math.sin(ang)*spd, { gravity:0.12, maxAge:ph.maxAge||320 });
+	} else if(ph.behavior === 'dash'){
+		if(!m.zenithIsDashing){
+			const ang = necroZenithAim(m, target);
+			m.zenithIsDashing = true;
+			m.zenithDashTimer = 0;
+			m.zenithDashMax = 36;
+			m.zenithDashVx = Math.cos(ang) * 18;
+			m.zenithDashVy = Math.sin(ang) * 18;
+			m.zenithDashPower = Math.max(10, Math.round(pwr * (typeof necroSummonDmgScale === 'function' ? necroSummonDmgScale(m) : 1)));
+			m.zenithDashAoe = ph.aoeRadius || 55;
+			dmgNumbers.push({ x:bx, y:m.y-40, text:'⚡ DASH!', age:0, color:'#ff6600' });
+		}
+	} else if(ph.behavior === 'rain'){
+		const cr = ph.countRange;
+		const rainCount = cr ? cr[0] + Math.floor(Math.random() * (cr[1]-cr[0]+1)) : Math.max(count, 1);
+		const tx = target ? target.x + target.w/2 : bx;
+		const ty = target ? target.y : by;
+		const spread = Math.max(80, w * 3) * Math.min(rainCount, 5);
+		for(let ri=0;ri<rainCount;ri++){
+			const rx = tx + (rainCount > 1 ? -spread/2 + spread * ri / (rainCount-1) : (Math.random()-0.5)*110);
+			const ry = ty - 380;
+			const delay = ri * 80;
+			setTimeout(() => {
+				if(!m || m.hp <= 0) return;
+				fire(rx, ry, 0, spd*1.2, { gravity:0.15, maxAge:200 });
+			}, delay);
+		}
+	} else if(ph.behavior === 'stationary'){
+		let tx, ty;
+		if(ph.shape === 'wall'){
+			const side = target && ((target.vx||0) >= 0) ? 1 : -1;
+			tx = (target ? target.x + target.w/2 : bx) + side * (90 + Math.random()*60);
+			ty = target ? target.y + target.h/2 : by;
+			const p = fire(tx, ty, 0, 0, { shape:'wall', maxAge:ph.maxAge||260, trail:'none' });
+			if(p){
+				p._isNecroZenithWall = true;
+				p.dispelImmune = true; p.dispellable = false;
+				p.noWallCollide = true;
+			}
+			return spawned;
+		}
+		if(ph.spawnNearBoss){
+			tx = bx + (Math.random()-0.5)*180;
+			ty = by + Math.random()*60;
+		} else {
+			tx = target ? target.x + target.w/2 + (Math.random()-0.5)*60 : bx;
+			ty = target ? target.y + target.h/2 : by;
+		}
+		fire(tx, ty, 0, 0, {
+			maxAge:ph.maxAge||120, trail:'none', linger:true, lingerMax:ph.maxAge||120,
+			aoe:true, aoeRadius:w*0.9, aoeMax:ph.maxAge||120,
+		});
+	} else if(ph.behavior === 'homing'){
+		const baseAng = necroZenithAim(m, target);
+		const sp = ph.spread || 0;
+		for(let ci=0;ci<count;ci++){
+			const aOff = count > 1 ? -sp/2 + sp*ci/(count-1) : 0;
+			fire(bx, by, Math.cos(baseAng+aOff)*spd*0.5, Math.sin(baseAng+aOff)*spd*0.5, {
+				homing:true, homingStrength:ph.homingStrength||0.05, maxAge:ph.maxAge||220,
+			});
+		}
+	} else if(ph.behavior === 'zigzag'){
+		const baseAng = necroZenithAim(m, target);
+		const sp2 = ph.spread || 0;
+		for(let ci=0;ci<count;ci++){
+			const aOff = count > 1 ? -sp2/2 + sp2*ci/(count-1) : 0;
+			const bVx = Math.cos(baseAng+aOff)*spd, bVy = Math.sin(baseAng+aOff)*spd;
+			const p = fire(bx, by, bVx, bVy, { maxAge:ph.maxAge||220 });
+			if(p){ p._zigzag = true; p._zigBaseVx = bVx; p._zigBaseVy = bVy; p._zigFreq = 0.12; p._zigAmp = 2.5; }
+		}
+	} else if(ph.behavior === 'lob'){
+		const sp3 = ph.spread || 0;
+		const targetX = target ? target.x+target.w/2 : bx+m.facing*200;
+		const targetY = target ? target.y+target.h/2 : by;
+		for(let ci=0;ci<count;ci++){
+			const aOff = count > 1 ? -sp3/2 + sp3*ci/(count-1) : (Math.random()-0.5)*0.15;
+			const dx = targetX - bx, dy = targetY - by;
+			const dist = Math.max(1, Math.hypot(dx, dy));
+			fire(bx, by, (dx/dist)*spd + Math.sin(aOff)*spd*0.3, (dy/dist)*spd, { gravity:0.22, maxAge:ph.maxAge||200 });
+		}
+	} else {
+		const threatAng = efx.includes('dispel') ? necroZenithAimThreat(m) : null;
+		const baseAng = threatAng != null ? threatAng : necroZenithAim(m, target);
+		const sp4 = ph.spread || 0;
+		if(ph.shape === 'beam'){
+			for(let ci=0;ci<count;ci++){
+				const aOff = count > 1 ? -sp4/2 + sp4*ci/(count-1) : 0;
+				const p = fire(bx, by, 0, 0, { shape:'beam', maxAge:ph.maxAge||130, trail:'none' });
+				if(p){
+					p._isLaser = true; p._laserHitCd = 0;
+					p.beamLen = 0; p.beamAngle = baseAng + aOff;
+					p.startX = bx; p.startY = by;
+					p.noWallCollide = true;
+				}
+			}
+		} else {
+			for(let ci=0;ci<count;ci++){
+				const aOff = count > 1 ? -sp4/2 + sp4*ci/(count-1) : 0;
+				fire(bx, by, Math.cos(baseAng+aOff)*spd, Math.sin(baseAng+aOff)*spd, { maxAge:ph.maxAge||180 });
+			}
+		}
+	}
+	return spawned;
+}
+function necroZenithContinueChain(p){
+	if(!p || !p._necroZenithPhaseChain || !p._necroZenithPhaseChain.length) return;
+	const m = p._necroZenithOwner;
+	if(!m || m.hp <= 0) return;
+	const next = p._necroZenithPhaseChain[0];
+	const rest = p._necroZenithPhaseChain.slice(1);
+	const spawned = necroZenithSpawn(m, next, p._necroZenithWillIdx, p._necroZenithIsP2, m.target);
+	if(spawned[0] && rest.length){
+		spawned[0]._necroZenithPhaseChain = rest;
+		spawned[0]._necroZenithWillIdx = p._necroZenithWillIdx;
+		spawned[0]._necroZenithIsP2 = p._necroZenithIsP2;
+		spawned[0]._necroZenithOwner = m;
+	}
+	p._necroZenithPhaseChain = [];
+}
+function necroZenithFire(m, willIdx, isP2, target){
+	const pool = isP2 ? m.zenithP2 : m.zenithWills;
+	const will = pool && pool[willIdx];
+	if(!will) return;
+	const ph0 = will.phases[0];
+	const snapHits = m.zenithTracker.hitsTaken;
+	const spawned = necroZenithSpawn(m, ph0, willIdx, isP2, target);
+	const track = spawned[0] || null;
+	if(track){
+		m.zenithOutcomes.push({
+			willIdx, isP2, proj:track, snapHits, firedFrame:m.zenithBattleTimer
+		});
+		if(will.phases.length > 1){
+			track._necroZenithPhaseChain = will.phases.slice(1).map(ph => Object.assign({}, ph));
+			track._necroZenithIsP2 = isP2;
+		}
+	}
+	will.data.totalFired++;
+	m.attackAnimTimer = typeof ATTACK_ANIM_DURATION === 'number' ? ATTACK_ANIM_DURATION : 24;
+	dmgNumbers.push({ x:m.x+m.w/2, y:m.y-30, text:will.icon+' '+will.name, age:0, color:'#aaccff' });
+}
+function necroZenithProcessOutcomes(m){
+	const MAX_TRACK = 300;
+	for(let i = m.zenithOutcomes.length - 1; i >= 0; i--){
+		const po = m.zenithOutcomes[i];
+		const age = m.zenithBattleTimer - po.firedFrame;
+		const alive = enemyProjectiles.includes(po.proj);
+		if(alive && age < MAX_TRACK) continue;
+		const pool = po.isP2 ? m.zenithP2 : m.zenithWills;
+		const will = pool && pool[po.willIdx];
+		if(!will){ m.zenithOutcomes.splice(i, 1); continue; }
+		const hit = !!(po.proj && po.proj._necroZenithHit);
+		if(hit){
+			will.data.successes++;
+			will.data.powerMult = Math.min(2.8, will.data.powerMult + 0.04);
+			will.failStreak = 0;
+			m.zenithTracker.hitsTaken++;
+		} else {
+			will.data.failures++;
+			will.failStreak++;
+			let escape = 'dodge';
+			if(po.proj && po.proj._dispelled){ escape = 'dispelled'; m.zenithTracker.dispelled++; }
+			else if(po.proj && !alive && age < MAX_TRACK-10){ escape = 'wall'; m.zenithTracker.wallBlocks++; }
+			else {
+				const tgt = m.target;
+				if(tgt && po.proj){
+					if(tgt.x + tgt.w/2 < po.proj.x) m.zenithTracker.dodgeLeft++;
+					else m.zenithTracker.dodgeRight++;
+				}
+			}
+			zenithAdaptWill(po.willIdx, escape, pool, m._zenithAdaptCtx());
+		}
+		m.zenithOutcomes.splice(i, 1);
+	}
+}
+function necroZenithWatchEnemyAttacks(m){
+	const t = m.zenithTracker;
+	for(const en of enemies){
+		if(en.dead) continue;
+		if((en.vx||0) < -1.4) t.dodgeLeft++;
+		if((en.vx||0) > 1.4) t.dodgeRight++;
+		if((en.vy||0) < -3) t.dodgeUp++;
+	}
+	m.zenithThreatTimer++;
+	if(m.zenithThreatTimer < 75) return;
+	m.zenithThreatTimer = 0;
+	let shots = 0, walls = 0, heals = 0;
+	for(const ep of enemyProjectiles){
+		if(ep.necroFriendly) continue;
+		shots++;
+		if(ep.shape === 'wall' || ep._isZenithWall) walls++;
+		if(ep.effects && (ep.effects.includes('healSelf') || ep.effects.includes('heal'))) heals++;
+	}
+	if(shots >= 5){
+		t.dispelled += 2;
+		const idx = Math.floor(Math.random() * m.zenithWills.length);
+		m.zenithWills[idx].failStreak = (m.zenithWills[idx].failStreak||0) + 1;
+		zenithAdaptWill(idx, 'dispelled', m.zenithWills, m._zenithAdaptCtx());
+		dmgNumbers.push({ x:m.x+m.w/2, y:m.y-48, text:'✦ Adapts to volleys', age:0, color:'#88ddff' });
+	} else if(walls || spellWalls.length){
+		t.wallBlocks += 2;
+		const idx = Math.floor(Math.random() * m.zenithWills.length);
+		zenithAdaptWill(idx, 'wall', m.zenithWills, m._zenithAdaptCtx());
+		dmgNumbers.push({ x:m.x+m.w/2, y:m.y-48, text:'✦ Adapts to barriers', age:0, color:'#88ddff' });
+	} else if(heals){
+		t.healEvents += 2;
+		const idx = Math.floor(Math.random() * m.zenithWills.length);
+		zenithAdaptWill(idx, 'dodge', m.zenithWills, m._zenithAdaptCtx());
+	}
+}
+function necroZenithChoose(m){
+	if(m.zenithMainPhase >= 2 && m.zenithP2 && m.zenithP2.length && Math.random() < 0.45){
+		return { willIdx:Math.floor(Math.random()*m.zenithP2.length), isP2:true };
+	}
+	m.zenithWillIndex = (m.zenithWillIndex + 1) % m.zenithWills.length;
+	return { willIdx:m.zenithWillIndex, isP2:false };
+}
+function necroZenithUpdateWalls(m){
+	for(const wp of enemyProjectiles){
+		if(!wp._isNecroZenithWall || wp._necroZenithOwner !== m) continue;
+		const wHW = wp.width, wHH = wp.height * 3;
+		wp._dmgTimer = (wp._dmgTimer || 0) + 1;
+		if(wp._dmgTimer % 40 === 0){
+			for(const en of enemies.concat(dummies)){
+				if(!en || en.dead) continue;
+				if(en.x+en.w > wp.x-wHW && en.x < wp.x+wHW && en.y+en.h > wp.y-wHH && en.y < wp.y+wHH){
+					en.hp -= wp.power;
+					if(en.hp <= 0) en.hp = 0;
+					en.flash = 6;
+					wp._necroZenithHit = true;
+					spawnImpact(wp.x, wp.y-20, wp.color);
+				}
+			}
+		}
+		for(let pi = enemyProjectiles.length-1; pi >= 0; pi--){
+			const ep = enemyProjectiles[pi];
+			if(ep.necroFriendly || ep === wp) continue;
+			if(ep.x > wp.x-wHW && ep.x < wp.x+wHW && ep.y > wp.y-wHH && ep.y < wp.y+wHH){
+				ep.hasHit = true;
+				spawnImpact(ep.x, ep.y, wp.color);
+				enemyProjectiles.splice(pi, 1);
+			}
+		}
+	}
+}
+function updateNecroZenith(m, nearest){
+	if(!m.zenithWills) initNecroZenith(m);
+	if(nearest) setMinionFacing(m, (nearest.x+nearest.w/2) - (m.x+m.w/2));
+	m.zenithBattleTimer++;
+	if(m.zenithGlobalCd > 0) m.zenithGlobalCd--;
+	if(m.hp <= m.maxHp * 0.4 && m.zenithMainPhase === 1){
+		m.zenithMainPhase = 2;
+		m.zenithP2Ready = true;
+		dmgNumbers.push({ x:m.x+m.w/2, y:m.y-56, text:'✦ PHASE 2 — FINAL CONVERGENCE', age:0, color:'#ff0066' });
+	}
+	if(m.zenithIsDashing){
+		m.zenithDashTimer++;
+		m.x += m.zenithDashVx;
+		m.y += m.zenithDashVy;
+		m.vx = m.zenithDashVx;
+		m.vy = m.zenithDashVy;
+		const r = m.zenithDashAoe || 55;
+		for(const en of enemies.concat(dummies)){
+			if(!en || en.dead) continue;
+			const dd = Math.hypot(en.x+en.w/2-(m.x+m.w/2), en.y+en.h/2-(m.y+m.h/2));
+			if(dd < r){
+				en.hp -= m.zenithDashPower || 20;
+				if(en.hp <= 0) en.hp = 0;
+				en.flash = 8;
+				m.zenithTracker.hitsTaken++;
+				spawnImpact(en.x+en.w/2, en.y+en.h/2, '#aaccff');
+				m.zenithIsDashing = false;
+			}
+		}
+		if(m.zenithDashTimer >= m.zenithDashMax) m.zenithIsDashing = false;
+	}
+	necroZenithProcessOutcomes(m);
+	necroZenithWatchEnemyAttacks(m);
+	necroZenithUpdateWalls(m);
+	const cd = m.zenithMainPhase >= 2 ? 69 : 102;
+	const cdAdj = Math.round(cd * (typeof necroAttackCdMult === 'function' ? necroAttackCdMult(m) : 1));
+	if(!m.zenithIsDashing && m.zenithGlobalCd <= 0 && nearest){
+		const pick = necroZenithChoose(m);
+		necroZenithFire(m, pick.willIdx, pick.isP2, nearest);
+		m.zenithGlobalCd = cdAdj + Math.floor(Math.random()*16) - 8;
+	}
+}
+
+function raiseNecroMinion(ns, typeId, fromDomain){
+	const et = ENEMY_TYPES[typeId];
+	if(!et) return false;
+	const pts = necroPointCost(typeId);
+	if(!canAffordNecroSummon(typeId, fromDomain)){
+		const used = necroPointsUsed(fromDomain);
+		const cap = necroPointCap(fromDomain);
+		dmgNumbers.push({x:(ns.x||player.x)+10,y:(ns.y||player.y)-30,text:`Need ${pts} pts (${used}/${cap})`,age:0,color:'#8e44ad'});
+		return false;
+	}
+	const isUlt = !!(ns.isUltimate || ns.sourceSlot === 9);
+	const ph = clampNecroPhaseStats(ns.ph || {}, typeId, isUlt);
+	const _nRangeBonus = (ph.summonRange||0) * 60;
+	const spellPower = summonSpellPower(ph, ns.power);
+	const scaledHp = summonHpFromPower(ph, et, fromDomain, ns.power);
+	const maxAge = summonDurationFrames(ph, ns.maxAge, true, isUlt);
+	playerMinions.push({
+		x:ns.x, y:ns.y, w:Math.round(et.w * summonSizeScale(ph, 'width')), h:Math.round(et.h * summonSizeScale(ph, 'height')),
+		vx:0, vy:0,
+		color: et.color,
+		spell:ns.spell, phaseIdx:ns.phaseIdx,
+		sourceSlot:ns.sourceSlot,
+		castId:ns.castId,
+		facing:ns.facing || 1,
+		isUltimate:ns.isUltimate,
+		power:spellPower,
+		spellPower:spellPower,
+		ph:ph,
+		hp:scaledHp, maxHp:scaledHp,
+		age:0, maxAge:maxAge,
+		fireTimer:0, fireCooldown:Math.round(FPS*2.5),
+		target:null, animTimer:0,
+		attackAnimTimer:0,
+		detectRange:(et.detectRange||500) + _nRangeBonus,
+		moveSpeed:summonMoveFromSpeed(ph, et),
+		summonClose:!!ph.summonClose,
+		selfReliance:!!ph.summonSelfReliance,
+		isNecroSummon:true,
+		fromDomain:!!fromDomain,
+		summonPoints:pts,
+		necroType:typeId,
+		necroName:et.name,
+		necroFlies:!!et.flies,
+		spellCooldowns: et.spells ? et.spells.map(() => Math.round(FPS*2)) : [],
+		onGround:false,
+		archmageElement: hasClass('archmage') ? (ns.effects && ns.effects[0] ? ns.effects[0] : null) : null,
+	});
+	dmgNumbers.push({x:ns.x,y:ns.y-20,text:`💀 ${et.name} (${pts}pt)`,age:0,color:'#8e44ad'});
+	spawnImpact(ns.x, ns.y, '#8e44ad');
+	if(typeId === 'zenith') initNecroZenith(playerMinions[playerMinions.length-1]);
+	return true;
+}
+
+function tryRaisePresetNecro(ns, typeId, fromDomain){
+	if(!typeId) return false;
+	if(!ENEMY_TYPES[typeId]){
+		dmgNumbers.push({x:ns.x,y:ns.y-30,text:'Cannot raise that foe',age:0,color:'#8e44ad'});
+		if(!fromDomain) refundNecroCast(ns);
+		return true;
+	}
+	if(typeof isUltOnlyNecroType === 'function' && isUltOnlyNecroType(typeId) && !(ns.isUltimate || ns.sourceSlot === 9)){
+		dmgNumbers.push({x:ns.x,y:ns.y-30,text:'Raid/secret bosses need the Ultimate slot',age:0,color:'#8e44ad'});
+		refundNecroCast(ns);
+		return true;
+	}
+	let bestiary = {};
+	try{ const raw = localStorage.getItem('magicBattle_bestiary'); if(raw) bestiary = JSON.parse(raw); }catch(e){}
+	if(!bestiary[typeId]){
+		dmgNumbers.push({x:ns.x,y:ns.y-30,text:'Not yet discovered!',age:0,color:'#8e44ad'});
+		if(!fromDomain) refundNecroCast(ns);
+		return true; // handled (do not open picker)
+	}
+	if(!fromDomain){
+		const costs = necroRaiseManaCosts(typeId, necroCombatRaiseOpts(ns));
+		if(totalMana < costs.total){
+			dmgNumbers.push({x:player.x+player.w/2,y:player.y-30,text:`Need ${costs.total} Total Mana!`,age:0,color:'#ff4444'});
+			refundNecroCast(ns);
+			return true;
+		}
+		if(!raiseNecroMinion(ns, typeId, false)){
+			refundNecroCast(ns);
+			return true;
+		}
+		totalMana -= costs.total;
+		updateTotalManaHUD();
+		return true;
+	}
+	return raiseNecroMinion(ns, typeId, fromDomain);
+}
 
 function openNecroSelect(){
 	necroSelectOpen = true;
@@ -5611,10 +6526,12 @@ function openNecroSelect(){
 	let bestiary = {};
 	try{ const raw = localStorage.getItem('magicBattle_bestiary'); if(raw) bestiary = JSON.parse(raw); }catch(e){}
 	necroSelectEntries = [];
+	const ult = !!(pendingNecroSummon && (pendingNecroSummon.isUltimate || pendingNecroSummon.sourceSlot === 9));
 	for(const key in ENEMY_TYPES){
 		if(!bestiary[key]) continue; // only defeated enemies
+		if(typeof isUltOnlyNecroType === 'function' && isUltOnlyNecroType(key) && !ult) continue;
 		const et = ENEMY_TYPES[key];
-		necroSelectEntries.push({ id:key, name:et.name, hp:et.hp, w:et.w, h:et.h, color:et.color, isBoss:!!et.isBoss, moveSpeed:et.moveSpeed||1.5, flies:!!et.flies });
+		necroSelectEntries.push({ id:key, name:et.name, hp:et.hp, w:et.w, h:et.h, color:et.color, isBoss:!!et.isBoss, moveSpeed:et.moveSpeed||1.5, flies:!!et.flies, points:necroPointCost(key) });
 	}
 }
 
@@ -5622,67 +6539,26 @@ function selectNecroSummon(index){
 	if(!pendingNecroSummon || index < 0 || index >= necroSelectEntries.length) return;
 	const entry = necroSelectEntries[index];
 	const ns = pendingNecroSummon;
-	const et = ENEMY_TYPES[entry.id];
-	// Magic control discount for summon costs
-	const controlDiscount = Math.max(0.3, 1 - stats.magicControl * 0.015);
-	// Cost: scales with enemy HP — boss summons cost significantly more
-	const ph = ns.ph || {};
-	const spellCostBonus = ns.spell ? Math.round(calcSpellCost(ns.spell) * 0.5) : 0;
-	const bossMult = entry.isBoss ? 5.5 : 1;
-	const manaCost = Math.round((200 + entry.hp * 0.15) * bossMult * controlDiscount) + spellCostBonus;
-	const regularManaCost = Math.round(Math.min(maxMana * 0.5, 60 + entry.hp * 0.03) * controlDiscount);
-	if(totalMana < manaCost){
-		dmgNumbers.push({x:player.x+player.w/2,y:player.y-30,text:`Need ${manaCost} Total Mana!`,age:0,color:'#ff4444'});
-		necroSelectOpen = false;
-		pendingNecroSummon = null;
+	if(!canAffordNecroSummon(entry.id, false)){
+		const used = necroPointsUsed(false);
+		const cap = necroPointCap(false);
+		const pts = necroPointCost(entry.id);
+		dmgNumbers.push({x:player.x+player.w/2,y:player.y-30,text:`Need ${pts} pts (${used}/${cap})`,age:0,color:'#8e44ad'});
 		return;
 	}
-	if(mana < regularManaCost){
-		dmgNumbers.push({x:player.x+player.w/2,y:player.y-30,text:`Need ${regularManaCost} Mana!`,age:0,color:'#ff4444'});
-		necroSelectOpen = false;
-		pendingNecroSummon = null;
+	const costs = necroRaiseManaCosts(entry.id, necroCombatRaiseOpts(ns));
+	if(typeof isUltOnlyNecroType === 'function' && isUltOnlyNecroType(entry.id) && !(ns.isUltimate || ns.sourceSlot === 9)){
+		dmgNumbers.push({x:player.x+player.w/2,y:player.y-30,text:'Raid/secret bosses need the Ultimate slot',age:0,color:'#8e44ad'});
 		return;
 	}
-	totalMana -= manaCost;
-	mana -= regularManaCost;
+	if(totalMana < costs.total){
+		dmgNumbers.push({x:player.x+player.w/2,y:player.y-30,text:`Need ${costs.total} Total Mana!`,age:0,color:'#ff4444'});
+		return;
+	}
+	if(!raiseNecroMinion(ns, entry.id, false)) return;
+	totalMana -= costs.total;
 	updateTotalManaHUD();
-
-	// Summon upgrades from spell phase
-	const _nHealthBonus = (ph.summonHealth||0) * 10; // +10 HP per health point
-	const _nSpeedMult = 1 + (ph.summonSpeed||0) * 0.08; // +8% speed per speed point
-	const _nRangeBonus = (ph.summonRange||0) * 60; // +60 detect range per range point
-	// Necro-summon inherits enemy stats scaled to spell power, with nerf and upgrades applied
-	const scaledHp = Math.round(entry.hp * 0.55 + ns.power * 25 + _nHealthBonus);
-	const necroMinion = {
-		x:ns.x, y:ns.y, w:entry.w, h:entry.h,
-		vx:0, vy:0,
-		color: entry.color,
-		spell:ns.spell, phaseIdx:ns.phaseIdx,
-		sourceSlot:ns.sourceSlot,
-		castId:ns.castId,
-		facing:ns.facing,
-		isUltimate:ns.isUltimate,
-		power:ns.power * 1.5, // nerfed from 2.5
-		hp:scaledHp, maxHp:scaledHp,
-		age:0, maxAge:Infinity, // permanent summon
-		fireTimer:0, fireCooldown:Math.round(FPS*2.5),
-		target:null, animTimer:0,
-		attackAnimTimer:0,
-		detectRange:500 + _nRangeBonus,
-		moveSpeed:Math.min((entry.moveSpeed||1.5) * _nSpeedMult, 5),
-		summonClose:true,
-		isNecroSummon:true,
-		necroType:entry.id,
-		necroName:entry.name,
-		necroFlies:entry.flies,
-		spellCooldowns: (ENEMY_TYPES[entry.id] && ENEMY_TYPES[entry.id].spells) ? ENEMY_TYPES[entry.id].spells.map(() => Math.round(FPS*2)) : [],
-		onGround:false,
-		// Archmage dual-class: player-selected necro summons inherit elemental behaviors from the original spell
-		archmageElement: hasClass('archmage') ? (ns.effects && ns.effects[0] ? ns.effects[0] : null) : null,
-	};
-	playerMinions.push(necroMinion);
-	dmgNumbers.push({x:ns.x,y:ns.y-20,text:`💀 ${entry.name} Risen!`,age:0,color:'#8e44ad'});
-	spawnImpact(ns.x, ns.y, '#8e44ad');
+	ns._refunded = true;
 	shakeScreen(4, 8);
 	// purple death particles
 	for(let i=0;i<15;i++) particles.push({x:ns.x,y:ns.y,vx:(Math.random()-0.5)*6,vy:-Math.random()*5,life:30+Math.random()*20,color:'#8e44ad'});
@@ -5691,6 +6567,7 @@ function selectNecroSummon(index){
 }
 
 function cancelNecroSelect(){
+	if(pendingNecroSummon) refundNecroCast(pendingNecroSummon);
 	necroSelectOpen = false;
 	pendingNecroSummon = null;
 }
@@ -5709,7 +6586,7 @@ function renderNecroSelectOverlay(){
 	ctx.fillText('💀 Choose Summon from Bestiary', canvas.width/2, 50);
 	ctx.font = '13px Arial';
 	ctx.fillStyle = '#999';
-	ctx.fillText('Click to summon · ESC to cancel', canvas.width/2, 72);
+	ctx.fillText(`Click to summon · ESC to cancel · ${necroPointsUsed(false)}/${necroPointCap(false)} points`, canvas.width/2, 72);
 
 	if(necroSelectEntries.length === 0){
 		ctx.font = 'italic 16px Arial';
@@ -5721,7 +6598,7 @@ function renderNecroSelectOverlay(){
 
 	// Grid layout
 	const cols = Math.min(4, necroSelectEntries.length);
-	const cardW = 170, cardH = 100, gap = 10;
+	const cardW = 186, cardH = 118, gap = 10;
 	const gridW = cols * (cardW + gap) - gap;
 	const startX = (canvas.width - gridW) / 2;
 	const startY = 90;
@@ -5734,10 +6611,9 @@ function renderNecroSelectOverlay(){
 		if(row < 0 || row >= maxVisibleRows) continue;
 		const cx = startX + col * (cardW + gap);
 		const cy = startY + row * (cardH + gap);
-		const nControlDiscount = Math.max(0.3, 1 - stats.magicControl * 0.015);
-		const manaCost = Math.round((500 + entry.hp * 0.5) * nControlDiscount);
-		const regularManaCost = Math.round((200 + entry.hp * 0.3) * nControlDiscount);
-		const canAfford = totalMana >= manaCost && mana >= regularManaCost;
+		const costs = necroRaiseManaCosts(entry.id, necroCombatRaiseOpts(pendingNecroSummon));
+		const manaCost = costs.total;
+		const canAfford = (manaCost <= 0 || totalMana >= manaCost) && canAffordNecroSummon(entry.id, false);
 		// Card
 		ctx.fillStyle = canAfford ? 'rgba(142,68,173,0.2)' : 'rgba(60,60,60,0.3)';
 		ctx.strokeStyle = canAfford ? '#8e44ad' : '#444';
@@ -5749,16 +6625,19 @@ function renderNecroSelectOverlay(){
 		// Enemy sprite (first idle frame)
 		const spriteSheet = ENEMY_SPRITE_SHEETS[entry.id];
 		if(spriteSheet && spriteSheet.complete && spriteSheet.naturalWidth > 0){
-			const sCols = SPRITE_COLS_OVERRIDE[entry.id] || SPRITE_COLS;
+			const meta = enemySheetMeta(entry.id);
+			const sCols = (meta && meta.cols) || SPRITE_COLS_OVERRIDE[entry.id] || SPRITE_COLS;
+			const sRows = (meta && meta.rows) || SPRITE_ROWS_OVERRIDE[entry.id] || SPRITE_ROWS;
+			const startCol = (meta && meta.startCol) || 0;
 			const frameW = spriteSheet.naturalWidth / sCols;
-			const frameH = spriteSheet.naturalHeight / SPRITE_ROWS;
+			const frameH = spriteSheet.naturalHeight / sRows;
 			const fitH = cardH - 16;
 			const scale = Math.min(50 / frameW, fitH / frameH);
 			const drawW = frameW * scale;
 			const drawH = frameH * scale;
 			const drawX = cx + 8 + (50 - drawW) / 2;
 			const drawY = cy + 8 + (fitH - drawH) / 2;
-			ctx.drawImage(spriteSheet, 0, 0, frameW, frameH, drawX, drawY, drawW, drawH);
+			ctx.drawImage(spriteSheet, startCol * frameW, 0, frameW, frameH, drawX, drawY, drawW, drawH);
 		} else {
 			// Fallback color swatch
 			ctx.fillStyle = entry.color;
@@ -5772,10 +6651,14 @@ function renderNecroSelectOverlay(){
 		// Stats
 		ctx.font = '10px Arial';
 		ctx.fillStyle = canAfford ? '#aaa' : '#555';
-		ctx.fillText(`HP: ${entry.hp} · ${manaCost} TM + ${regularManaCost} MP`, cx+64, cy+40);
+		ctx.fillText(`HP: ${entry.hp} · ${entry.points||1} pt`, cx+64, cy+38);
+		if(manaCost > 0){
+			ctx.fillStyle = canAfford ? '#ffcc44' : '#555';
+			ctx.fillText(`${manaCost} total mana`, cx+64, cy+54);
+		}
 		if(entry.isBoss){
 			ctx.fillStyle = '#f39c12';
-			ctx.fillText('⭐ Boss', cx+64, cy+54);
+			ctx.fillText('⭐ Boss', cx+64, cy+82);
 		}
 		// Store clickable region
 		necroSelectEntries[idx]._cx = cx;
@@ -6172,18 +7055,22 @@ const seraphelFight = {
 /* =============================================================
    INFERNAL KITTEN — SECRET FIRE DUNGEON BOSS
    ============================================================= */
-const KITTEN_ARENA_RECT  = { x:2400, y:0, w:1800, h:680 };
-const KITTEN_CORRIDOR     = { x:80, y:0, w:2400, h:80 };
-const KITTEN_SHAFT        = { x:80, y:0, w:120, h:240 };
+const _fireKitten = (IS_DUNGEON && DUNGEON_TYPE === 'fire' && DUNGEONS.fire && DUNGEONS.fire._kitten) ? DUNGEONS.fire._kitten : null;
+const KITTEN_ARENA_RECT  = _fireKitten ? _fireKitten.arena : { x:2400, y:0, w:1800, h:1680 };
+const KITTEN_CORRIDOR     = _fireKitten ? _fireKitten.corridor : { x:80, y:0, w:2400, h:200 };
+const KITTEN_SHAFT        = _fireKitten ? _fireKitten.shaft : { x:80, y:0, w:120, h:1320 };
 // Chain door: a visible gate at the entrance of the kitten shaft (top of start room ceiling)
 // Shooting it with a chain projectile opens it and reveals the secret passage
 const KITTEN_CHAIN_DOOR = (IS_DUNGEON && DUNGEON_TYPE === 'fire') ? {
-	x: 80, y: 168, w: 120, h: 16,  // spans the KITTEN_SHAFT entrance at ceiling of start room
+	x: _fireKitten ? _fireKitten.door.x : 80,
+	y: _fireKitten ? _fireKitten.door.y : 1268,
+	w: _fireKitten ? _fireKitten.door.w : 120,
+	h: _fireKitten ? _fireKitten.door.h : 16,
 	open: false,
 	glowTimer: 0,
 	hitFlash: 0,
 } : null;
-const KITTEN_LOCK_WALL    = { x:2400, y:0, w:40, h:80 };
+const KITTEN_LOCK_WALL    = { x:KITTEN_ARENA_RECT.x, y:0, w:40, h:200 };
 const KITTEN_SECRET_CORRIDORS = [KITTEN_SHAFT, KITTEN_CORRIDOR, KITTEN_ARENA_RECT];
 const kittenBoss = (IS_DUNGEON && DUNGEON_TYPE === 'fire') ? {
 	phase: 'hidden',   // 'hidden' | 'revealed' | 'cutscene' | 'active' | 'defeated'
@@ -6273,7 +7160,7 @@ if(DUNGEON_TYPE === 'fire'){
 	FIRE_PREBOSS_LOCK_WALL = _fdg._prebossLockWall;
 } else if(DUNGEON_TYPE === 'ice'){
 	BOSS_ROOM_TRIGGER_X = 8350;
-	BOSS_ROOM_RECT = { x:8200, y:400, w:1400, h:700 };
+	BOSS_ROOM_RECT = { x:8200, y:400, w:3000, h:700 };
 	BOSS_LOCK_WALL = { x:8200, y:400, w:40, h:700 };
 } else if(DUNGEON_TYPE === 'earth'){
 	BOSS_ROOM_TRIGGER_X = 2300;
@@ -6298,9 +7185,10 @@ if(IS_DUNGEON && DUNGEON_TYPE === 'fire'){
 	// Tablet rests on the upper-left boss platform so the player sees it on entry.
 	// Platform: {x:_br.x+100, y:_br.y+600, w:320}  →  surface at y = BOSS_Y+600 = 8800
 	const _fBR = DUNGEONS.fire._bossRoomRect;
+	const _tab = DUNGEONS.fire._tablet;
 	bossTablet = {
-		x: _fBR.x + 160,           // centred on upper-left platform (x+100 to x+420)
-		y: _fBR.y + 600 - 120,    // bottom of tablet sits on platform surface
+		x: _tab ? _tab.x : _fBR.x + 160,
+		y: _tab ? _tab.y : _fBR.y + 640 - 120,
 		w: 50, h: 120,
 		name: 'Ancient Stone',
 		icon: '📜',
@@ -6640,12 +7528,13 @@ function revealKittenPassage(){
 	computeTileEdges();
 	// Visual feedback
 	shakeScreen(12, 40);
+	const doorY = KITTEN_CHAIN_DOOR ? KITTEN_CHAIN_DOOR.y : 1268;
 	for(let i = 0; i < 30; i++){
-		particles.push({ x:100 + Math.random()*40, y:200 + Math.random()*20,
+		particles.push({ x:100 + Math.random()*40, y:doorY + Math.random()*20,
 			vx:(Math.random()-0.5)*8, vy:-2-Math.random()*6,
 			life:40+Math.random()*30, color:['#ff4400','#ffaa00','#ff6600','#ffdd00'][i%4]});
 	}
-	dmgNumbers.push({x:140, y:180, text:'🔥 A hidden passage has opened!', age:0, color:'#ffaa00'});
+	dmgNumbers.push({x:140, y:doorY, text:'🔥 A hidden passage has opened!', age:0, color:'#ffaa00'});
 }
 
 /* --- Kitten boss trigger: player enters arena --- */
@@ -10224,11 +11113,16 @@ function renderHotbar(){
 				const pct = (spellCooldowns[i] / spellMaxCooldowns[i]) * 100;
 				cdHtml = `<div class="hb-cd-overlay" style="height:${pct}%"></div>`;
 			}
+			const raise = typeof necroSpellRaiseCosts==='function' ? necroSpellRaiseCosts(sp, dungeonManaOpts(i, sp)) : null;
+			if(raise) el.classList.add('hb-necro');
 			const costLabel = isUlt ? `${displayCost}⚡` : `${displayCost}💧`;
+			const raiseHtml = raise
+				? `<div class="hb-mana" style="${isUlt?'color:#ffaa00':''}">${costLabel}</div><div class="hb-raise"><span class="hb-total">${raise.total}✦</span></div>`
+				: `<div class="hb-mana" style="${isUlt?'color:#ffaa00':''}">${costLabel}</div>`;
 			el.innerHTML = `<span class="hb-key">${keyLabel}</span>
 				<div class="hb-dot" style="background:${usable?color:'#555'}"></div>
 				<div class="hb-name" style="${usable?'':'color:#666;text-decoration:line-through'}">${onlineBlocked?'🔒 '+sp.name:sp.name}</div>
-				<div class="hb-mana" style="${isUlt?'color:#ffaa00':''}">${costLabel}</div>${cdHtml}`;
+				${raiseHtml}${cdHtml}`;
 		} else {
 			el.innerHTML = `<span class="hb-key">${keyLabel}</span><div class="hb-name" style="color:#555">—</div>`;
 		}
@@ -10253,8 +11147,12 @@ const warriorSlashes = []; // Warrior class melee slash effects
 
 /* --- visual hitbox: use sprite bounds for spell-enemy hit detection --- */
 function getVisualHitRect(en){
+	const type = en.necroType || en.type;
+	const frame = enemySheetFrameSize(type);
+	const dest = frame ? enemySpriteDestSize(en, frame.fW, frame.fH) : null;
 	const s = SPRITE_SCALE[en.type] || 1.5;
-	const rW = en.w * s, rH = en.h * s;
+	const rW = dest ? dest.rW : en.w * s;
+	const rH = dest ? dest.rH : en.h * s;
 	const isFlying = en.typeDef && en.typeDef.flies;
 	return {
 		x: en.x + en.w/2 - rW/2,
@@ -10288,9 +11186,10 @@ imp: {
 	flies: true, moveSpeed: 2.0, detectRange: 700, attackRange: 380, aiBehavior: 'harasser',
 	drawFn: 'drawImp',
 	spells: [
-		{ name:'pyroclasticOrb', cooldown:120, range:380, castFn:'castImpPyroclasticOrb' },
-		{ name:'volcanicDarts',  cooldown:175, range:360, castFn:'castImpVolcanicDarts' },
-		{ name:'smokeDash',      cooldown:270, range:280, castFn:'castImpSmokeDash' },
+		{ name:'emberOrbit',     cooldown:200, range:520, castFn:'castImpEmberOrbit' },
+		{ name:'cinderFakeout',  cooldown:240, range:420, castFn:'castImpCinderFakeout' },
+		{ name:'infernoPinball', cooldown:260, range:560, castFn:'castImpInfernoPinball' },
+		{ name:'wildfireTrail',  cooldown:280, range:600, castFn:'castImpWildfireTrail' },
 	],
 },
 flameSerpent: {
@@ -10298,9 +11197,10 @@ flameSerpent: {
 	flies: false, moveSpeed: 3.0, detectRange: 600, attackRange: 260, aiBehavior: 'melee_lunge',
 	drawFn: 'drawFlameSerpent',
 	spells: [
-		{ name:'scorchTrail', cooldown:150, range:220, castFn:'castSerpentScorchTrail' },
-		{ name:'coilSlam',    cooldown:230, range:180, castFn:'castSerpentCoilSlam' },
-		{ name:'venomFlame',  cooldown:205, range:340, castFn:'castSerpentVenomFlame' },
+		{ name:'burrowingFang', cooldown:220, range:480, castFn:'castSerpentBurrowingFang' },
+		{ name:'burningCoil',   cooldown:260, range:360, castFn:'castSerpentBurningCoil' },
+		{ name:'magmaFang',     cooldown:200, range:500, castFn:'castSerpentMagmaFang' },
+		{ name:'eruptionChase', cooldown:280, range:540, castFn:'castSerpentEruptionChase' },
 	],
 },
 emberMage: {
@@ -10308,9 +11208,9 @@ emberMage: {
 	flies: false, moveSpeed: 1.2, detectRange: 760, attackRange: 450, aiBehavior: 'ranged_kite',
 	drawFn: 'drawEmberMage',
 	spells: [
-		{ name:'spellbookZigzag',    cooldown:120, range:420, castFn:'castEmberSpellbook' },
-		{ name:'flamethrowerSweep',  cooldown:220, range:320, castFn:'castEmberFlamethrowerSweep' },
-		{ name:'summonPillars',      cooldown:275, range:380, castFn:'castEmberSummonPillar' },
+		{ name:'fireSigil',       cooldown:240, range:560, castFn:'castEmberFireSigil' },
+		{ name:'reboundFlame',    cooldown:220, range:540, castFn:'castEmberReboundFlame' },
+		{ name:'combustionMark',  cooldown:260, range:500, castFn:'castEmberCombustionMark' },
 	],
 },
 magmaGolem: {
@@ -10318,9 +11218,10 @@ magmaGolem: {
 	flies: false, moveSpeed: 0.8, detectRange: 580, attackRange: 240, aiBehavior: 'tank_advance',
 	drawFn: 'drawMagmaGolem',
 	spells: [
-		{ name:'seismicFist',  cooldown:205, range:220, castFn:'castGolemSeismicFist' },
-		{ name:'lavaCrown',    cooldown:175, range:340, castFn:'castGolemLavaCrown' },
-		{ name:'moltenArmor',  cooldown:260, range:200, castFn:'castGolemMoltenArmor' },
+		{ name:'faultline',       cooldown:260, range:480, castFn:'castGolemFaultline' },
+		{ name:'magmaCore',       cooldown:300, range:360, castFn:'castGolemMagmaCore' },
+		{ name:'volcanicFists',   cooldown:280, range:520, castFn:'castGolemVolcanicFists' },
+		{ name:'moltenCollapse',  cooldown:340, range:300, castFn:'castGolemMoltenCollapse' },
 	],
 },
 fireSprite: {
@@ -10328,10 +11229,18 @@ fireSprite: {
 	flies: true, moveSpeed: 3.5, detectRange: 650, attackRange: 320, aiBehavior: 'harasser',
 	drawFn: 'drawFireSprite',
 	spells: [
-		{ name:'emberWhirl',   cooldown:100, range:300, castFn:'castSpriteEmberWhirl' },
-		{ name:'meteorSeed',   cooldown:195, range:340, castFn:'castSpriteMeteorSeed' },
-		{ name:'phaseFlicker', cooldown:275, range:220, castFn:'castSpritePhaseFlicker' },
+		{ name:'emberBlink',    cooldown:180, range:480, castFn:'castSpriteEmberBlink' },
+		{ name:'cometDive',     cooldown:220, range:560, castFn:'castSpriteCometDive' },
+		{ name:'emberMines',    cooldown:200, range:420, castFn:'castSpriteEmberMines' },
+		{ name:'flickerSwarm',  cooldown:260, range:500, castFn:'castSpriteFlickerSwarm' },
 	],
+},
+magmaWarden: {
+	name: 'Magma Warden', w: 120, h: 168, hp: 5200, color: '#221810', color2: '#ff6622',
+	flies: false, moveSpeed: 0.7, detectRange: 1400, attackRange: 900, aiBehavior: 'tank_advance',
+	drawFn: 'drawMagmaWarden',
+	isMiniBoss: true,
+	spells: [],
 },
 
 /* ---------- BOSS: INFERNO DRAGON ---------- */
@@ -10382,7 +11291,7 @@ infernalKitten: {
 /* ---------- BOSS: FROZEN COLOSSUS ---------- */
 frostColossus: {
 	name: 'Kryonax, The Frozen Colossus', w: 360, h: 280, hp: 15000, color: '#2a4477', color2: '#4488ff',
-	flies: true, moveSpeed: 1.3, detectRange: 2200, isBoss: true,
+	flies: true, moveSpeed: 2.4, detectRange: 2200, isBoss: true,
 	drawFn: 'drawFrostColossus',
 	// Phase 1 attacks (indices 0-4) — heavy ice attacks, telegraphed
 	// Phase 2 adds attacks (indices 5-7) and reduces all cooldowns
@@ -10420,136 +11329,149 @@ earthColossus: {
 /* ---------- ICE ENEMIES ---------- */
 frostWraith: {
 	name: 'Frost Wraith', w: 30, h: 44, hp: 200, color: '#5588cc', color2: '#88bbff',
-	flies: true, moveSpeed: 1.8, detectRange: 400, aiBehavior: 'ambush',
+	flies: true, phaseWalls: true, moveSpeed: 1.8, detectRange: 560, attackRange: 420, aiBehavior: 'ambush',
 	drawFn: 'drawFrostWraith',
 	spells: [
-		{ name:'iceBolt', cooldown:60, range:380, castFn:'castWraithIceBolt' },
-		{ name:'frostNova', cooldown:160, range:200, castFn:'castWraithFrostNova' },
-		{ name:'chillingTouch', cooldown:110, range:140, castFn:'castWraithPhaseStrike' },
+		{ name:'frozenReflection', cooldown:240, range:480, castFn:'castWraithFrozenReflection' },
+		{ name:'iceVeil',          cooldown:220, range:520, castFn:'castWraithIceVeil' },
+		{ name:'shardPossession',  cooldown:260, range:500, castFn:'castWraithShardPossession' },
+		{ name:'frozenMoment',     cooldown:280, range:440, castFn:'castWraithFrozenMoment' },
 	],
 },
 iceArcher: {
 	name: 'Ice Archer', w: 28, h: 46, hp: 170, color: '#446688', color2: '#6699bb',
-	flies: false, moveSpeed: 1.5, detectRange: 520, aiBehavior: 'ranged_kite',
+	flies: false, moveSpeed: 1.5, detectRange: 680, attackRange: 540, aiBehavior: 'ranged_kite',
 	drawFn: 'drawIceArcher',
 	spells: [
-		{ name:'iceArrow', cooldown:50, range:500, castFn:'castArcherIceArrow' },
-		{ name:'frostTrap', cooldown:200, range:400, castFn:'castArcherFrostTrap' },
-		{ name:'shatterShot', cooldown:130, range:440, castFn:'castArcherShatterShot' },
+		{ name:'ricochetArrow',  cooldown:200, range:600, castFn:'castArcherRicochetArrow' },
+		{ name:'frostline',      cooldown:240, range:560, castFn:'castArcherFrostline' },
+		{ name:'threePointShot', cooldown:220, range:580, castFn:'castArcherThreePointShot' },
+		{ name:'huntersMark',    cooldown:280, range:540, castFn:'castArcherHuntersMark' },
 	],
 },
 snowBeast: {
 	name: 'Snow Beast', w: 54, h: 42, hp: 600, color: '#8899aa', color2: '#bbccdd',
-	flies: false, moveSpeed: 1.4, detectRange: 340, aiBehavior: 'tank_advance',
+	flies: false, moveSpeed: 1.4, detectRange: 460, attackRange: 280, aiBehavior: 'tank_advance',
 	drawFn: 'drawSnowBeast',
 	spells: [
-		{ name:'frostBreath', cooldown:75, range:220, castFn:'castBeastFrostBreath' },
-		{ name:'iceSlam', cooldown:120, range:170, castFn:'castBeastIceSlam' },
-		{ name:'blizzardRoar', cooldown:200, range:300, castFn:'castBeastBlizzardRoar' },
+		{ name:'avalancheCharge', cooldown:240, range:480, castFn:'castBeastAvalancheCharge' },
+		{ name:'frostquake',      cooldown:260, range:360, castFn:'castBeastFrostquake' },
+		{ name:'iceback',         cooldown:300, range:300, castFn:'castBeastIceback' },
+		{ name:'whiteoutRoar',    cooldown:320, range:420, castFn:'castBeastWhiteoutRoar' },
 	],
 },
 cryoMage: {
 	name: 'Cryo Mage', w: 30, h: 48, hp: 160, color: '#3366aa', color2: '#5588cc',
-	flies: false, moveSpeed: 1.0, detectRange: 480, aiBehavior: 'ranged_kite',
+	flies: false, moveSpeed: 1.0, detectRange: 700, attackRange: 500, aiBehavior: 'ranged_kite',
 	drawFn: 'drawCryoMage',
 	spells: [
-		{ name:'icicleBarrage', cooldown:55, range:440, castFn:'castCryoIcicleBarrage' },
-		{ name:'freezeRay', cooldown:140, range:400, castFn:'castCryoFreezeRay' },
-		{ name:'iceShield', cooldown:200, range:120, castFn:'castCryoIceShield' },
+		{ name:'frostGeometry',    cooldown:240, range:560, castFn:'castCryoFrostGeometry' },
+		{ name:'temperatureShift', cooldown:260, range:520, castFn:'castCryoTemperatureShift' },
+		{ name:'iceEcho',          cooldown:220, range:540, castFn:'castCryoIceEcho' },
+		{ name:'crystalCoffin',    cooldown:280, range:500, castFn:'castCryoCrystalCoffin' },
 	],
 },
 glacierSentinel: {
 	name: 'Glacier Sentinel', w: 48, h: 56, hp: 700, color: '#556688', color2: '#7799bb',
-	flies: false, moveSpeed: 0.7, detectRange: 300, aiBehavior: 'tank_advance',
+	flies: false, moveSpeed: 0.7, detectRange: 420, attackRange: 260, aiBehavior: 'tank_advance',
 	drawFn: 'drawGlacierSentinel',
 	spells: [
-		{ name:'frostStomp', cooldown:100, range:200, castFn:'castSentinelFrostStomp' },
-		{ name:'iceBoulder', cooldown:90, range:320, castFn:'castSentinelIceBoulder' },
-		{ name:'frozenWall', cooldown:180, range:220, castFn:'castSentinelFrozenBarrier' },
+		{ name:'movingFortress', cooldown:260, range:400, castFn:'castSentinelMovingFortress' },
+		{ name:'glacierHammer',  cooldown:240, range:360, castFn:'castSentinelGlacierHammer' },
+		{ name:'frozenOrbit',    cooldown:280, range:480, castFn:'castSentinelFrozenOrbit' },
+		{ name:'absoluteGuard',  cooldown:320, range:300, castFn:'castSentinelAbsoluteGuard' },
 	],
 },
 
 /* ---------- EARTH ENEMIES ---------- */
 rockGolem: {
-	name: 'Rock Golem', w: 46, h: 54, hp: 700, color: '#665533', color2: '#887744',
-	flies: false, moveSpeed: 0.8, detectRange: 320, aiBehavior: 'tank_advance',
+	name: 'Rock Golem', w: 46, h: 54, hp: 900, color: '#665533', color2: '#887744',
+	flies: false, moveSpeed: 0.8, detectRange: 620, attackRange: 280, aiBehavior: 'tank_advance',
 	drawFn: 'drawRockGolem',
 	spells: [
-		{ name:'boulderThrow', cooldown:90, range:340, castFn:'castGolemBoulderThrow' },
-		{ name:'groundSlam', cooldown:130, range:200, castFn:'castGolemGroundSlam' },
-		{ name:'stoneSkin', cooldown:250, range:100, castFn:'castGolemStoneSkin' },
+		{ name:'boulderRoll',  cooldown:160, range:540, castFn:'castGolemBoulderRoll' },
+		{ name:'faultStep',    cooldown:180, range:500, castFn:'castGolemFaultStep' },
+		{ name:'stoneDecoy',   cooldown:220, range:400, castFn:'castGolemStoneDecoy' },
+		{ name:'gravityGrip',  cooldown:200, range:460, castFn:'castGolemGravityGrip' },
 	],
 },
 vineCrawler: {
-	name: 'Vine Crawler', w: 52, h: 20, hp: 200, color: '#448822', color2: '#66aa44',
-	flies: false, moveSpeed: 2.2, detectRange: 380, aiBehavior: 'melee_lunge',
+	name: 'Vine Crawler', w: 52, h: 20, hp: 380, color: '#448822', color2: '#66aa44',
+	flies: false, moveSpeed: 2.4, detectRange: 640, attackRange: 300, aiBehavior: 'melee_lunge',
 	drawFn: 'drawVineCrawler',
 	spells: [
-		{ name:'vineWhip', cooldown:50, range:220, castFn:'castVineWhip' },
-		{ name:'rootSnare', cooldown:140, range:340, castFn:'castVineRootSnare' },
-		{ name:'thornBurst', cooldown:120, range:260, castFn:'castVineThornBurst' },
+		{ name:'vineTunnel',     cooldown:160, range:520, castFn:'castVineTunnel' },
+		{ name:'thornWheel',     cooldown:170, range:460, castFn:'castVineThornWheel' },
+		{ name:'graspingGround', cooldown:180, range:440, castFn:'castVineGraspingGround' },
+		{ name:'seedBomb',       cooldown:190, range:500, castFn:'castVineSeedBomb' },
 	],
 },
 caveSpider: {
-	name: 'Cave Spider', w: 44, h: 22, hp: 80, color: '#554433', color2: '#776655',
-	flies: false, moveSpeed: 2.6, detectRange: 340, aiBehavior: 'melee_lunge',
+	name: 'Cave Spider', w: 44, h: 22, hp: 280, color: '#554433', color2: '#776655',
+	flies: false, moveSpeed: 2.8, detectRange: 680, attackRange: 360, aiBehavior: 'melee_lunge',
 	drawFn: 'drawCaveSpider',
 	spells: [
-		{ name:'webShot', cooldown:90, range:300, castFn:'castSpiderWebShot' },
-		{ name:'poisonBite', cooldown:110, range:100, castFn:'castSpiderPoisonBite' },
-		{ name:'pounce', cooldown:170, range:220, castFn:'castSpiderPounce' },
+		{ name:'ceilingDrop', cooldown:150, range:460, castFn:'castSpiderCeilingDrop' },
+		{ name:'webSwing',    cooldown:140, range:540, castFn:'castSpiderWebSwing' },
+		{ name:'eggSac',      cooldown:190, range:420, castFn:'castSpiderEggSac' },
+		{ name:'webMaze',     cooldown:200, range:500, castFn:'castSpiderWebMaze' },
 	],
 },
 crystalMage: {
-	name: 'Crystal Mage', w: 30, h: 48, hp: 170, color: '#8855aa', color2: '#aa77cc',
-	flies: false, moveSpeed: 1.0, detectRange: 480, aiBehavior: 'ranged_kite',
+	name: 'Crystal Mage', w: 30, h: 48, hp: 340, color: '#8855aa', color2: '#aa77cc',
+	flies: false, moveSpeed: 1.0, detectRange: 800, attackRange: 500, aiBehavior: 'ranged_kite',
 	drawFn: 'drawCrystalMage',
 	spells: [
-		{ name:'crystalShard', cooldown:55, range:440, castFn:'castCrystalShard' },
-		{ name:'gemBarrier', cooldown:180, range:220, castFn:'castCrystalGemBarrier' },
-		{ name:'prismBlast', cooldown:130, range:400, castFn:'castCrystalPrismBlast' },
+		{ name:'crystalRelay', cooldown:160, range:600, castFn:'castCrystalRelay' },
+		{ name:'shardRain',    cooldown:170, range:580, castFn:'castCrystalShardRain' },
+		{ name:'prismClone',   cooldown:190, range:540, castFn:'castCrystalPrismClone' },
+		{ name:'crystalPrison',cooldown:200, range:460, castFn:'castCrystalPrison' },
 	],
 },
 mudElemental: {
-	name: 'Mud Elemental', w: 42, h: 46, hp: 400, color: '#665540', color2: '#887755',
-	flies: false, moveSpeed: 1.2, detectRange: 360, aiBehavior: 'balanced',
+	name: 'Mud Elemental', w: 42, h: 46, hp: 560, color: '#665540', color2: '#887755',
+	flies: false, moveSpeed: 1.2, detectRange: 620, attackRange: 320, aiBehavior: 'balanced',
 	drawFn: 'drawMudElemental',
 	spells: [
-		{ name:'mudBall', cooldown:65, range:320, castFn:'castMudBall' },
-		{ name:'quicksand', cooldown:150, range:220, castFn:'castMudQuicksand' },
-		{ name:'engulf', cooldown:180, range:170, castFn:'castMudEngulf' },
+		{ name:'mudWave',   cooldown:150, range:500, castFn:'castMudWave' },
+		{ name:'bogClone',  cooldown:180, range:440, castFn:'castMudBogClone' },
+		{ name:'sinkhole',  cooldown:180, range:460, castFn:'castMudSinkhole' },
+		{ name:'mudslide',  cooldown:190, range:520, castFn:'castMudslide' },
 	],
 },
 
 /* ---------- IRON FORGE ENEMIES ---------- */
 ironSentinel: {
-	name: 'Iron Sentinel', w: 44, h: 56, hp: 800, color: '#4a4a5a', color2: '#6a6a7a',
-	flies: false, moveSpeed: 0.9, detectRange: 340, aiBehavior: 'tank_advance',
+	name: 'Iron Sentinel', w: 44, h: 56, hp: 980, color: '#4a4a5a', color2: '#6a6a7a',
+	flies: false, moveSpeed: 1.0, detectRange: 620, attackRange: 300, aiBehavior: 'tank_advance',
 	drawFn: 'drawIronSentinel',
 	spells: [
-		{ name:'ironSlash', cooldown:80, range:200, castFn:'castIronSlash' },
-		{ name:'shieldBash', cooldown:130, range:180, castFn:'castIronShieldBash' },
-		{ name:'metalSpike', cooldown:110, range:320, castFn:'castIronSpike' },
+		{ name:'shieldMarch',    cooldown:160, range:440, castFn:'castSentinelShieldMarch' },
+		{ name:'counterSpark',   cooldown:170, range:360, castFn:'castSentinelCounterSpark' },
+		{ name:'magneticPull',   cooldown:180, range:520, castFn:'castSentinelMagneticPull' },
+		{ name:'assemblyStrike', cooldown:190, range:560, castFn:'castSentinelAssemblyStrike' },
 	],
 },
 forgeDrone: {
-	name: 'Forge Drone', w: 24, h: 24, hp: 350, color: '#cc6622', color2: '#ff8844',
-	flies: true, moveSpeed: 2.8, detectRange: 380, aiBehavior: 'harasser',
+	name: 'Forge Drone', w: 24, h: 24, hp: 450, color: '#cc6622', color2: '#ff8844',
+	flies: true, moveSpeed: 3.0, detectRange: 700, attackRange: 360, aiBehavior: 'harasser',
 	drawFn: 'drawForgeDrone',
 	spells: [
-		{ name:'sparkBolt', cooldown:45, range:340, castFn:'castForgeSparkBolt' },
-		{ name:'heatBeam', cooldown:120, range:280, castFn:'castForgeHeatBeam' },
-		{ name:'overcharge', cooldown:160, range:200, castFn:'castForgeOvercharge' },
+		{ name:'weldingBeam', cooldown:150, range:500, castFn:'castDroneWeldingBeam' },
+		{ name:'sparkMine',   cooldown:140, range:460, castFn:'castDroneSparkMine' },
+		{ name:'overheat',    cooldown:190, range:400, castFn:'castDroneOverheat' },
+		{ name:'droneDive',   cooldown:160, range:580, castFn:'castDroneDive' },
 	],
 },
 slagBrute: {
-	name: 'Slag Brute', w: 52, h: 60, hp: 1200, color: '#553322', color2: '#774433',
-	flies: false, moveSpeed: 0.6, detectRange: 280, aiBehavior: 'tank_advance',
+	name: 'Slag Brute', w: 52, h: 60, hp: 1450, color: '#553322', color2: '#774433',
+	flies: false, moveSpeed: 0.7, detectRange: 620, attackRange: 280, aiBehavior: 'tank_advance',
 	drawFn: 'drawSlagBrute',
 	spells: [
-		{ name:'slagSmash', cooldown:110, range:180, castFn:'castSlagSmash' },
-		{ name:'moltenSpit', cooldown:90, range:300, castFn:'castSlagMoltenSpit' },
-		{ name:'ironHarden', cooldown:200, range:100, castFn:'castSlagHarden' },
+		{ name:'slagHammer',      cooldown:160, range:440, castFn:'castBruteSlagHammer' },
+		{ name:'furnaceHeart',    cooldown:210, range:400, castFn:'castBruteFurnaceHeart' },
+		{ name:'slagThrow',       cooldown:150, range:500, castFn:'castBruteSlagThrow' },
+		{ name:'foundryCollapse', cooldown:200, range:460, castFn:'castBruteFoundryCollapse' },
 	],
 },
 
@@ -10579,63 +11501,69 @@ ironColossus: {
 
 /* ---------- SYLVARIS WILDES ENEMIES ---------- */
 thornWolf: {
-	name: 'Thorn Wolf', w: 48, h: 32, hp: 224, color: '#5a7a3a', color2: '#7a9a5a',
-	flies: false, moveSpeed: 3.0, detectRange: 400, xp: 12, aiBehavior: 'melee_lunge',
+	name: 'Thorn Wolf', w: 48, h: 32, hp: 400, color: '#5a7a3a', color2: '#7a9a5a',
+	flies: false, moveSpeed: 3.3, detectRange: 640, attackRange: 300, xp: 12, aiBehavior: 'melee_lunge',
 	drawFn: 'drawThornWolf',
 	spells: [
-		{ name:'thornBite', cooldown:50, range:120, castFn:'castThornBite' },
-		{ name:'thornDash', cooldown:120, range:300, castFn:'castThornDash' },
-		{ name:'barkSpines', cooldown:160, range:260, castFn:'castBarkSpines' },
+		{ name:'huntingCircle',  cooldown:150, range:460, castFn:'castWolfHuntingCircle' },
+		{ name:'thornPounce',    cooldown:140, range:440, castFn:'castWolfThornPounce' },
+		{ name:'packEcho',       cooldown:170, range:480, castFn:'castWolfPackEcho' },
+		{ name:'predatoryFeint', cooldown:160, range:440, castFn:'castWolfPredatoryFeint' },
 	],
 },
 sporeFungus: {
-	name: 'Spore Fungus', w: 36, h: 40, hp: 280, color: '#8a6a4a', color2: '#aa8866',
-	flies: false, moveSpeed: 0.6, detectRange: 300, xp: 14, aiBehavior: 'stationary',
+	name: 'Spore Fungus', w: 36, h: 40, hp: 420, color: '#8a6a4a', color2: '#aa8866',
+	flies: false, moveSpeed: 0.6, detectRange: 620, attackRange: 360, xp: 14, aiBehavior: 'stationary',
 	drawFn: 'drawSporeFungus',
 	spells: [
-		{ name:'sporeCloud', cooldown:70, range:240, castFn:'castSporeCloud' },
-		{ name:'toxicBurst', cooldown:130, range:180, castFn:'castToxicBurst' },
-		{ name:'fungalGrowth', cooldown:200, range:160, castFn:'castFungalGrowth' },
+		{ name:'sporeCloud',    cooldown:150, range:500, castFn:'castFungusSporeCloud' },
+		{ name:'toxicBurst',    cooldown:170, range:400, castFn:'castFungusToxicBurst' },
+		{ name:'fungalGrowth',  cooldown:190, range:480, castFn:'castFungusFungalGrowth' },
+		{ name:'mycelium',      cooldown:200, range:520, castFn:'castFungusMycelium' },
 	],
 },
 mossWraith: {
-	name: 'Moss Wraith', w: 32, h: 46, hp: 176, color: '#3a6a4a', color2: '#5a8a6a',
-	flies: true, moveSpeed: 1.6, detectRange: 420, xp: 13, aiBehavior: 'ambush',
+	name: 'Moss Wraith', w: 32, h: 46, hp: 340, color: '#3a6a4a', color2: '#5a8a6a',
+	flies: true, phaseWalls: true, moveSpeed: 1.8, detectRange: 680, attackRange: 420, xp: 13, aiBehavior: 'ambush',
 	drawFn: 'drawMossWraith',
 	spells: [
-		{ name:'mossGrasp', cooldown:55, range:340, castFn:'castMossGrasp' },
-		{ name:'natureDrain', cooldown:140, range:200, castFn:'castNatureDrain' },
-		{ name:'fadeStrike', cooldown:110, range:160, castFn:'castFadeStrike' },
+		{ name:'mossGrasp',     cooldown:160, range:500, castFn:'castMossMossGrasp' },
+		{ name:'verdantDrain',  cooldown:180, range:420, castFn:'castMossVerdantDrain' },
+		{ name:'mossDouble',    cooldown:190, range:460, castFn:'castMossDouble' },
+		{ name:'fadeStrike',    cooldown:170, range:440, castFn:'castMossFadeStrike' },
 	],
 },
 willowWisp: {
-	name: 'Willow Wisp', w: 20, h: 20, hp: 112, color: '#aaffaa', color2: '#ccffcc',
-	flies: true, moveSpeed: 2.4, detectRange: 440, xp: 10, aiBehavior: 'harasser',
+	name: 'Willow Wisp', w: 20, h: 20, hp: 220, color: '#aaffaa', color2: '#ccffcc',
+	flies: true, phaseWalls: true, moveSpeed: 2.6, detectRange: 720, attackRange: 440, xp: 10, aiBehavior: 'harasser',
 	drawFn: 'drawWillowWisp',
 	spells: [
-		{ name:'wispBolt', cooldown:40, range:400, castFn:'castWispBolt' },
-		{ name:'wispFlare', cooldown:120, range:250, castFn:'castWispFlare' },
-		{ name:'enchantPulse', cooldown:160, range:200, castFn:'castEnchantPulse' },
+		{ name:'wispBolt',      cooldown:140, range:560, castFn:'castWispWispBolt' },
+		{ name:'wispFlare',     cooldown:170, range:420, castFn:'castWispWispFlare' },
+		{ name:'enchantPulse',  cooldown:190, range:400, castFn:'castWispEnchantPulse' },
+		{ name:'lightTrail',    cooldown:200, range:500, castFn:'castWispLightTrail' },
 	],
 },
 glowBeetle: {
-	name: 'Glow Beetle', w: 38, h: 24, hp: 144, color: '#4488aa', color2: '#66aacc',
-	flies: false, moveSpeed: 1.6, detectRange: 340, xp: 14, aiBehavior: 'balanced',
+	name: 'Glow Beetle', w: 38, h: 24, hp: 380, color: '#4488aa', color2: '#66aacc',
+	flies: false, moveSpeed: 1.6, detectRange: 640, attackRange: 380, xp: 14, aiBehavior: 'balanced',
 	drawFn: 'drawGlowBeetle',
 	spells: [
-		{ name:'luminanceBeam', cooldown:80, range:300, castFn:'castLuminanceBeam' },
-		{ name:'shellCharge', cooldown:160, range:200, castFn:'castShellCharge' },
-		{ name:'glowBurst', cooldown:200, range:240, castFn:'castGlowBurst' },
+		{ name:'shellCharge',     cooldown:160, range:480, castFn:'castBeetleShellCharge' },
+		{ name:'luminanceBeam',   cooldown:170, range:520, castFn:'castBeetleLuminanceBeam' },
+		{ name:'glowBurst',       cooldown:180, range:440, castFn:'castBeetleGlowBurst' },
+		{ name:'shellReflect',    cooldown:190, range:360, castFn:'castBeetleShellReflect' },
 	],
 },
 stalactiteBat: {
-	name: 'Stalactite Bat', w: 34, h: 28, hp: 96, color: '#5a5a6a', color2: '#7a7a8a',
-	flies: true, moveSpeed: 2.2, detectRange: 400, xp: 11, aiBehavior: 'ambush',
+	name: 'Stalactite Bat', w: 34, h: 28, hp: 260, color: '#5a5a6a', color2: '#7a7a8a',
+	flies: true, moveSpeed: 2.4, detectRange: 700, attackRange: 420, xp: 11, aiBehavior: 'ambush',
 	drawFn: 'drawStalactiteBat',
 	spells: [
-		{ name:'sonicShriek', cooldown:75, range:320, castFn:'castSonicShriek' },
-		{ name:'diveBomb', cooldown:160, range:280, castFn:'castDiveBomb' },
-		{ name:'echoBlast', cooldown:190, range:260, castFn:'castEchoBlast' },
+		{ name:'sonicShriek',   cooldown:150, range:480, castFn:'castBatSonicShriek' },
+		{ name:'diveBomb',      cooldown:170, range:500, castFn:'castBatDiveBomb' },
+		{ name:'echoBlast',     cooldown:190, range:460, castFn:'castBatEchoBlast' },
+		{ name:'ceilingDrop',   cooldown:200, range:520, castFn:'castBatCeilingDrop' },
 	],
 },
 deepRootHorror: {
@@ -10656,23 +11584,25 @@ deepRootHorror: {
 	],
 },
 skyVine: {
-	name: 'Sky Vine', w: 30, h: 54, hp: 208, color: '#44aa44', color2: '#66cc66',
-	flies: false, moveSpeed: 0.4, detectRange: 320, xp: 12, aiBehavior: 'stationary',
+	name: 'Sky Vine', w: 30, h: 54, hp: 520, color: '#44aa44', color2: '#66cc66',
+	flies: false, moveSpeed: 0.4, detectRange: 680, attackRange: 420, xp: 12, aiBehavior: 'stationary',
 	drawFn: 'drawSkyVine',
 	spells: [
-		{ name:'vineLash', cooldown:45, range:280, castFn:'castSkyVineLash' },
-		{ name:'leafBarrage', cooldown:110, range:340, castFn:'castLeafBarrage' },
-		{ name:'vineGrab', cooldown:160, range:200, castFn:'castVineGrab' },
+		{ name:'vineLash',        cooldown:150, range:500, castFn:'castVineVineLash' },
+		{ name:'leafBarrage',     cooldown:170, range:560, castFn:'castVineLeafBarrage' },
+		{ name:'vineGrab',        cooldown:180, range:440, castFn:'castVineVineGrab' },
+		{ name:'canopyCollapse',  cooldown:200, range:520, castFn:'castVineCanopyCollapse' },
 	],
 },
 windSylph: {
-	name: 'Wind Sylph', w: 28, h: 38, hp: 144, color: '#88bbdd', color2: '#aaddee',
-	flies: true, moveSpeed: 3.0, detectRange: 460, xp: 13, aiBehavior: 'harasser',
+	name: 'Wind Sylph', w: 28, h: 38, hp: 300, color: '#88bbdd', color2: '#aaddee',
+	flies: true, moveSpeed: 3.2, detectRange: 740, attackRange: 460, xp: 13, aiBehavior: 'harasser',
 	drawFn: 'drawWindSylph',
 	spells: [
-		{ name:'windGust', cooldown:45, range:400, castFn:'castWindGust' },
-		{ name:'cycloneSpin', cooldown:120, range:180, castFn:'castCycloneSpin' },
-		{ name:'airSlash', cooldown:80, range:380, castFn:'castAirSlash' },
+		{ name:'cycloneSpin',   cooldown:160, range:480, castFn:'castSylphCycloneSpin' },
+		{ name:'airSlash',      cooldown:150, range:540, castFn:'castSylphAirSlash' },
+		{ name:'windGust',      cooldown:180, range:500, castFn:'castSylphWindGust' },
+		{ name:'pressureDrop',  cooldown:200, range:420, castFn:'castSylphPressureDrop' },
 	],
 },
 elderTreant: {
@@ -10701,13 +11631,14 @@ stormRaptor: {
 },
 /* ---------- DRAGON GRAVEYARD ENEMIES ---------- */
 boneWraith: {
-	name: 'Bone Wraith', w: 32, h: 50, hp: 280, color: '#8866aa', color2: '#aa88cc',
-	flies: true, moveSpeed: 1.8, detectRange: 400, xp: 15, aiBehavior: 'ambush',
+	name: 'Bone Wraith', w: 32, h: 50, hp: 360, color: '#8866aa', color2: '#aa88cc',
+	flies: true, phaseWalls: true, moveSpeed: 1.8, detectRange: 680, attackRange: 440, xp: 15, aiBehavior: 'ambush',
 	drawFn: 'drawBoneWraith',
 	spells: [
-		{ name:'shadowBolt', cooldown:70, range:380, castFn:'castShadowBolt' },
-		{ name:'phaseStrike', cooldown:120, range:250, castFn:'castPhaseStrike' },
-		{ name:'soulDrain', cooldown:160, range:300, castFn:'castSoulDrain' },
+		{ name:'shadowBolt', cooldown:150, range:500, castFn:'castShadowBolt' },
+		{ name:'phaseStrike', cooldown:180, range:420, castFn:'castPhaseStrike' },
+		{ name:'soulEcho', cooldown:190, range:480, castFn:'castSoulEcho' },
+		{ name:'graveRift', cooldown:200, range:520, castFn:'castGraveRift' },
 	],
 },
 babyDragon: {
@@ -10715,10 +11646,10 @@ babyDragon: {
 	flies: false, moveSpeed: 2.0, detectRange: 600, xp: 100, isBoss: true,
 	drawFn: 'drawBabyDragon',
 	spells: [
-		{ name:'iceBreath', cooldown:120, range:350, castFn:'castBabyIceBreath' },
-		{ name:'frostNova', cooldown:180, range:250, castFn:'castBabyFrostNova' },
-		{ name:'icicleBarrage', cooldown:240, range:400, castFn:'castBabyIcicleBarrage' },
-		{ name:'glacialSlam', cooldown:300, range:300, castFn:'castBabyGlacialSlam' },
+		{ name:'iceBreath', cooldown:140, range:420, castFn:'castBabyIceBreath' },
+		{ name:'frostNova', cooldown:180, range:320, castFn:'castBabyFrostNova' },
+		{ name:'icicleBarrage', cooldown:200, range:480, castFn:'castBabyIcicleBarrage' },
+		{ name:'frozenDive', cooldown:220, range:400, castFn:'castBabyFrozenDive' },
 		{ name:'blizzardRoar', cooldown:400, range:500, castFn:'castBabyBlizzardRoar' },
 		// Phase 2 spells (indices 5-7)
 		{ name:'windGust', cooldown:140, range:450, castFn:'castBabyWindGust' },
@@ -10728,55 +11659,60 @@ babyDragon: {
 },
 /* ---------- DARKENED SYLVARIS ENEMIES (corrupted underground) ---------- */
 darkVineCrawler: {
-	name: 'Darkened Vine Crawler', w: 38, h: 18, hp: 800, color: '#2a1a2a', color2: '#4a2a4a',
-	flies: false, moveSpeed: 2.2, detectRange: 360, aiBehavior: 'melee_lunge',
+	name: 'Darkened Vine Crawler', w: 38, h: 18, hp: 820, color: '#2a1a2a', color2: '#4a2a4a',
+	flies: false, moveSpeed: 2.4, detectRange: 680, attackRange: 400, aiBehavior: 'melee_lunge',
 	drawFn: 'drawDarkVineCrawler',
 	spells: [
-		{ name:'darkVineWhip', cooldown:55, range:200, castFn:'castDarkVineWhip' },
-		{ name:'darkRootSnare', cooldown:100, range:260, castFn:'castDarkRootSnare' },
-		{ name:'darkThornBurst', cooldown:130, range:280, castFn:'castDarkThornBurst' },
+		{ name:'voidVineWhip',     cooldown:150, range:520, castFn:'castDarkVoidWhip' },
+		{ name:'corruptedSnare',   cooldown:180, range:500, castFn:'castDarkRootSnare' },
+		{ name:'blackBloom',       cooldown:170, range:460, castFn:'castDarkBlackBloom' },
+		{ name:'rottingTunnel',    cooldown:200, range:540, castFn:'castDarkRottingTunnel' },
 	],
 },
 darkThornWolf: {
-	name: 'Darkened Thorn Wolf', w: 36, h: 28, hp: 900, color: '#1a1a2a', color2: '#3a2a4a',
-	flies: false, moveSpeed: 3.2, detectRange: 380, aiBehavior: 'melee_lunge',
+	name: 'Darkened Thorn Wolf', w: 36, h: 28, hp: 920, color: '#1a1a2a', color2: '#3a2a4a',
+	flies: false, moveSpeed: 3.4, detectRange: 700, attackRange: 420, aiBehavior: 'melee_lunge',
 	drawFn: 'drawDarkThornWolf',
 	spells: [
-		{ name:'darkBite', cooldown:50, range:180, castFn:'castDarkBite' },
-		{ name:'darkDash', cooldown:90, range:300, castFn:'castDarkDash' },
-		{ name:'shadowSpines', cooldown:120, range:260, castFn:'castShadowSpines' },
+		{ name:'darkBite',        cooldown:150, range:440, castFn:'castDarkWolfBite' },
+		{ name:'shadowDash',      cooldown:170, range:520, castFn:'castDarkWolfShadowDash' },
+		{ name:'corruptedSpines', cooldown:180, range:480, castFn:'castDarkWolfSpines' },
+		{ name:'predatorsMark',   cooldown:190, range:500, castFn:'castDarkWolfMark' },
 	],
 },
 darkMossWraith: {
-	name: 'Darkened Moss Wraith', w: 30, h: 44, hp: 700, color: '#1a2a1a', color2: '#2a3a2a',
-	flies: true, moveSpeed: 1.6, detectRange: 400, aiBehavior: 'ambush',
+	name: 'Darkened Moss Wraith', w: 30, h: 44, hp: 740, color: '#1a2a1a', color2: '#2a3a2a',
+	flies: true, phaseWalls: true, moveSpeed: 1.8, detectRange: 720, attackRange: 440, aiBehavior: 'ambush',
 	drawFn: 'drawDarkMossWraith',
 	spells: [
-		{ name:'darkGrasp', cooldown:60, range:240, castFn:'castDarkGrasp' },
-		{ name:'voidDrain', cooldown:110, range:280, castFn:'castVoidDrain' },
-		{ name:'darkFadeStrike', cooldown:140, range:220, castFn:'castDarkFadeStrike' },
+		{ name:'voidGrasp',       cooldown:160, range:500, castFn:'castDarkWraithVoidGrasp' },
+		{ name:'corruptionDrain', cooldown:180, range:460, castFn:'castDarkWraithCorrDrain' },
+		{ name:'shadowCopies',    cooldown:190, range:480, castFn:'castDarkWraithCopies' },
+		{ name:'darkFade',        cooldown:200, range:440, castFn:'castDarkWraithDarkFade' },
 	],
 },
 
 /* ---------- STORM ISLANDS ENEMIES ---------- */
 flameSalamander: {
-	name: 'Flame Salamander', w: 48, h: 24, hp: 600, color: '#cc4400', color2: '#ff6622',
-	flies: false, moveSpeed: 2.5, detectRange: 380, xp: 15, aiBehavior: 'melee_lunge',
+	name: 'Flame Salamander', w: 48, h: 24, hp: 640, color: '#cc4400', color2: '#ff6622',
+	flies: false, moveSpeed: 2.5, detectRange: 680, attackRange: 420, xp: 15, aiBehavior: 'melee_lunge',
 	drawFn: 'drawFlameSalamander',
 	spells: [
-		{ name:'fireSpit', cooldown:60, range:300, castFn:'castFireSpit' },
-		{ name:'flameDash', cooldown:120, range:200, castFn:'castFlameDash' },
-		{ name:'emberTrail', cooldown:140, range:250, castFn:'castEmberTrail' },
+		{ name:'fireSpit', cooldown:150, range:480, castFn:'castFireSpit' },
+		{ name:'flameDash', cooldown:170, range:440, castFn:'castFlameDash' },
+		{ name:'emberTrail', cooldown:180, range:460, castFn:'castEmberTrail' },
+		{ name:'magmaRoll', cooldown:200, range:500, castFn:'castMagmaRoll' },
 	],
 },
 magmaImp: {
-	name: 'Magma Imp', w: 32, h: 40, hp: 450, color: '#aa3300', color2: '#dd5500',
-	flies: false, moveSpeed: 3.0, detectRange: 350, xp: 12, aiBehavior: 'balanced',
+	name: 'Magma Imp', w: 32, h: 40, hp: 480, color: '#aa3300', color2: '#dd5500',
+	flies: false, moveSpeed: 3.0, detectRange: 660, attackRange: 400, xp: 12, aiBehavior: 'balanced',
 	drawFn: 'drawMagmaImp',
 	spells: [
-		{ name:'magmaBolt', cooldown:50, range:280, castFn:'castMagmaBolt' },
-		{ name:'lavaSplash', cooldown:100, range:200, castFn:'castLavaSplash' },
-		{ name:'impLeap', cooldown:130, range:250, castFn:'castImpLeap' },
+		{ name:'magmaBolt', cooldown:140, range:460, castFn:'castMagmaBolt' },
+		{ name:'lavaSplash', cooldown:170, range:400, castFn:'castLavaSplash' },
+		{ name:'impLeap', cooldown:180, range:440, castFn:'castImpLeap' },
+		{ name:'magmaTrap', cooldown:190, range:420, castFn:'castMagmaTrap' },
 	],
 },
 
@@ -10800,94 +11736,103 @@ fireColossus: {
 
 /* ---------- SEA TEMPLE ENEMIES (deep underwater) ---------- */
 abyssalGuardian: {
-	name: 'Abyssal Guardian', w: 40, h: 48, hp: 850, color: '#1a3a5a', color2: '#2a5a7a',
-	flies: false, moveSpeed: 1.8, detectRange: 400, xp: 18, aiBehavior: 'tank_advance',
+	name: 'Abyssal Guardian', w: 40, h: 48, hp: 900, color: '#1a3a5a', color2: '#2a5a7a',
+	flies: false, moveSpeed: 1.8, detectRange: 700, attackRange: 440, xp: 18, aiBehavior: 'tank_advance',
 	drawFn: 'drawAbyssalGuardian',
 	spells: [
-		{ name:'abyssalStrike', cooldown:60, range:200, castFn:'castAbyssalStrike' },
-		{ name:'tidalBash', cooldown:110, range:250, castFn:'castTidalBash' },
-		{ name:'depthCrush', cooldown:150, range:180, castFn:'castDepthCrush' },
+		{ name:'abyssalStrike', cooldown:150, range:460, castFn:'castAbyssalStrike' },
+		{ name:'tidalBash', cooldown:170, range:420, castFn:'castTidalBash' },
+		{ name:'depthCrush', cooldown:190, range:400, castFn:'castDepthCrush' },
+		{ name:'undertow', cooldown:200, range:480, castFn:'castUndertow' },
 	],
 },
 coralSentinel: {
-	name: 'Coral Sentinel', w: 36, h: 36, hp: 750, color: '#aa3060', color2: '#cc5080',
-	flies: false, moveSpeed: 1.5, detectRange: 420, xp: 16, aiBehavior: 'ranged_kite',
+	name: 'Coral Sentinel', w: 36, h: 36, hp: 800, color: '#aa3060', color2: '#cc5080',
+	flies: false, moveSpeed: 1.5, detectRange: 700, attackRange: 440, xp: 16, aiBehavior: 'ranged_kite',
 	drawFn: 'drawCoralSentinel',
 	spells: [
-		{ name:'coralSpine', cooldown:55, range:320, castFn:'castCoralSpine' },
-		{ name:'coralBurst', cooldown:120, range:260, castFn:'castCoralBurst' },
-		{ name:'calcifyShield', cooldown:160, range:100, castFn:'castCalcifyShield' },
+		{ name:'coralSpine', cooldown:150, range:500, castFn:'castCoralSpine' },
+		{ name:'coralBurst', cooldown:170, range:440, castFn:'castCoralBurst' },
+		{ name:'calcifyShield', cooldown:190, range:200, castFn:'castCalcifyShield' },
+		{ name:'coralGarden', cooldown:200, range:480, castFn:'castCoralGarden' },
 	],
 },
 depthSerpent: {
-	name: 'Depth Serpent', w: 50, h: 20, hp: 700, color: '#0a4060', color2: '#1a6080',
-	flies: false, moveSpeed: 3.0, detectRange: 380, xp: 14, aiBehavior: 'melee_lunge',
+	name: 'Depth Serpent', w: 50, h: 20, hp: 740, color: '#0a4060', color2: '#1a6080',
+	flies: false, moveSpeed: 3.0, detectRange: 680, attackRange: 420, xp: 14, aiBehavior: 'melee_lunge',
 	drawFn: 'drawDepthSerpent',
 	spells: [
-		{ name:'serpentBite', cooldown:45, range:180, castFn:'castSerpentBite' },
-		{ name:'venomSpit', cooldown:90, range:300, castFn:'castVenomSpit' },
-		{ name:'coilingStrike', cooldown:130, range:220, castFn:'castCoilingStrike' },
+		{ name:'serpentBite', cooldown:150, range:420, castFn:'castSerpentBite' },
+		{ name:'venomSpit', cooldown:170, range:480, castFn:'castVenomSpit' },
+		{ name:'coilingStrike', cooldown:180, range:440, castFn:'castCoilingStrike' },
+		{ name:'abyssalCurrent', cooldown:200, range:500, castFn:'castAbyssalCurrent' },
 	],
 },
 // ===== BLACK SANDS DESERT ENEMIES =====
 sandWraith: {
 	name: 'Sand Wraith', w: 50, h: 58, hp: 1800, color: '#aa8844', color2: '#ccaa55',
-	flies: false, moveSpeed: 2.8, detectRange: 420, xp: 22, aiBehavior: 'ranged_kite',
+	flies: false, moveSpeed: 2.8, detectRange: 700, attackRange: 460, xp: 22, aiBehavior: 'ranged_kite',
 	drawFn: 'drawSandWraith',
 	spells: [
-		{ name:'sandBlast', cooldown:50, range:340, castFn:'castSandBlast' },
-		{ name:'dustDevil', cooldown:110, range:280, castFn:'castDustDevil' },
-		{ name:'mirageShift', cooldown:140, range:200, castFn:'castMirageShift' },
+		{ name:'sandBlast', cooldown:150, range:500, castFn:'castSandBlast' },
+		{ name:'dustDevil', cooldown:170, range:440, castFn:'castDustDevil' },
+		{ name:'mirageShift', cooldown:190, range:420, castFn:'castMirageShift' },
+		{ name:'buriedStrike', cooldown:200, range:480, castFn:'castBuriedStrike' },
 	],
 },
 tombGuardian: {
 	name: 'Tomb Guardian', w: 56, h: 68, hp: 3000, color: '#5a4a30', color2: '#7a6a48',
-	flies: false, moveSpeed: 1.5, detectRange: 450, xp: 28, aiBehavior: 'tank_advance',
+	flies: false, moveSpeed: 1.5, detectRange: 720, attackRange: 460, xp: 28, aiBehavior: 'tank_advance',
 	drawFn: 'drawTombGuardian',
 	spells: [
-		{ name:'stoneSmash', cooldown:70, range:200, castFn:'castStoneSmash' },
-		{ name:'ancientCurse', cooldown:130, range:300, castFn:'castAncientCurse' },
-		{ name:'sandstoneShield', cooldown:160, range:100, castFn:'castSandstoneShield' },
+		{ name:'stoneSmash', cooldown:160, range:420, castFn:'castStoneSmash' },
+		{ name:'ancientCurse', cooldown:180, range:480, castFn:'castAncientCurse' },
+		{ name:'sandstoneShield', cooldown:190, range:200, castFn:'castSandstoneShield' },
+		{ name:'tombquake', cooldown:210, range:500, castFn:'castTombquake' },
 	],
 },
 desertSerpent: {
 	name: 'Desert Serpent', w: 64, h: 30, hp: 2200, color: '#8a7030', color2: '#aa9040',
-	flies: false, moveSpeed: 3.2, detectRange: 400, xp: 24, aiBehavior: 'melee_lunge',
+	flies: false, moveSpeed: 3.2, detectRange: 700, attackRange: 440, xp: 24, aiBehavior: 'melee_lunge',
 	drawFn: 'drawDesertSerpent',
 	spells: [
-		{ name:'venomousFang', cooldown:45, range:190, castFn:'castVenomousFang' },
-		{ name:'sandBurrow', cooldown:100, range:250, castFn:'castSandBurrow' },
-		{ name:'constrictingCoil', cooldown:135, range:200, castFn:'castConstrictingCoil' },
+		{ name:'venomousFang', cooldown:150, range:420, castFn:'castVenomousFang' },
+		{ name:'sandBurrow', cooldown:170, range:460, castFn:'castSandBurrow' },
+		{ name:'constrictingCoil', cooldown:180, range:400, castFn:'castConstrictingCoil' },
+		{ name:'duneAmbush', cooldown:200, range:500, castFn:'castDuneAmbush' },
 	],
 },
 mummyWarrior: {
 	name: 'Mummy Warrior', w: 48, h: 62, hp: 2600, color: '#6a5a38', color2: '#8a7a50',
-	flies: false, moveSpeed: 2.0, detectRange: 400, xp: 26, aiBehavior: 'balanced',
+	flies: false, moveSpeed: 2.0, detectRange: 700, attackRange: 440, xp: 26, aiBehavior: 'balanced',
 	drawFn: 'drawMummyWarrior',
 	spells: [
-		{ name:'cursedSwing', cooldown:55, range:210, castFn:'castCursedSwing' },
-		{ name:'wrappingBinds', cooldown:110, range:280, castFn:'castWrappingBinds' },
-		{ name:'tombRage', cooldown:150, range:180, castFn:'castTombRage' },
+		{ name:'cursedSwing', cooldown:150, range:420, castFn:'castCursedSwing' },
+		{ name:'wrappingBinds', cooldown:170, range:480, castFn:'castWrappingBinds' },
+		{ name:'tombRage', cooldown:190, range:400, castFn:'castTombRage' },
+		{ name:'burialSnare', cooldown:200, range:460, castFn:'castBurialSnare' },
 	],
 },
 scarabSwarm: {
 	name: 'Scarab Swarm', w: 52, h: 40, hp: 1500, color: '#2a4a2a', color2: '#3a6a3a',
-	flies: true, moveSpeed: 3.5, detectRange: 350, xp: 20, aiBehavior: 'balanced',
+	flies: true, moveSpeed: 3.5, detectRange: 680, attackRange: 420, xp: 20, aiBehavior: 'balanced',
 	drawFn: 'drawScarabSwarm',
 	spells: [
-		{ name:'swarmBite', cooldown:40, range:160, castFn:'castSwarmBite' },
-		{ name:'plagueCloud', cooldown:100, range:260, castFn:'castPlagueCloud' },
-		{ name:'burstScatter', cooldown:130, range:220, castFn:'castBurstScatter' },
+		{ name:'swarmBite', cooldown:150, range:400, castFn:'castSwarmBite' },
+		{ name:'plagueCloud', cooldown:170, range:460, castFn:'castPlagueCloud' },
+		{ name:'burstScatter', cooldown:180, range:440, castFn:'castBurstScatter' },
+		{ name:'livingCarpet', cooldown:200, range:500, castFn:'castLivingCarpet' },
 	],
 },
 sandstormDjinn: {
 	name: 'Sandstorm Djinn', w: 54, h: 66, hp: 3500, color: '#aa7722', color2: '#cc9944',
-	flies: true, moveSpeed: 2.2, detectRange: 500, xp: 32, aiBehavior: 'ranged_kite',
+	flies: true, phaseWalls: true, moveSpeed: 2.2, detectRange: 740, attackRange: 500, xp: 32, aiBehavior: 'ranged_kite',
 	drawFn: 'drawSandstormDjinn',
 	spells: [
-		{ name:'sandstormBolt', cooldown:55, range:380, castFn:'castSandstormBolt' },
-		{ name:'whirlwindBarrage', cooldown:120, range:320, castFn:'castWhirlwindBarrage' },
-		{ name:'desertMirage', cooldown:160, range:400, castFn:'castDesertMirage' },
+		{ name:'sandstormBolt', cooldown:150, range:520, castFn:'castSandstormBolt' },
+		{ name:'whirlwindBarrage', cooldown:180, range:480, castFn:'castWhirlwindBarrage' },
+		{ name:'desertMirage', cooldown:190, range:500, castFn:'castDesertMirage' },
+		{ name:'sandstormPrison', cooldown:210, range:460, castFn:'castSandstormPrison' },
 	],
 },
 // ===== SERAPHEL, THE SEVERED LIGHT (Boss) =====
@@ -10928,7 +11873,15 @@ voidArbiter: {
 		{ name:'voidTeleportStrike', cooldown:220, range:700, castFn:'castVoidTeleportStrike' },
 	],
 },
+zenith: {
+	name: 'Zenith, The Final Convergence', w: 100, h: 100, hp: 120000, color: '#99bbff', color2: '#ffffff',
+	flies: true, moveSpeed: 2.0, detectRange: 2200, isBoss: true,
+	drawFn: 'drawVoidArbiter',
+	spells: [],
+},
 };
+if(typeof window !== 'undefined') window.ENEMY_TYPES = ENEMY_TYPES;
+if(typeof renderHotbar === 'function') renderHotbar();
 /* Auto-compute weight for each enemy type if not explicitly set
    weight: how much the enemy resists solidify momentum.
    Computed from size/hp. Bosses get very high weight (they already bypass solidify). */
@@ -10954,6 +11907,7 @@ ENEMY_TYPES.imp.weight=0.6;
 ENEMY_TYPES.flameSerpent.weight=0.8;
 ENEMY_TYPES.vineCrawler.weight=0.5;
 ENEMY_TYPES.magmaGolem.weight=2.5;
+ENEMY_TYPES.magmaWarden.weight=8;
 ENEMY_TYPES.glacierSentinel.weight=2.2;
 ENEMY_TYPES.slagBrute.weight=2.8;
 ENEMY_TYPES.rockGolem.weight=2.3;
@@ -10977,7 +11931,7 @@ if(IS_SANDBOX){
 		dummies.push({
 			x: d.x, y: d.y,
 			w: 28, h: 48,
-			hp: 5000, maxHp: 5000,
+			hp: 10000, maxHp: 10000,
 			flash: 0,
 			dots: [],
 			stunTimer: 0,
@@ -10985,6 +11939,9 @@ if(IS_SANDBOX){
 			vx: 0, vy: 0,
 			dead: false,
 			deathTimer: 0,
+			isSandboxDummy: true,
+			spawnX: d.x, spawnY: d.y,
+			onGround: true,
 		});
 		dummyDmgAccum.push([]);
 	}
@@ -11079,7 +12036,6 @@ setTimeout(() => updateQuestTracker(), 100);
 setTimeout(() => updateSpellTeacherTracker(), 200);
 
 // Dialogue system state
-let dialogueActive = false;
 let dialogueQueue = [];
 let dialogueIndex = 0;
 let dialogueCallback = null;
@@ -11088,9 +12044,7 @@ let typewriterTarget = '';
 let typewriterTimer = 0;
 let nearbyNpc = null;
 
-// Inventory overlay state
-let inventoryOpen = false;
-let scrollShopOpen = false;
+// Inventory overlay state (inventoryOpen / scrollShopOpen declared at top)
 
 // Notification state
 let notifyTimer = 0;
@@ -12018,7 +12972,7 @@ function spawnDungeonEnemies(){
 		if(t.isBoss){ bossSpawnDef = def; continue; }
 		// Find ground below spawn position
 		let groundY = def.y;
-		if(!t.flies){
+		if(!t.flies && !def._cliff){
 			for(let row = Math.floor(def.y / TILE); row < MAP_ROWS; row++){
 				if(isSolid(Math.floor(def.x / TILE), row)){
 					groundY = row * TILE - t.h;
@@ -12030,7 +12984,10 @@ function spawnDungeonEnemies(){
 			type: def.type,
 			typeDef: t,
 			x: def.x, y: groundY,
-			puzzleSeg: def.puzzleSeg,  // segment index for kill-all puzzle tracking
+			puzzleSeg: def.puzzleSeg,
+			roomId: def.roomId,
+			_cliff: !!def._cliff,
+			isMiniBoss: !!(def.isMiniBoss || t.isMiniBoss),
 			_coopKey: Math.round(def.x) + '_' + Math.round(groundY) + '_' + def.type,
 			w: Math.round(t.w * DIFF_SIZE_MULT), h: Math.round(t.h * DIFF_SIZE_MULT),
 			vx: 0, vy: 0,
@@ -12061,6 +13018,8 @@ function spawnDungeonEnemies(){
 			bossPhase: 1,
 			bossPhaseTransition: 0,
 			bossCharging: false,
+			_safeX: def.x,
+			_safeY: groundY,
 		});
 	}
 }
@@ -12290,6 +13249,7 @@ function blindDurationFrames(power){
 }
 function enemyDetectRange(en){
 	let r=en&&en.typeDef?(en.typeDef.detectRange||0):0;
+	if(en&&en.typeDef&&!en.typeDef.isBoss) r*=1.8;
 	if((en.blindTimer||0)>0||(en._amVisionReduce||0)>0) r*=0.25;
 	return r;
 }
@@ -12538,49 +13498,44 @@ function moveEntityTile(ent){
 	let remainX = ent.vx;
 	while(Math.abs(remainX) > 0.01){
 		const stepX = Math.abs(remainX) > maxStep ? Math.sign(remainX) * maxStep : remainX;
+		const prevX = ent.x;
 		ent.x += stepX;
 		remainX -= stepX;
-		const left = Math.floor(ent.x / TILE);
-		const right = Math.floor((ent.x + ent.w - 0.1) / TILE);
-		const top = Math.floor(ent.y / TILE);
-		const bottom = Math.floor((ent.y + ent.h - 0.1) / TILE);
-		let hitWall = false;
-		for(let r = top; r <= bottom; r++){
-			for(let c = left; c <= right; c++){
-				if(isSolid(c, r)){
-					if(ent.vx > 0) ent.x = c * TILE - ent.w;
-					else if(ent.vx < 0) ent.x = (c + 1) * TILE;
-					ent.vx = 0;
-					if(ent.launchVx) ent.launchVx = 0; // Kill launch on wall hit
-					hitWall = true;
-				}
+		if(rectOverlapsSolid(ent.x, ent.y, ent.w, ent.h)){
+			ent.x = prevX;
+			const dirX = Math.sign(stepX);
+			if(dirX){
+				while(!rectOverlapsSolid(ent.x + dirX, ent.y, ent.w, ent.h)) ent.x += dirX;
 			}
+			ent.vx = 0;
+			if(ent.launchVx) ent.launchVx = 0;
+			break;
 		}
-		if(hitWall) break;
 	}
 	// Vertical — step in increments too
 	let remainY = ent.vy;
 	ent.onGround = false;
 	while(Math.abs(remainY) > 0.01){
 		const stepY = Math.abs(remainY) > maxStep ? Math.sign(remainY) * maxStep : remainY;
+		const prevY = ent.y;
 		ent.y += stepY;
 		remainY -= stepY;
-		const left2 = Math.floor(ent.x / TILE);
-		const right2 = Math.floor((ent.x + ent.w - 0.1) / TILE);
-		const top2 = Math.floor(ent.y / TILE);
-		const bottom2 = Math.floor((ent.y + ent.h - 0.1) / TILE);
-		let hitWallY = false;
-		for(let r = top2; r <= bottom2; r++){
-			for(let c = left2; c <= right2; c++){
-				if(isSolid(c, r)){
-					if(ent.vy > 0){ ent.y = r * TILE - ent.h; ent.onGround = true; }
-					else if(ent.vy < 0) ent.y = (r + 1) * TILE;
-					ent.vy = 0;
-					hitWallY = true;
-				}
+		if(rectOverlapsSolid(ent.x, ent.y, ent.w, ent.h)){
+			ent.y = prevY;
+			const dirY = Math.sign(stepY);
+			if(dirY > 0){
+				while(!rectOverlapsSolid(ent.x, ent.y + 1, ent.w, ent.h)) ent.y += 1;
+				ent.onGround = true;
+			} else if(dirY < 0){
+				while(!rectOverlapsSolid(ent.x, ent.y - 1, ent.w, ent.h)) ent.y -= 1;
 			}
+			ent.vy = 0;
+			break;
 		}
-		if(hitWallY) break;
+	}
+	if(!ent.onGround && rectOverlapsSolid(ent.x, ent.y + 1, ent.w, ent.h)){
+		ent.onGround = true;
+		if(ent.vy > 0) ent.vy = 0;
 	}
 	// Sylvaris underground: also check sandboxPlatforms for cave ledges
 	if(IS_SYLVARIS && ent.y + ent.h > SYLVARIS_CONFIG.groundY + 50){
@@ -12588,7 +13543,7 @@ function moveEntityTile(ent){
 			if(plat.y <= SYLVARIS_CONFIG.groundY) continue;
 			if(ent.x + ent.w > plat.x && ent.x < plat.x + plat.w &&
 			   ent.y + ent.h > plat.y && ent.y < plat.y + plat.h){
-				if(ent.vy >= 0){
+				if(ent.vy >= 0 && platformStandClear(ent.x, ent.y, ent.w, ent.h, plat)){
 					ent.y = plat.y - ent.h;
 					ent.vy = 0;
 					ent.onGround = true;
@@ -12618,6 +13573,8 @@ function moveEntityTile(ent){
 			ent.vy = 0;
 		}
 	}
+	if(rectOverlapsSolid(ent.x, ent.y, ent.w, ent.h) || entityInCeilingCrush(ent, ent.x, ent.y)) unstuckFromTiles(ent);
+	else markEntitySafeTilePos(ent);
 }
 function moveEntitySandbox(ent){
 	// Leviathan path stage check (cache once per frame)
@@ -13517,8 +14474,8 @@ function castSpell(){
 		mana-=cost;
 		player.hasCast=true; // Tutorial tracking
 		trackSpellTeacherCast(spell); // Spell Teacher quest tracking
-		// accumulate total mana from normal spell casts (2x gain)
-		totalMana+=cost*2;
+		const necroSummonCast = typeof necroSummonPhase==='function' && necroSummonPhase(spell) && typeof isNecroCaster==='function' && isNecroCaster(dungeonManaOpts(activeSlot, spell));
+		if(!necroSummonCast) totalMana+=cost*2;
 		updateTotalManaHUD();
 		const cd=Math.round((8+Math.round(avgPower*12)+Math.round(rawCost*0.12))*vowCdMult);
 		spellCooldowns[activeSlot]=cd; spellMaxCooldowns[activeSlot]=cd;
@@ -13650,22 +14607,30 @@ function spawnPhase(spell,phaseIdx,originX,originY,facing,dmgMult,isUltimate,cas
 			let bestiary = {};
 			try{ const raw = localStorage.getItem('magicBattle_bestiary'); if(raw) bestiary = JSON.parse(raw); }catch(e){}
 			const strongIds = [];
-			for(const key in ENEMY_TYPES){
-				if(!bestiary[key]) continue;
-				const et = ENEMY_TYPES[key];
-				if(et.isBoss) continue;
-				if(et.hp > 300) strongIds.push(key);
-			}
-			if(strongIds.length === 0){
+			const domainUlt = !!(domainObj.isUltimate || domainObj.sourceSlot === 9);
+			if(ph.necroSummonType && ph.necroSummonType !== 'random' && ENEMY_TYPES[ph.necroSummonType] && bestiary[ph.necroSummonType]
+				&& !(typeof isUltOnlyNecroType === 'function' && isUltOnlyNecroType(ph.necroSummonType) && !domainUlt)){
+				strongIds.push(ph.necroSummonType);
+			} else {
 				for(const key in ENEMY_TYPES){
 					if(!bestiary[key]) continue;
-					if(!ENEMY_TYPES[key].isBoss) strongIds.push(key);
+					if(typeof isUltOnlyNecroType === 'function' && isUltOnlyNecroType(key) && !domainUlt) continue;
+					const et = ENEMY_TYPES[key];
+					if(et.isBoss) continue;
+					if(et.hp > 300) strongIds.push(key);
+				}
+				if(strongIds.length === 0){
+					for(const key in ENEMY_TYPES){
+						if(!bestiary[key]) continue;
+						if(typeof isUltOnlyNecroType === 'function' && isUltOnlyNecroType(key) && !domainUlt) continue;
+						if(!ENEMY_TYPES[key].isBoss) strongIds.push(key);
+					}
 				}
 			}
 			if(strongIds.length > 0){
 				domainObj.necroSummonIds = strongIds;
 				domainObj.necroSummonCount = 0;
-				domainObj.necroSummonMax = 3;
+				domainObj.necroSummonMax = 99;
 				domainObj.necroSummonPower = (ph.power||1) * 2.5;
 				domainObj.necroSpellPh = ph;
 				domainObj.necroNextSummonAge = Math.round(2 * FPS);
@@ -13849,55 +14814,8 @@ function spawnPhase(spell,phaseIdx,originX,originY,facing,dmgMult,isUltimate,cas
 		if(proj.shape==='summon'){
 			// Necromancer class: summon defeated enemies from bestiary
 			if(hasClass('necromancer')){
-				// Count existing necro-summons
-				const necroCount = playerMinions.filter(m => m.isNecroSummon).length;
-				if(necroCount >= 20){
-					dmgNumbers.push({x:player.x+player.w/2,y:player.y-30,text:'Max 20 Necro-Summons!',age:0,color:'#8e44ad'});
-					continue;
-				}
-				// Domain sub-phase summons: auto-pick a lower-tier enemy
-				if(isDomainSubPhase){
-					if(_dom && _dom._remoteFlag) continue;
-					let bestiary = {};
-					try{ const raw = localStorage.getItem('magicBattle_bestiary'); if(raw) bestiary = JSON.parse(raw); }catch(e){}
-					const autoIds = [];
-					for(const key in ENEMY_TYPES){
-						if(!bestiary[key]) continue;
-						const et = ENEMY_TYPES[key];
-						if(!et.isBoss && et.hp <= 600) autoIds.push(key);
-					}
-					if(autoIds.length > 0){
-						const typeId = autoIds[Math.floor(Math.random() * autoIds.length)];
-						const et = ENEMY_TYPES[typeId];
-						const _dHealthBonus = (ph.summonHealth||0) * 10;
-						const _dSpeedMult = 1 + (ph.summonSpeed||0) * 0.08;
-						const _dRangeBonus = (ph.summonRange||0) * 60;
-						const scaledHp = Math.round(et.hp * 0.55 + proj.power * 25 + _dHealthBonus);
-						playerMinions.push({
-							x:proj.x, y:proj.y, w:et.w, h:et.h,
-							vx:0, vy:0,
-							color: et.color,
-							power: proj.power * 1.5,
-							hp:scaledHp, maxHp:scaledHp,
-							age:0, maxAge:activeDomain ? activeDomain.maxAge - activeDomain.age : 600,
-							animTimer:0, attackAnimTimer:0,
-							facing: Math.random() < 0.5 ? 1 : -1,
-							onGround:false, target:null, summonClose:true,
-							isNecroSummon:true, necroType:typeId,
-							necroName:et.name, necroFlies:!!et.flies,
-							fireTimer:0, fireCooldown:Math.round(FPS*2.5),
-							detectRange: (et.detectRange||400) + _dRangeBonus,
-							moveSpeed: Math.min((et.moveSpeed||1.5) * _dSpeedMult, 5),
-							spellCooldowns: et.spells ? et.spells.map(() => Math.round(FPS*2)) : [],
-							// Archmage dual-class: necro summons inherit elemental behaviors
-							archmageElement: hasClass('archmage') ? (proj.effects && proj.effects[0] ? proj.effects[0] : null) : null,
-						});
-						dmgNumbers.push({x:proj.x,y:proj.y-20,text:`💀 ${et.name}`,age:0,color:'#8e44ad'});
-					}
-					continue;
-				}
-				// Queue necro summon selection — game will pause briefly
-				pendingNecroSummon = {
+				const fromDomain = !!isDomainSubPhase;
+				const ns = {
 					x:proj.x, y:proj.y,
 					spell:spell, phaseIdx:phaseIdx,
 					sourceSlot:proj.sourceSlot,
@@ -13905,15 +14823,44 @@ function spawnPhase(spell,phaseIdx,originX,originY,facing,dmgMult,isUltimate,cas
 					facing:proj.facing,
 					isUltimate:proj.isUltimate,
 					power:proj.power,
-					maxAge:proj.maxAge,
+					maxAge:fromDomain && activeDomain ? activeDomain.maxAge - activeDomain.age : Infinity,
 					color:proj.color,
 					ph:ph,
 					effects:proj.effects||[],
 				};
+				if(isDomainSubPhase){
+					if(_dom && _dom._remoteFlag) continue;
+					const preset = ph.necroSummonType;
+					if(preset && preset !== 'random'){
+						tryRaisePresetNecro(ns, preset, true);
+					} else {
+						const pick = pickRandomNecroType(true, ns);
+						if(pick) raiseNecroMinion(ns, pick, true);
+						else dmgNumbers.push({x:player.x+player.w/2,y:player.y-30,text:`Domain summon cap ${necroPointsUsed(true)}/${necroPointCap(true)}`,age:0,color:'#8e44ad'});
+					}
+					continue;
+				}
+				ns.castManaCost = displayedSpellMana(spell, dungeonManaOpts(proj.sourceSlot != null ? proj.sourceSlot : 0, spell));
+				ns.castFromTotal = !!(proj.isUltimate || spell.isUltimate || proj.sourceSlot === 9);
+				if(ph.necroSummonType === 'random' || ph.necroSummonType == null){
+					const pick = pickRandomNecroType(false, ns);
+					if(pick) tryRaisePresetNecro(ns, pick, false);
+					else {
+						dmgNumbers.push({x:player.x+player.w/2,y:player.y-30,text:'No valid random summon',age:0,color:'#8e44ad'});
+						refundNecroCast(ns);
+					}
+					continue;
+				}
+				if(ph.necroSummonType){
+					tryRaisePresetNecro(ns, ph.necroSummonType, false);
+					continue;
+				}
+				pendingNecroSummon = ns;
 				continue;
 			}
-			const _smW = Math.max(14, Math.round(20 + (ph.width-1)*18));
-			const _smH = Math.max(14, Math.round(20 + (ph.height-1)*18));
+			const _smW = Math.max(8, Math.round(20 * summonSizeScale(ph, 'width')));
+			const _smH = Math.max(8, Math.round(20 * summonSizeScale(ph, 'height')));
+			const _smPower = summonSpellPower(ph, proj.power);
 			playerMinions.push({
 				x:proj.x, y:proj.y, w:_smW, h:_smH,
 				vx:0, vy:0,
@@ -13924,12 +14871,14 @@ function spawnPhase(spell,phaseIdx,originX,originY,facing,dmgMult,isUltimate,cas
 				facing:proj.facing,
 				isUltimate:proj.isUltimate,
 				power:proj.power,
-				hp:20+(ph.summonHealth||0)*5, maxHp:20+(ph.summonHealth||0)*5,
-				age:0, maxAge:proj.maxAge*3,
+				spellPower:_smPower,
+				ph:ph,
+				hp:summonHpFromPower(ph, null, false, proj.power), maxHp:summonHpFromPower(ph, null, false, proj.power),
+				age:0, maxAge:summonDurationFrames(ph, proj.maxAge, false),
 				fireTimer:0, fireCooldown:Math.round(FPS*2.5),
 				target:null, animTimer:0,
 				detectRange:600+(ph.summonRange||0)*100,
-				moveSpeed:Math.min(1.0+(ph.summonSpeed||0)*0.5, 5),
+				moveSpeed:summonMoveFromSpeed(ph, null),
 				summonClose:!!ph.summonClose,
 				selfReliance:!!ph.summonSelfReliance,
 				// Archmage: tag summon with elemental variant based on first effect
@@ -13974,6 +14923,16 @@ function morphProjectile(proj,phaseIdx,dmgMult){
 	const ph=spell.phases[phaseIdx];
 	// Resolve 'same' shape: inherit from previous phase
 	const resolvedShape=(ph.shape==='same'&&phaseIdx>0)?spell.phases[phaseIdx-1].shape:(ph.shape||'missile');
+	// Later-phase summons/allies must spawn at the previous phase location.
+	// Morphing only restyles the projectile, so a summon shape would sit there and do nothing.
+	if(resolvedShape==='summon'||resolvedShape==='allyOrb'){
+		const ox=proj.x, oy=proj.y, of=proj.facing;
+		spawnPhase(spell, phaseIdx, ox, oy, of, dmgMult, proj.isUltimate, proj.castId, proj.sourceSlot, ox, oy);
+		proj.age=proj.maxAge;
+		proj.hasHit=true;
+		proj.phaseTriggered=true;
+		return;
+	}
 	const isSameShapeM=ph.shape==='same'&&phaseIdx>0;
 	const prevPhM=isSameShapeM?spell.phases[phaseIdx-1]:null;
 	const count=Math.min(ph.behavior==='aroundSelf'?(ph.aroundSelfCount||4):(isSameShapeM?1:(ph.count||1)), proj._fromDomain?5:200);
@@ -14055,7 +15014,7 @@ function spawnEnemyProj(x,y,vx,vy,opts){
 	if(COOP_GUEST && !CoopSync.applying) return;
 	const ENEMY_DMG_BUFF = 1.4; // global enemy damage buff multiplier
 	const nerfMult = _eprojDmgNerf !== 1 ? _eprojDmgNerf : 1;
-	const sylvarisNerf = IS_SYLVARIS ? 0.65 : 1; // Sylvaris enemies deal ~35% less damage
+	const sylvarisNerf = (IS_SYLVARIS && !opts.noZoneNerf) ? 0.65 : 1; // Sylvaris enemies deal ~35% less damage
 	const scaledPower = Math.round((opts.power||8) * DIFF_DMG_MULT * ENEMY_DMG_BUFF * nerfMult * sylvarisNerf * (((typeof CoopSync !== 'undefined' && CoopSync.applying) ? 1 : ((_coopBossDmg || coopDungeonBossAlive()) ? coopBossDmgMult() : 1))));
 	// Auto-enable noWallCollide for projectiles spawned in the leviathan arena
 	let nwc = opts.noWallCollide||false;
@@ -14065,19 +15024,21 @@ function spawnEnemyProj(x,y,vx,vy,opts){
 	if(kittenBoss?.phase==='active' && !_kef.includes('burn')) _kef=[..._kef,'burn'];
 	const _ep = {
 		x,y,vx,vy,age:0,maxAge:opts.maxAge||180,
-		width:opts.width||8,height:opts.height||8,
+		width:(opts.width||8)*ENEMY_ATK_SCALE,height:(opts.height||8)*ENEMY_ATK_SCALE,
 		color:opts.color||'#ff4400',color2:opts.color2||'#ffaa44',
 		power:scaledPower,shape:opts.shape||'circle',
 		effects:_kef,trail:opts.trail||'none',
 		rotAngle:0,rotSpeed:opts.rotSpeed||0,
 		gravity:opts.gravity||0,
 		pierce:opts.pierce||false,hasHit:false,
-		aoe:opts.aoe||false,aoeRadius:opts.aoeRadius||0,aoeTimer:0,aoeMax:opts.aoeMax||30,
+		aoe:opts.aoe||false,aoeRadius:(opts.aoeRadius||0)*ENEMY_ATK_SCALE,aoeTimer:0,aoeMax:opts.aoeMax||30,
 		linger:opts.linger||false,lingerTimer:0,lingerMax:opts.lingerMax||0,lingerDmgInterval:opts.lingerDmgInterval||30,
 		lingerLastDmg:0,
 		noWallCollide:nwc,
 		dispelImmune:opts.dispelImmune||(seraphelFight.phase==='active'),
 		_destroysSolid:opts._destroysSolid||false,
+		homing:!!opts.homing,
+		homingStrength:opts.homingStrength||0.05,
 	};
 	enemyProjectiles.push(_ep);
 	CoopSync.queueProj(_ep);
@@ -14340,6 +15301,8 @@ function castSpritePhaseFlicker(en){
 		const side=player.x+player.w/2>en.x+en.w/2?-1:1;
 		en.x=player.x+player.w/2+side*80-en.w/2;
 		en.y=player.y+player.h/2-en.h/2;
+		if(typeof unstuckFromTiles==='function') unstuckFromTiles(en);
+		if(en.typeDef && en.typeDef.flies) en.baseY = en.y - (en.flyOffset || 0);
 		const dir=side;
 		// Burst from new position
 		for(let i=0;i<8;i++){
@@ -18433,7 +19396,7 @@ function castVoidTeleportStrike(en){
 
 /* Cast function lookup */
 const CAST_FNS = {
-	// Fire enemies
+	// Fire enemies — new kit names are assigned from fire-dungeon-kit.js
 	castImpPyroclasticOrb, castImpVolcanicDarts, castImpSmokeDash,
 	castSerpentScorchTrail, castSerpentCoilSlam, castSerpentVenomFlame,
 	castEmberSpellbook, castEmberFlamethrowerSweep, castEmberSummonPillar,
@@ -18443,7 +19406,7 @@ const CAST_FNS = {
 	castDragonBreath, castDragonMeteorStrike, castDragonTailSwipe,
 	castDragonLavaPillar, castDragonWingGust, castDragonInfernoVortex,
 	castDragonCharge, castDragonApocalypse,
-	// Ice enemies
+	// Ice enemies — new kit names are assigned from ice-dungeon-kit.js
 	castWraithIceBolt, castWraithFrostNova, castWraithPhaseStrike,
 	castArcherIceArrow, castArcherFrostTrap, castArcherShatterShot,
 	castBeastFrostBreath, castBeastIceSlam, castBeastBlizzardRoar,
@@ -18453,7 +19416,7 @@ const CAST_FNS = {
 	castFrostBreath, castIcicleBarrage, castGlacialSlam,
 	castFrozenPillars, castBlizzardGust, castPermafrostVortex,
 	castGlacialCharge, castAbsoluteZero,
-	// Earth enemies
+	// Earth enemies — new kit names are assigned from earth-dungeon-kit.js
 	castGolemBoulderThrow, castGolemGroundSlam, castGolemStoneSkin,
 	castVineWhip, castVineRootSnare, castVineThornBurst,
 	castSpiderWebShot, castSpiderPoisonBite, castSpiderPounce,
@@ -18463,7 +19426,8 @@ const CAST_FNS = {
 	castBoulderBarrage, castSeismicSlam, castStalagmiteErupt,
 	castEarthenWall, castCrystalStorm, castTerraVortex,
 	castTitanCharge, castCataclysm,
-	// Iron enemies
+	// Iron + Thorn Wolf — new kit names are assigned from forge-wildes-kit.js
+	// Sylvaris + Corrupted Roots — new kit names are assigned from wildes-dungeon-kit.js
 	castIronSlash, castIronShieldBash, castIronSpike,
 	castForgeSparkBolt, castForgeHeatBeam, castForgeOvercharge,
 	castSlagSmash, castSlagMoltenSpit, castSlagHarden,
@@ -18485,7 +19449,7 @@ const CAST_FNS = {
 	castWindGust, castCycloneSpin, castAirSlash,
 	castAncientSmash, castRootUpheaval, castBarkBarrage, castTreantCharge, castEntombingRoots,
 	castLightningStrike, castStormDive, castThunderclap, castGaleForce, castTempestFury,
-	// Bone wraith
+	// Bone wraith + late kits — new names are assigned from late-dungeon-kit.js
 	castShadowBolt, castPhaseStrike, castSoulDrain,
 	// Darkened sylvaris enemies
 	castDarkVineWhip, castDarkRootSnare, castDarkThornBurst,
@@ -18830,6 +19794,7 @@ function updateProjectiles(){
 		}
 		/* Cone: always pin to start position — cone expands from origin, no movement */
 		if(p.shape==='cone'){p.vx=0;p.vy=0;p.x=p.startX;p.y=p.startY;}
+		if(typeof forgeKitSteerPlayerProj === 'function') forgeKitSteerPlayerProj(p);
 		if(!(p.behavior==='orbit'&&p.age<p.orbitDur)){p.x+=p.vx;p.y+=p.vy;}
 		/* Vortex: slow down gradually (slow-moving projectile) */
 		if(p.shape==='vortex'){const slowFactor=0.985;p.vx*=slowFactor;p.vy*=slowFactor;}
@@ -18940,6 +19905,28 @@ function updateProjectiles(){
 		for(const en of getAllTargets()){
 			if(en.dead)continue;
 			if(en.isDormant)continue;
+			if(en._iceGuard && typeof iceKitReflectCheck === 'function'){
+				iceKitReflectCheck(p, en);
+				spawnImpact(p.x, p.y, p.color);
+				continue;
+			}
+			if(en._fireNoHit || en._iceNoHit || en._earthNoHit || en._wildesNoHit || en._lateNoHit)continue;
+			if(typeof iceKitBlockPlayerProj === 'function' && iceKitBlockPlayerProj(p)){
+				spawnImpact(p.x, p.y, p.color);
+				break;
+			}
+			if(typeof earthKitInterceptProj === 'function' && earthKitInterceptProj(p)){
+				spawnImpact(p.x, p.y, p.color);
+				break;
+			}
+			if(typeof wildesKitInterceptProj === 'function' && wildesKitInterceptProj(p)){
+				spawnImpact(p.x, p.y, p.color);
+				break;
+			}
+			if(typeof lateKitInterceptProj === 'function' && lateKitInterceptProj(p)){
+				spawnImpact(p.x, p.y, p.color);
+				break;
+			}
 			/* phaseThrough re-hit: allow hitting again on cooldown (max 3 per target) */
 			if(p.hitTargets.has(en)){
 				if(p.effects.includes('phaseThrough')&&!PIERCE_SET.has(p.shape)&&p._phaseHitMap){
@@ -19060,6 +20047,14 @@ function updateProjectiles(){
 					continue;
 				}
 				if(IS_CHRONORAID && en === chronoBoss && chronoBoss.phase >= 3){baseDmg*=0.5;dmgNumbers.push({x:en.x+en.w/2,y:en.y-5,text:'BLOCKED',age:0,color:'#aaddff'});}
+				if(en._fireCoreOpen) baseDmg *= 1.75;
+				if(typeof iceKitOnEnemyHit === 'function') baseDmg *= iceKitOnEnemyHit(en);
+				if(typeof forgeKitOnEnemyHit === 'function'){
+					const _forgeM = forgeKitOnEnemyHit(en, p);
+					if(_forgeM === 0) continue;
+					baseDmg *= _forgeM;
+				}
+				if(typeof lateKitOnEnemyHit === 'function') baseDmg *= lateKitOnEnemyHit(en, p);
 				en.flash=8;
 				if(!p.isSummonProj) player.lastAttackedEnemy = en;
 				dmgNumbers.push({x:en.x+en.w/2,y:en.y-10,text:Math.round(baseDmg)+'',age:0,color:p.color});
@@ -19695,6 +20690,67 @@ function updateProjectiles(){
 /* =============================================================
    UPDATE ENEMY PROJECTILES (hits player)
    ============================================================= */
+function enemyProjHasPhaseThrough(p){
+	return !!(p && (p._phaseThruPlatforms || ((p.effects||[]).includes('phaseThrough'))));
+}
+function resolveOpenSkyEnemyProjHit(p){
+	if(!p || p.noWallCollide || p.aoe || p.linger || p._clockOrb || p._isLaser || p._isNecroZenithWall || p._isZenithWall || p._rolling) return false;
+	if(enemyProjHasPhaseThrough(p)) return false;
+	const hw = (p.width || 8) * 0.5, hh = (p.height || 8) * 0.5;
+	const plats = (typeof sandboxPlatforms !== 'undefined' && sandboxPlatforms) ? sandboxPlatforms : [];
+	let hitPlat = null;
+	for(const plat of plats){
+		if(plat._gone) continue;
+		if(p.x + hw > plat.x && p.x - hw < plat.x + plat.w &&
+		   p.y + hh > plat.y && p.y - hh < plat.y + plat.h){
+			hitPlat = plat;
+			break;
+		}
+	}
+	if(!hitPlat && typeof GROUND_Y === 'number' && p.y + hh >= GROUND_Y){
+		hitPlat = { x:-2000, y:GROUND_Y, w:20000, h:200, isFloor:true };
+	}
+	if(!hitPlat) return false;
+	const isFloor = !!(hitPlat.isFloor || (typeof GROUND_Y === 'number' && Math.abs(hitPlat.y - GROUND_Y) < 2 && hitPlat.w > 400));
+	if(p._allowBounce && (p._bounces||0) < 3){
+		const prevY = p.y - p.vy;
+		const prevX = p.x - p.vx;
+		const hitTop    = prevY <= hitPlat.y + 2 && p.vy > 0;
+		const hitBottom = prevY >= hitPlat.y + hitPlat.h - 2 && p.vy < 0;
+		const hitSideL  = prevX >= hitPlat.x + hitPlat.w - 2 && p.vx < 0;
+		const hitSideR  = prevX <= hitPlat.x + 2 && p.vx > 0;
+		p._bounces = (p._bounces||0) + 1;
+		if(hitTop){
+			p.y = hitPlat.y - hh; p.vy = -Math.abs(p.vy) * 0.65; p.vx *= 0.92;
+		} else if(hitBottom){
+			p.y = hitPlat.y + hitPlat.h + hh; p.vy = Math.abs(p.vy) * 0.65;
+		} else if(hitSideL||hitSideR){
+			p.x = hitSideL ? hitPlat.x + hitPlat.w + hw : hitPlat.x - hw;
+			p.vx = -p.vx * 0.75;
+		} else {
+			p.y = hitPlat.y - hh; p.vy = -Math.abs(p.vy) * 0.65; p.vx *= 0.92;
+		}
+		if(Math.abs(p.vy) < 0.5) p.vy = 0;
+		p.maxAge = Math.min(p.maxAge + 50, 500);
+		spawnImpact(p.x, p.y, p.color);
+		return false;
+	}
+	if(p._allowBounce && isFloor){
+		p.y = hitPlat.y - hh;
+		p.vy = 0; p.gravity = 0;
+		p.vx *= 0.80;
+		p._rolling = true;
+		p._rollFloorY = hitPlat.y - hh;
+		spawnImpact(p.x, p.y, p.color);
+		if(typeof necroZenithContinueChain === 'function') necroZenithContinueChain(p);
+		return false;
+	}
+	if(isFloor) p.y = hitPlat.y - hh;
+	spawnImpact(p.x, p.y, p.color);
+	if(typeof necroZenithContinueChain === 'function') necroZenithContinueChain(p);
+	return true;
+}
+
 function updateEnemyProjectiles(){
 	for(let i=enemyProjectiles.length-1;i>=0;i--){
 		const p=enemyProjectiles[i];
@@ -19774,17 +20830,41 @@ function updateEnemyProjectiles(){
 			if(p._laserHitCd > 0){ p._laserHitCd--; } else {
 				const _ldX = Math.cos(p.beamAngle), _ldY = Math.sin(p.beamAngle);
 				const _lSteps = Math.max(3, Math.floor(p.beamLen / 40));
-				for(let _ls = 1; _ls <= _lSteps; _ls++){
-					const _ld = (_ls / _lSteps) * p.beamLen;
-					if(circRect(p.startX + _ldX*_ld, p.startY + _ldY*_ld, p.height*0.6,
-							player.x, player.y, player.w, player.h) && player.iFrames <= 0){
-						damagePlayer(p.power, p.effects);
-						spawnImpact(p.startX+_ldX*_ld, p.startY+_ldY*_ld, p.color);
-						p._laserHitCd = 20; break;
+				if(p.necroFriendly){
+					outerLaser: for(let _ls = 1; _ls <= _lSteps; _ls++){
+						const _ld = (_ls / _lSteps) * p.beamLen;
+						const lx = p.startX + _ldX*_ld, ly = p.startY + _ldY*_ld;
+						const targets = enemies.concat(dummies);
+						for(const en2 of targets){
+							if(!en2 || en2.dead) continue;
+							if(circRect(lx, ly, p.height*0.6, en2.x, en2.y, en2.w, en2.h)){
+								en2.hp -= p.power;
+								if(en2.hp <= 0) en2.hp = 0;
+								en2.flash = 8;
+								p._necroZenithHit = true;
+								dmgNumbers.push({x:en2.x+en2.w/2,y:en2.y-10,text:'-'+Math.round(p.power),age:0,color:'#b388ff'});
+								spawnImpact(lx, ly, p.color);
+								p._laserHitCd = 20;
+								break outerLaser;
+							}
+						}
+					}
+				} else {
+					for(let _ls = 1; _ls <= _lSteps; _ls++){
+						const _ld = (_ls / _lSteps) * p.beamLen;
+						if(circRect(p.startX + _ldX*_ld, p.startY + _ldY*_ld, p.height*0.6,
+								player.x, player.y, player.w, player.h) && player.iFrames <= 0){
+							damagePlayer(p.power, p.effects);
+							spawnImpact(p.startX+_ldX*_ld, p.startY+_ldY*_ld, p.color);
+							p._laserHitCd = 20; break;
+						}
 					}
 				}
 			}
-			if(p.age >= p.maxAge){ enemyProjectiles.splice(i, 1); }
+			if(p.age >= p.maxAge){
+				if(p.necroFriendly && typeof necroZenithContinueChain === 'function') necroZenithContinueChain(p);
+				enemyProjectiles.splice(i, 1);
+			}
 			continue;
 		}
 
@@ -19932,34 +21012,64 @@ function updateEnemyProjectiles(){
 
 		/* Necro-friendly projectiles damage enemies and dummies, not player */
 		if(p.necroFriendly){
-			const hr=Math.max(p.width,p.height)*0.6;
-			let necroHit=false;
-			for(let ei2=enemies.length-1;ei2>=0;ei2--){
-				const en2=enemies[ei2];
-				if(en2.dead)continue;
-				if(circRect(p.x,p.y,hr,en2.x,en2.y,en2.w,en2.h)){
-					en2.hp-=p.power;
-					if(en2.hp<=0) en2.hp=0;
-					en2.flash=8;
-					dmgNumbers.push({x:en2.x+en2.w/2,y:en2.y-10,text:'-'+Math.round(p.power),age:0,color:'#b388ff'});
-					spawnImpact(p.x,p.y,p.color);
-					if(!p.pierce){necroHit=true;enemyProjectiles.splice(i,1);break;}
-				}
+			if(resolveOpenSkyEnemyProjHit(p)){
+				const idx=enemyProjectiles.indexOf(p);if(idx>=0)enemyProjectiles.splice(idx,1);
+				continue;
 			}
-			if(!necroHit){
-				for(let di=dummies.length-1;di>=0;di--){
-					const d2=dummies[di];
-					if(d2.dead)continue;
-					if(circRect(p.x,p.y,hr,d2.x,d2.y,d2.w,d2.h)){
-						d2.hp-=p.power;
-						d2.flash=8;
-						dmgNumbers.push({x:d2.x+d2.w/2,y:d2.y-10,text:'-'+Math.round(p.power),age:0,color:'#b388ff'});
+			if(p._isNecroZenithWall){
+				if(p.age>=p.maxAge){
+					if(typeof necroZenithContinueChain === 'function') necroZenithContinueChain(p);
+					enemyProjectiles.splice(i,1);
+				}
+				continue;
+			}
+			const hr=Math.max(p.width,p.height)*0.6;
+			const aoeR = p.aoe ? (p.aoeRadius || hr) : hr;
+			let necroHit=false;
+			const tickLinger = !!(p.linger || p.aoe);
+			if(tickLinger) p._necroAoeCd = (p._necroAoeCd||0) + 1;
+			const doTick = !tickLinger || (p._necroAoeCd % 20 === 1);
+			if(!p.hitTargets) p.hitTargets = new Set();
+			if(doTick){
+				for(let ei2=enemies.length-1;ei2>=0;ei2--){
+					const en2=enemies[ei2];
+					if(en2.dead)continue;
+					if(!tickLinger && p.hitTargets.has(en2)) continue;
+					if(circRect(p.x,p.y,aoeR,en2.x,en2.y,en2.w,en2.h)){
+						en2.hp-=p.power;
+						if(en2.hp<=0) en2.hp=0;
+						en2.flash=8;
+						p._necroZenithHit = true;
+						if(!tickLinger) p.hitTargets.add(en2);
+						dmgNumbers.push({x:en2.x+en2.w/2,y:en2.y-10,text:'-'+Math.round(p.power),age:0,color:'#b388ff'});
 						spawnImpact(p.x,p.y,p.color);
-						if(!p.pierce){enemyProjectiles.splice(i,1);break;}
+						if(!p.pierce && !tickLinger){necroHit=true;break;}
+					}
+				}
+				if(!necroHit){
+					for(let di=dummies.length-1;di>=0;di--){
+						const d2=dummies[di];
+						if(d2.dead)continue;
+						if(!tickLinger && p.hitTargets.has(d2)) continue;
+						if(circRect(p.x,p.y,aoeR,d2.x,d2.y,d2.w,d2.h)){
+							d2.hp-=p.power;
+							d2.flash=8;
+							p._necroZenithHit = true;
+							if(!tickLinger) p.hitTargets.add(d2);
+							dmgNumbers.push({x:d2.x+d2.w/2,y:d2.y-10,text:'-'+Math.round(p.power),age:0,color:'#b388ff'});
+							spawnImpact(p.x,p.y,p.color);
+							if(!p.pierce && !tickLinger){necroHit=true;break;}
+						}
 					}
 				}
 			}
+			if(necroHit){
+				if(typeof necroZenithContinueChain === 'function') necroZenithContinueChain(p);
+				const idx=enemyProjectiles.indexOf(p);if(idx>=0)enemyProjectiles.splice(idx,1);
+				continue;
+			}
 			if(p.age>=p.maxAge||p.x<-100||p.x>WORLD_W+100||p.y<-200||p.y>WORLD_H+100){
+				if(typeof necroZenithContinueChain === 'function') necroZenithContinueChain(p);
 				const idx=enemyProjectiles.indexOf(p);if(idx>=0)enemyProjectiles.splice(idx,1);
 			}
 			continue;
@@ -20158,6 +21268,31 @@ function updateEnemyProjectiles(){
 			if(!epWall&&IS_SYLVARIS){for(const tp of sandboxPlatforms){if(!tp.isTreeTrunk)continue;if(p.x>=tp.x&&p.x<=tp.x+tp.w&&p.y>=tp.y&&p.y<=tp.y+tp.h){epWall=true;break;}}}
 			if(!epWall&&IS_BLACKSANDS){for(const pp of sandboxPlatforms){if(!pp.isPyramid)continue;if(p.x>=pp.x&&p.x<=pp.x+pp.w&&p.y>=pp.y&&p.y<=pp.y+pp.h){epWall=true;break;}}}
 			if(epWall){
+				if((p._firePinball || p._fireRebound) && typeof fireKitTryBounce === 'function'){
+					fireKitTryBounce(p);
+					if(p.age >= p.maxAge){ spawnImpact(p.x, p.y, p.color); enemyProjectiles.splice(i, 1); }
+					continue;
+				}
+				if(p._iceRicochet && typeof iceKitTryBounce === 'function'){
+					iceKitTryBounce(p);
+					if(p.age >= p.maxAge){ spawnImpact(p.x, p.y, p.color); enemyProjectiles.splice(i, 1); }
+					continue;
+				}
+				if(p._earthRoll && typeof earthKitTryBounce === 'function'){
+					earthKitTryBounce(p);
+					if(p.age >= p.maxAge){ spawnImpact(p.x, p.y, p.color); enemyProjectiles.splice(i, 1); }
+					continue;
+				}
+				if((p._wildesHook || p._wildesAccel || p._wildesLeaf) && typeof wildesKitTryBounce === 'function'){
+					wildesKitTryBounce(p);
+					if(p.age >= p.maxAge){ spawnImpact(p.x, p.y, p.color); enemyProjectiles.splice(i, 1); }
+					continue;
+				}
+				if(p._lateRoll && typeof lateKitTryBounce === 'function'){
+					lateKitTryBounce(p);
+					if(p.age >= p.maxAge){ spawnImpact(p.x, p.y, p.color); enemyProjectiles.splice(i, 1); }
+					continue;
+				}
 				/* _destroysSolid: enemy projectile shatters solidify on contact */
 				if(_hitSolid&&p._destroysSolid){
 					spawnImpact(_hitSolid.x,_hitSolid.y,_hitSolid.color);
@@ -20633,7 +21768,20 @@ function applyEnemyHitEffects(proj,en,rawDmg){
 				}
 				break;
 			}
-			case'knockback':if(resistsForcedMove(en))break;if(!(en.knockbackCooldown>0)){const _kbSlider=Math.max(0.5,Number(proj.phase&&proj.phase.power)||1);const _kbF=_kbSlider*(_isBossTarget?3.0:1.5);en._kbVx=proj.facing*_kbF;en._kbVy=-_kbF*0.4;en._kbTimer=20;en.stunTimer=Math.max(en.stunTimer,20);en.knockbackCooldown=15;}break;
+			case'knockback':if(resistsForcedMove(en))break;if(!(en.knockbackCooldown>0||en._knockbackCooldown>0)){
+				const _kbSlider=Math.max(0.5,Number(proj.phase&&proj.phase.power)||1);
+				if(en.isSandboxDummy){
+					const _kbAng=Math.atan2((en.y+en.h/2)-proj.y,(en.x+en.w/2)-proj.x);
+					const _kbPow=_kbSlider*5.2;
+					en._kbVx=Math.cos(_kbAng)*_kbPow;
+					en._kbVy=Math.sin(_kbAng)*_kbPow;
+					en._kbTimer=20;
+					en._knockbackCooldown=15;
+					en.stunTimer=Math.max(en.stunTimer,20);
+				}else{
+					const _kbF=_kbSlider*(_isBossTarget?3.0:1.5);en._kbVx=proj.facing*_kbF;en._kbVy=-_kbF*0.4;en._kbTimer=20;en.stunTimer=Math.max(en.stunTimer,20);en.knockbackCooldown=15;
+				}
+			}break;
 			case'pull':{if(resistsForcedMove(en))break;const dx2=player.x+player.w/2-(en.x+en.w/2);const dy2=player.y+player.h/2-(en.y+en.h/2);const d2=Math.sqrt(dx2*dx2+dy2*dy2)||1;const _pd=_isBossTarget?120:50;en.x+=dx2/d2*_pd*ePow*ultMult;en.y+=dy2/d2*(_pd*0.6)*ePow*ultMult;break;}
 			case'stun':{
 				if(_isBossTarget){
@@ -20643,7 +21791,14 @@ function applyEnemyHitEffects(proj,en,rawDmg){
 				}else{const sr=en._stunResist||0;const sd=Math.min(30,Math.round(18*eDur*ultMult*Math.max(0.1,1-sr*0.25)));en.stunTimer=Math.max(en.stunTimer,sd);en._stunResist=sr+1;}
 				break;}
 
-			case'forceJump':{if(resistsForcedMove(en))break;const _fjPow2=proj.phase?.power||1;en.y-=Math.min(300,40+_fjPow2*15)*ultMult;dmgNumbers.push({x:en.x+en.w/2,y:en.y-10,text:'🚀 Launched!',age:0,color:'#ff8800'});break;}
+			case'forceJump':{if(resistsForcedMove(en))break;const _fjPow2=proj.phase?.power||1;
+				if(en.isSandboxDummy){
+					en.vy=-Math.min(18,8+_fjPow2*2)*ultMult;
+					en.onGround=false;
+				}else{
+					en.y-=Math.min(300,40+_fjPow2*15)*ultMult;
+				}
+				dmgNumbers.push({x:en.x+en.w/2,y:en.y-10,text:'🚀 Launched!',age:0,color:'#ff8800'});break;}
 			case'lifesteal':{
 				// Health Call Back — block lifesteal in phase 3
 				if(IS_CHRONORAID && chronoBoss && !chronoBoss.dead && chronoBoss.phase >= 3){
@@ -21079,6 +22234,35 @@ function updateDummies(){
 			continue;
 		}
 		if(d.dead) continue; // skip dead openworld dummies
+
+		// Sandbox dummies move like a player: gravity, knockback, platforms
+		if(d.isSandboxDummy){
+			if((d._kbTimer||0)>0){
+				d._kbTimer--;
+				const _kbTE=d._kbTimer/20;
+				d.vx=(d._kbVx||0)*_kbTE;
+				d.vy=(d._kbVy||0)*_kbTE;
+			} else {
+				if((d._knockbackCooldown||0)>0) d._knockbackCooldown--;
+				if((d.stickyDebuff||0)>0){ d.stickyDebuff--; d.vx*=0.05; d.vy*=0.05; }
+				const slowMul = d.slowTimer>0 ? 0.4 : 1;
+				d.vx *= 0.82 * slowMul;
+				d.vy += GRAVITY;
+				if(d.vy > 18) d.vy = 18;
+			}
+			if(typeof moveEntitySandbox === 'function') moveEntitySandbox(d);
+			else { d.x += d.vx; d.y += d.vy; }
+			if(d.x <= 0 || d.x + d.w >= WORLD_W || d.y < -200 || d.y + d.h > WORLD_H + 40){
+				d.x = d.spawnX; d.y = d.spawnY;
+				d.vx = 0; d.vy = 0;
+				d._kbTimer = 0; d._kbVx = 0; d._kbVy = 0;
+				d.onGround = true;
+				d.hp = d.maxHp;
+				d._prevHp = d.maxHp;
+				d.dots = [];
+				if(dummyDmgAccum[i]) dummyDmgAccum[i] = [];
+			}
+		}
 
 		// Auto respawn HP after 2 seconds of no damage (sandbox only)
 		if(d.hp <= 0 || d.hp < d.maxHp){
@@ -22497,55 +23681,75 @@ function toggleInventory(){
 	overlay.classList.add('open');
 }
 
+function applyPlayerSaveExtras(data){
+	if(!data) return;
+	if(data.mageClass != null) playerData.mageClass = data.mageClass;
+	if(data.mageClass2 != null) playerData.mageClass2 = data.mageClass2;
+	if(data.vows) playerData.vows = data.vows;
+	if('domainVow' in data) playerData.domainVow = data.domainVow;
+	const dcVow = playerData.vows && playerData.vows.find(v => v && v.boostType === 'dualClass' && v.secondClass);
+	playerData.mageClass2 = dcVow ? dcVow.secondClass : (playerData.mageClass2 || 'none');
+	activeMageClass = playerData.mageClass || 'none';
+	activeMageClass2 = playerData.mageClass2 || 'none';
+	applyVowSacrifices();
+	const next = computeStats();
+	for(const k in next) stats[k] = next[k];
+}
+
+function syncCombatFromPlayerSave(){
+	const saved = localStorage.getItem('magicBattle_playerData');
+	if(!saved) return;
+	try {
+		const data = JSON.parse(saved);
+		playerData.equipment = data.equipment;
+		playerData.inventory = data.inventory || playerData.inventory;
+		if(data.gold != null) playerData.gold = data.gold;
+		playerData.spellBoosts = data.spellBoosts || new Array(10).fill(1.0);
+		playerData.loadouts = data.loadouts || [];
+		playerData.activeLoadoutIdx = data.activeLoadoutIdx != null ? data.activeLoadoutIdx : -1;
+		applyPlayerSaveExtras(data);
+		if(player.transformActive){
+			// Mid-transformation: do NOT replace the active transform spells in playerData.spells.
+			// Instead update the snapshot so that when transformation ends the player
+			// returns to whatever loadout they just switched to in inventory.
+			let _postTransSpells = data.spells;
+			if(playerData.loadouts.length > 0 && playerData.activeLoadoutIdx >= 0){
+				const _al = playerData.loadouts[playerData.activeLoadoutIdx];
+				if(_al && _al.type === 'transformation'){
+					const _stdIdx = playerData.loadouts.findIndex(l => l.type !== 'transformation');
+					if(_stdIdx >= 0) _postTransSpells = JSON.parse(JSON.stringify(playerData.loadouts[_stdIdx].spells));
+				}
+			}
+			player.transformSavedSpells = _postTransSpells;
+		} else {
+			playerData.spells = data.spells;
+			if(playerData.loadouts.length > 0 && playerData.activeLoadoutIdx >= 0){
+				const _al = playerData.loadouts[playerData.activeLoadoutIdx];
+				if(_al && _al.type === 'transformation'){
+					const _stdIdx = playerData.loadouts.findIndex(l => l.type !== 'transformation');
+					if(_stdIdx >= 0) playerData.spells = JSON.parse(JSON.stringify(playerData.loadouts[_stdIdx].spells));
+				}
+			}
+		}
+		if(typeof loadEquippedSpells === 'function') loadEquippedSpells();
+		renderHotbar();
+		updateTotalManaHUD();
+	} catch(e){}
+}
+
 function closeInventory(){
 	inventoryOpen = false;
 	const overlay = document.getElementById('inventoryOverlay');
 	const frame = document.getElementById('invFrame');
 	overlay.classList.remove('open');
 	frame.src = 'about:blank';
-	// Reload player data (spells/equipment/boosts may have changed)
-	const saved = localStorage.getItem('magicBattle_playerData');
-	if(saved){
-		try {
-			const data = JSON.parse(saved);
-			playerData.equipment = data.equipment;
-			playerData.inventory = data.inventory || playerData.inventory;
-			if(data.gold != null) playerData.gold = data.gold;
-			playerData.spellBoosts = data.spellBoosts || new Array(10).fill(1.0);
-			playerData.loadouts = data.loadouts || [];
-			playerData.activeLoadoutIdx = data.activeLoadoutIdx != null ? data.activeLoadoutIdx : -1;
-			if(player.transformActive){
-				// Mid-transformation: do NOT replace the active transform spells in playerData.spells.
-				// Instead update the snapshot so that when transformation ends the player
-				// returns to whatever loadout they just switched to in inventory.
-				let _postTransSpells = data.spells;
-				// If they switched to a transformation loadout in inventory, revert to first standard
-				if(playerData.loadouts.length > 0 && playerData.activeLoadoutIdx >= 0){
-					const _al = playerData.loadouts[playerData.activeLoadoutIdx];
-					if(_al && _al.type === 'transformation'){
-						const _stdIdx = playerData.loadouts.findIndex(l => l.type !== 'transformation');
-						if(_stdIdx >= 0) _postTransSpells = JSON.parse(JSON.stringify(playerData.loadouts[_stdIdx].spells));
-					}
-				}
-				player.transformSavedSpells = _postTransSpells;
-			} else {
-				playerData.spells = data.spells;
-				// GUARD: if active loadout is transformation type and not transformed,
-				// restore the first standard loadout's spells.
-				if(playerData.loadouts.length > 0 && playerData.activeLoadoutIdx >= 0){
-					const _al = playerData.loadouts[playerData.activeLoadoutIdx];
-					if(_al && _al.type === 'transformation'){
-						const _stdIdx = playerData.loadouts.findIndex(l => l.type !== 'transformation');
-						if(_stdIdx >= 0) playerData.spells = JSON.parse(JSON.stringify(playerData.loadouts[_stdIdx].spells));
-					}
-				}
-			}
-			loadEquippedSpells();
-			renderHotbar();
-			updateTotalManaHUD();
-		} catch(e){}
-	}
+	syncCombatFromPlayerSave();
 }
+
+window.addEventListener('message', function(ev){
+	if(!ev.data || ev.data.type !== 'magicBattle_spellsChanged') return;
+	syncCombatFromPlayerSave();
+});
 
 
 
@@ -24218,7 +25422,7 @@ const zenithPlayerTracker = IS_ZENITH ? {
 } : null;
 
 // ── Phase 2 attack templates (deep-copied onto zenithBoss.p2Attacks at P2 transition) ─
-const ZENITH_P2_TEMPLATES = IS_ZENITH ? [
+const ZENITH_P2_TEMPLATES = [
 	/* 0: Radial Burst — 360° spray of orbs around boss */
 	{
 		name:'Radial Burst', icon:'💥',
@@ -24257,10 +25461,10 @@ const ZENITH_P2_TEMPLATES = IS_ZENITH ? [
 		}],
 		data:{successes:0,failures:0,powerMult:1.0,totalFired:0}, failStreak:0,
 	},
-] : null;
+];
 
 // ── 7 Wills: Basic starting configs (all slow, all dodgeable) ─
-const ZENITH_WILLS = IS_ZENITH ? [
+const ZENITH_WILLS = [
 	/* 0 — Will of the Arc (arcing lob — always starts with ricochet) */
 	{
 		name:'Will of the Arc', icon:'🌙',
@@ -24331,7 +25535,7 @@ const ZENITH_WILLS = IS_ZENITH ? [
 		}],
 		data:{successes:0,failures:0,powerMult:1.0,totalFired:0}, failStreak:0,
 	},
-] : null;
+];
 
 // ── Zenith Indicators ──────────────────────────────────────
 function updateZenithIndicators(){
@@ -24687,9 +25891,9 @@ function _zenithWeightedRandom(wPool){
 }
 
 // ── Collect effects already claimed across all wills ────────
-function _zenithGetUsedEffects(){
+function _zenithGetUsedEffects(pools){
 	const used = {};
-	const allPools = [ZENITH_WILLS, zenithBoss ? zenithBoss.p2Attacks : null].filter(Boolean);
+	const allPools = pools || [ZENITH_WILLS, zenithBoss ? zenithBoss.p2Attacks : null].filter(Boolean);
 	for(const pool of allPools){
 		if(!pool) continue;
 		for(const will of pool){
@@ -24705,9 +25909,9 @@ function _zenithGetUsedEffects(){
 }
 
 // ── Build modification probability pool ──────────────────
-function _zenithBuildModPool(will, phaseIdx){
+function _zenithBuildModPool(will, phaseIdx, tracker, pools){
 	const phase = will.phases[phaseIdx];
-	const t = zenithPlayerTracker || {};
+	const t = tracker || zenithPlayerTracker || {};
 	const dL = t.dodgeLeft||0, dR = t.dodgeRight||0, dU = t.dodgeUp||0;
 	const wb = t.wallBlocks||0, sh = t.shieldHits||0;
 	const he = t.healEvents||0, dp = t.dispelled||0;
@@ -24731,7 +25935,7 @@ function _zenithBuildModPool(will, phaseIdx){
 		pool.push({ type:'spread', delta:0.20, weight:1.0 });
 	// Effect additions — respects uniqueness, strong elemental weights so boss uses them regularly
 	if((phase.effects||[]).length < 4){
-		const _usedEfx = _zenithGetUsedEffects();
+		const _usedEfx = _zenithGetUsedEffects(pools);
 		// Subtract this will's own effects so we only block cross-will conflicts
 		for(const ownEff of (phase.effects||[])){
 			if(_usedEfx[ownEff] > 0) _usedEfx[ownEff]--;
@@ -24911,7 +26115,7 @@ function _zenithApplyMod(will, phaseIdx, mod){
 }
 
 // ── Guided-random adaptation engine ──────────────────────
-function zenithAdaptWill(willIdx, escapeMethod, poolRef){
+function zenithAdaptWill(willIdx, escapeMethod, poolRef, ctx){
 	const pool3 = poolRef || ZENITH_WILLS;
 	if(!pool3) return;
 	const will = pool3[willIdx];
@@ -24922,7 +26126,7 @@ function zenithAdaptWill(willIdx, escapeMethod, poolRef){
 		const ds = will.phases[pi].devScore||0;
 		if(ds < minDev){ minDev = ds; targetPIdx = pi; }
 	}
-	const modPool = _zenithBuildModPool(will, targetPIdx);
+	const modPool = _zenithBuildModPool(will, targetPIdx, ctx && ctx.tracker, ctx && ctx.pools);
 	if(!modPool.length) return;
 	// Always apply 2 mods per failure for aggressive adaptation
 	const modCount = 2;
@@ -24935,17 +26139,17 @@ function zenithAdaptWill(willIdx, escapeMethod, poolRef){
 	}
 	// Chance to add an auto-generated new phase — higher thresholds for frequent escalation
 	const _streak3 = will.failStreak;
-	const _btime3  = zenithBoss ? zenithBoss.battleTimer : 0;
+	const _btime3  = (ctx && ctx.battleTimer != null) ? ctx.battleTimer : (zenithBoss ? zenithBoss.battleTimer : 0);
 	// Time bonus: after 20s add a phase chance even without fail streak
 	const _timeBonus3 = _btime3 > 2400 ? 0.45 : _btime3 > 1200 ? 0.28 : _btime3 > 600 ? 0.15 : 0;
 	const phaseChance = _streak3 >= 4 ? 0.75 : _streak3 >= 2 ? 0.55 : _streak3 >= 1 ? 0.38 : _timeBonus3;
 	if(will.phases.length < 3 && Math.random() < phaseChance){
-		_zenithAddAutoPhase(willIdx, pool3);
+		_zenithAddAutoPhase(willIdx, pool3, ctx);
 	}
 }
 
 // ── Auto-generate an impressive new phase ────────────────
-function _zenithAddAutoPhase(willIdx, poolRef){
+function _zenithAddAutoPhase(willIdx, poolRef, ctx){
 	const pool4 = poolRef || ZENITH_WILLS;
 	if(!pool4) return;
 	const will = pool4[willIdx];
@@ -24953,7 +26157,7 @@ function _zenithAddAutoPhase(willIdx, poolRef){
 	const minDev = Math.min(...will.phases.map(p => p.devScore||0));
 	const existingBeh = will.phases.map(p => p.behavior);
 	// Get cross-will effect usage (excluding this will's own effects)
-	const usedEfx4 = _zenithGetUsedEffects();
+	const usedEfx4 = _zenithGetUsedEffects(ctx && ctx.pools);
 	for(const ph of will.phases){
 		for(const eff of (ph.effects||[])){ if((usedEfx4[eff]||0) > 0) usedEfx4[eff]--; }
 	}
@@ -25015,9 +26219,10 @@ function _zenithAddAutoPhase(willIdx, poolRef){
 	};
 	if(tmpl.homingStrength) newPhase.homingStrength = tmpl.homingStrength;
 	will.phases.push(newPhase);
-	if(zenithBoss){
+	const _bannerAt = ctx || zenithBoss;
+	if(_bannerAt){
 		shakeScreen(3, 5);
-		dmgNumbers.push({ x:zenithBoss.x+zenithBoss.w/2, y:zenithBoss.y-70,
+		dmgNumbers.push({ x:_bannerAt.x+_bannerAt.w/2, y:_bannerAt.y-70,
 			text:`[${will.icon}] ⚡ +PHASE ${will.phases.length}`, age:0, color:'#ff44cc' });
 	}
 }
@@ -25483,6 +26688,12 @@ function updateEnemies(){
 			continue;
 		}
 
+		if(typeof DungeonEnv !== 'undefined' && DungeonEnv.updateWarden && DungeonEnv.updateWarden(en)){
+			en.animTimer++;
+			if(en.attackAnimTimer>0)en.attackAnimTimer--;
+			if(en.flash>0)en.flash--;
+			continue;
+		}
 		en.animTimer++;
 		if(en.attackAnimTimer>0)en.attackAnimTimer--;
 		if(en.flash>0)en.flash--;
@@ -25541,7 +26752,7 @@ function updateEnemies(){
 		}
 
 		// Death check
-		if(en.hp<=0){en.dead=true;en.deathTimer=0;
+		if(en.hp<=0){en.dead=true;en.deathTimer=0;if(typeof fireKitEnd==='function') fireKitEnd(en);if(typeof iceEnd==='function') iceEnd(en);if(typeof earthEnd==='function') earthEnd(en);if(typeof forgeEnd==='function') forgeEnd(en);if(typeof wildesEnd==='function') wildesEnd(en);if(typeof lateEnd==='function') lateEnd(en);
 			// Baby dragon phase 1 death — don't count kill yet (will revive)
 			const isBabyDragonPhase1 = en.type === 'babyDragon' && !graveyardBossState.phase2Active;
 
@@ -25555,6 +26766,7 @@ function updateEnemies(){
 				}catch(e){}
 				// Roll ingredient drops for this enemy
 				rollEnemyDrops(en);
+				if(typeof DungeonEnv !== 'undefined' && DungeonEnv.onEnemyDeath) DungeonEnv.onEnemyDeath(en);
 			}
 			if((IS_SYLVARIS || IS_OBSERVATORY || IS_DRAGONGRAVEYARD || IS_STORMISLANDS || IS_BLACKSANDS) && !isBabyDragonPhase1){
 				sylvarisKillCounts[en.type] = (sylvarisKillCounts[en.type]||0) + 1;
@@ -25665,6 +26877,25 @@ function updateEnemies(){
 
 		if(en.stunTimer>0)continue;
 
+		if(typeof updateFireDungeonEnemy === 'function' && en.fireKit && updateFireDungeonEnemy(en)){
+			continue;
+		}
+		if(typeof updateIceDungeonEnemy === 'function' && ((typeof ICE_KIT_TYPES !== 'undefined' && ICE_KIT_TYPES[en.type]) || en.iceKit) && updateIceDungeonEnemy(en)){
+			continue;
+		}
+		if(typeof updateEarthDungeonEnemy === 'function' && ((typeof EARTH_KIT_TYPES !== 'undefined' && EARTH_KIT_TYPES[en.type]) || en.earthKit) && updateEarthDungeonEnemy(en)){
+			continue;
+		}
+		if(typeof updateForgeKitEnemy === 'function' && ((typeof FORGE_KIT_TYPES !== 'undefined' && FORGE_KIT_TYPES[en.type]) || en.forgeKit) && updateForgeKitEnemy(en)){
+			continue;
+		}
+		if(typeof updateWildesEnemy === 'function' && ((typeof WILDES_KIT_TYPES !== 'undefined' && WILDES_KIT_TYPES[en.type]) || en.wildesKit) && updateWildesEnemy(en)){
+			continue;
+		}
+		if(typeof updateLateEnemy === 'function' && ((typeof LATE_KIT_TYPES !== 'undefined' && LATE_KIT_TYPES[en.type]) || en.lateKit) && updateLateEnemy(en)){
+			continue;
+		}
+
 		// Charging movement
 		if(en.charging){
 			en.chargeTimer--;
@@ -25679,8 +26910,8 @@ function updateEnemies(){
 					en.charging=false;en.vx=0;en.vy=0;en.chargeVx=0;en.chargeVy=0;
 				}
 			}
-			// Imp charge: throw fire swords during charge
-			if(en.type==='imp'&&!en.chargeCastDone&&en.chargeTimer<25){
+			// Imp charge: throw fire swords during charge (legacy kit only)
+			if(en.type==='imp'&&!en.fireKit&&!en.chargeCastDone&&en.chargeTimer<25){
 				en.chargeCastDone=true;
 				for(let si=0;si<3;si++){
 					const sa=-0.4+si*0.4;
@@ -25692,13 +26923,13 @@ function updateEnemies(){
 				}
 			}
 			// Serpent strike: contact damage
-			if(en.type==='flameSerpent'&&!en.chargeCastDone){
+			if(en.type==='flameSerpent'&&!en.fireKit&&!en.chargeCastDone){
 				if(rectRect(en,player)&&player.iFrames<=0){
 					damagePlayer(21*DIFF_DMG_MULT,[]);en.chargeCastDone=true;
 				}
 			}
 			// Fire sprite dash: leave trail
-			if(en.type==='fireSprite'&&en.chargeTimer%3===0){
+			if(en.type==='fireSprite'&&!en.fireKit&&en.chargeTimer%3===0){
 				spawnEnemyProj(en.x+en.w/2,en.y+en.h/2,0,0,{
 					color:'#ffaa00',color2:'#ffee44',power:4,width:10,height:10,
 					shape:'circle',maxAge:40,
@@ -25771,8 +27002,8 @@ function updateEnemies(){
 		const caveBossBlocked = en.type === 'elderTreant' && caveBossState.phase !== 'active';
 		const canSee=!caveBossBlocked&&(bossAlwaysSees||(en.typeDef.isBoss?(playerDist<enemyDetectRange(en)):(playerDist<enemyDetectRange(en)&&hasLineOfSight(en.x+en.w/2,en.y+en.h/2,player.x+player.w/2,player.y+player.h/2))));
 
-		// Face player
-		if(canSee) en.facing = dx > 0 ? 1 : -1;
+		// Face player — deadzone so stacked/parallel targets don't flip every frame
+		if(canSee) setMinionFacing(en, dx);
 
 		// Flying enemy hover
 		if(en.typeDef.flies){
@@ -25800,6 +27031,7 @@ function updateEnemies(){
 				en.baseY += (clampedTarget - en.baseY) * 0.02;
 			}
 			en.y = en.baseY + en.flyOffset;
+			clampFlyingHoverToAir(en);
 		}
 
 		// Speed modifier (domain vow slow stacks with base slow)
@@ -25879,7 +27111,7 @@ function updateEnemies(){
 					const si = ((en.currentSpell||0) + attempt) % cap;
 					if(en.spellCooldowns[si]>0) continue;
 					const sp=spells[si];
-					if(playerDist<=sp.range){
+					if(playerDist<=enemyAtkRange(sp.range)){
 						const fn=CAST_FNS[sp.castFn];
 						if(fn){ if(en._dmgNerf) _eprojDmgNerf = en._dmgNerf; fn(en); _eprojDmgNerf = 1; }
 						en.attackAnimTimer = ATTACK_ANIM_DURATION;
@@ -25891,25 +27123,27 @@ function updateEnemies(){
 				}
 			} else {
 				// Non-boss: gate on attackRange + first-entry delay (slight pause when player enters range)
-				const _atkRange = en.typeDef.attackRange || en.typeDef.detectRange;
+				const _atkRange = enemyAtkRange(en.typeDef.attackRange || en.typeDef.detectRange);
 				if(playerDist <= _atkRange){
 					if(!en._inAtkRange){
 						en._inAtkRange = true;
-						en._enterDelay = 45; // ~0.75 s pause before first shot
+						const _kitFast = (typeof FIRE_KIT_TYPES !== 'undefined' && FIRE_KIT_TYPES[en.type]) || (typeof ICE_KIT_TYPES !== 'undefined' && ICE_KIT_TYPES[en.type]) || (typeof EARTH_KIT_TYPES !== 'undefined' && EARTH_KIT_TYPES[en.type]) || (typeof FORGE_KIT_TYPES !== 'undefined' && FORGE_KIT_TYPES[en.type]) || (typeof WILDES_KIT_TYPES !== 'undefined' && WILDES_KIT_TYPES[en.type]) || (typeof LATE_KIT_TYPES !== 'undefined' && LATE_KIT_TYPES[en.type]);
+						en._enterDelay = _kitFast ? 10 : 45; // kit enemies attack almost immediately
 					}
 				} else {
 					en._inAtkRange = false;
 				}
 				if(en._enterDelay > 0) en._enterDelay--;
 				// Global cast gate — one randomly chosen spell every 3 s (2.5 s on hard)
-				const _gcdBase = DIFFICULTY === 'hard' ? 150 : 180;
+				const _kitFastGcd = (typeof FIRE_KIT_TYPES !== 'undefined' && FIRE_KIT_TYPES[en.type]) || (typeof ICE_KIT_TYPES !== 'undefined' && ICE_KIT_TYPES[en.type]) || (typeof EARTH_KIT_TYPES !== 'undefined' && EARTH_KIT_TYPES[en.type]) || (typeof FORGE_KIT_TYPES !== 'undefined' && FORGE_KIT_TYPES[en.type]) || (typeof WILDES_KIT_TYPES !== 'undefined' && WILDES_KIT_TYPES[en.type]) || (typeof LATE_KIT_TYPES !== 'undefined' && LATE_KIT_TYPES[en.type]);
+				const _gcdBase = _kitFastGcd ? (DIFFICULTY === 'hard' ? 80 : 100) : (DIFFICULTY === 'hard' ? 150 : 180);
 				if(en._gcd === undefined) en._gcd = Math.floor(Math.random() * _gcdBase);
 				if(en._gcd > 0){ en._gcd--; }
-				else if(en._inAtkRange && !en._enterDelay){
+				else if(en._inAtkRange && !en._enterDelay && !en.fireKit && !en.iceKit && !en.earthKit && !en.forgeKit && !en.wildesKit && !en.lateKit){
 					const cap = Math.min(spells.length, maxSpellIdx);
 					const ready = [];
 					for(let si=0; si<cap; si++){
-						if(en.spellCooldowns[si] <= 0 && playerDist <= spells[si].range) ready.push(si);
+						if(en.spellCooldowns[si] <= 0 && playerDist <= enemyAtkRange(spells[si].range)) ready.push(si);
 					}
 					if(ready.length > 0){
 						const si = ready[Math.floor(Math.random() * ready.length)];
@@ -25926,7 +27160,7 @@ function updateEnemies(){
 			// Move toward player — behavior depends on enemy type
 			const aiBehavior = isBoss ? 'boss' : (en.typeDef.aiBehavior || 'balanced');
 			const spd = en.typeDef.moveSpeed * spdMult;
-			const dirX = dx > 0 ? 1 : -1;
+			const dirX = Math.abs(dx) < 18 ? 0 : (dx > 0 ? 1 : -1);
 			const py = player.y + player.h/2;
 			const ey = en.y + en.h/2;
 			switch(aiBehavior){
@@ -26074,12 +27308,19 @@ function updateEnemies(){
 			en.vy += GRAVITY;
 			if(en.vy > 18) en.vy = 18;
 			moveEntityTile(en);
-		} else {
+		} else if(enemyPhasesWalls(en)){
 			en.vy = 0;
-			// Flying enemies skip tile collision — apply vx directly
 			en.x += en.vx;
 			if(en.x < 0) en.x = 0;
 			if(en.x + en.w > WORLD_W) en.x = WORLD_W - en.w;
+		} else {
+			en.vy = 0;
+			moveEntityTile(en);
+			if(en.x < 0){ en.x = 0; en.vx = 0; }
+			if(en.x + en.w > WORLD_W){ en.x = WORLD_W - en.w; en.vx = 0; }
+			if(en.y < 0){ en.y = 0; en.vy = 0; }
+			if(en.y + en.h > WORLD_H){ en.y = WORLD_H - en.h; en.vy = 0; }
+			if(en.typeDef.flies) en.baseY = en.y - (en.flyOffset || 0);
 		}
 		// Clamp boss to arena bounds
 		if(en.typeDef.isBoss && BOSS_ROOM_RECT && bossState.phase==='active'){
@@ -26834,7 +28075,7 @@ function update(){
 		player.launchVx = 0;
 	}
 	if(player.stunTimer<=0&&!player.ultCharging&&!aiChatActive){
-		const spdM=player.slowTimer>0?0.5:1;
+		const spdM=(player.slowTimer>0?0.5:1)*(player._iceDrag?Math.max(0.28,1-player._iceDrag):1)*(player._kitSlow?Math.max(0.32,1-player._kitSlow):1);
 		const vowSpdMult=1+vowSpeedBonus*0.08;
 		const vowMvPenalty=Math.max(0.5, 1 - vowMovementPenalty*0.01);
 		const domSameSpdMult=(activeDomain && activeDomain._sameBuff)?1.4:1;
@@ -27315,9 +28556,10 @@ function update(){
 			}
 			playerMinions.splice(mi,1);continue;
 		}
-		// Non-necro summons still have a lifespan — trigger same death effects on expire
-		if(!m.isNecroSummon && m.age >= m.maxAge){
+		// Summons expire when their duration runs out (necro cap 60s)
+		if(m.maxAge != null && isFinite(m.maxAge) && m.age >= m.maxAge){
 			spawnImpact(m.x+m.w/2,m.y+m.h/2,m.color);
+			if(m.isNecroSummon) dmgNumbers.push({x:m.x+m.w/2,y:m.y-20,text:`💀 ${m.necroName||'Summon'} Fades`,age:0,color:'#8e44ad'});
 			if(m.archmageElement){
 				const mcx2=m.x+m.w/2, mcy2=m.y+m.h/2;
 				const _ael2 = m.archmageElement==='stun_boosted'?'stun':m.archmageElement;
@@ -27357,73 +28599,82 @@ function update(){
 			}
 			playerMinions.splice(mi,1);continue;
 		}
-		// Find nearest alive enemy (also dummies); prioritize player's target
-		let nearest=null,nearDist=m.detectRange||600;
-		if(player.lastAttackedEnemy && !player.lastAttackedEnemy.dead){
-			const pdd=Math.hypot(player.lastAttackedEnemy.x+player.lastAttackedEnemy.w/2-m.x-m.w/2, player.lastAttackedEnemy.y+player.lastAttackedEnemy.h/2-m.y-m.h/2);
-			if(pdd<nearDist*2){nearest=player.lastAttackedEnemy;nearDist=pdd;}
+		if(typeof updateFireDungeonEnemy === 'function' && m.fireKit && updateFireDungeonEnemy(m)){
+			continue;
 		}
-		if(!nearest){
+		if(typeof updateIceDungeonEnemy === 'function' && ((typeof ICE_KIT_TYPES !== 'undefined' && ICE_KIT_TYPES[m.necroType || m.type]) || m.iceKit) && updateIceDungeonEnemy(m)){
+			continue;
+		}
+		if(typeof updateEarthDungeonEnemy === 'function' && ((typeof EARTH_KIT_TYPES !== 'undefined' && EARTH_KIT_TYPES[m.necroType || m.type]) || m.earthKit) && updateEarthDungeonEnemy(m)){
+			continue;
+		}
+		if(typeof updateForgeKitEnemy === 'function' && ((typeof FORGE_KIT_TYPES !== 'undefined' && FORGE_KIT_TYPES[m.necroType || m.type]) || m.forgeKit) && updateForgeKitEnemy(m)){
+			continue;
+		}
+		if(typeof updateWildesEnemy === 'function' && ((typeof WILDES_KIT_TYPES !== 'undefined' && WILDES_KIT_TYPES[m.necroType || m.type]) || m.wildesKit) && updateWildesEnemy(m)){
+			continue;
+		}
+		if(typeof updateLateEnemy === 'function' && ((typeof LATE_KIT_TYPES !== 'undefined' && LATE_KIT_TYPES[m.necroType || m.type]) || m.lateKit) && updateLateEnemy(m)){
+			continue;
+		}
+		const orderTgt = minionOrderTarget(m);
+		let nearest = null;
+		if(orderTgt && !orderTgt._cursor) nearest = orderTgt;
+		else {
+			let nearDist = m.detectRange || 600;
 			for(const en of enemies){
-				if(en.dead)continue;
+				if(en.dead) continue;
 				const dd=Math.hypot(en.x+en.w/2-m.x-m.w/2,en.y+en.h/2-m.y-m.h/2);
-				if(dd<nearDist){nearest=en;nearDist=dd;}
+				if(dd<nearDist){ nearest=en; nearDist=dd; }
 			}
 			for(const d of dummies){
-				if(d.dead)continue;
+				if(d.dead) continue;
 				const dd=Math.hypot(d.x+d.w/2-m.x-m.w/2,d.y+d.h/2-m.y-m.h/2);
-				if(dd<nearDist){nearest=d;nearDist=dd;}
+				if(dd<nearDist){ nearest=d; nearDist=dd; }
 			}
 		}
-		m.target=nearest;
-		// Move toward target
-		if(nearest){
-			const dx=nearest.x+nearest.w/2-m.x-m.w/2;
-			const dy=nearest.y+nearest.h/2-m.y-m.h/2;
-			const dist2=Math.hypot(dx,dy)||1;
-			const speed=m.moveSpeed||2.5;
-			const stopDist=m.summonClose?60:200;
-			if(m.isNecroSummon && !m.necroFlies){
-				// Ground necro summon: only move horizontally, jump if needed
-				if(dist2>stopDist) m.vx+=(dx/Math.abs(dx||1))*speed*0.12;
-				// Jump toward target if it's above and minion is on ground
-				if(dy<-40 && m.onGround) m.vy=-10;
-			} else {
-				// Flying summon or normal orb summon
-				if(dist2>stopDist){m.vx+=(dx/dist2)*speed*0.1;m.vy+=(dy/dist2)*speed*0.1;}
-			}
-			m.facing=dx>0?1:-1;
+		m.target = nearest;
+		const combatLock = nearest || (orderTgt && !orderTgt._cursor ? orderTgt : null);
+		if(m._lockOn !== combatLock){
+			m._lockOn = combatLock;
+			m._lockSide = null;
+			m._faceFlip = 0;
+		}
+		const pcx = player.x + player.w/2, pcy = player.y + player.h/2;
+		const pdx = pcx - m.x - m.w/2, pdy = pcy - m.y - m.h/2;
+		const pDist = Math.hypot(pdx, pdy);
+		const PLAYER_LEASH = 420, PLAYER_FOLLOW = 140, PLAYER_TP = 1500;
+		const keepDist = m.summonClose ? 60 : 220;
+		const combat = nearest || (orderTgt && !orderTgt._cursor ? orderTgt : null);
+		if(pDist > PLAYER_TP){
+			m.x = player.x + (Math.random()-0.5) * 100;
+			m.y = player.y - m.h;
+			m.vx = 0; m.vy = 0;
+		} else if(pDist > PLAYER_LEASH){
+			steerMinionToward(m, pcx, pcy, PLAYER_FOLLOW);
+		} else if(combat && !m.summonClose){
+			steerMinionHoldRange(m, combat, keepDist);
+		} else if(orderTgt && orderTgt._cursor){
+			let tx = orderTgt.x + (orderTgt.w||0)/2, ty = orderTgt.y + (orderTgt.h||0)/2;
+			const cdx = tx - pcx, cdy = ty - pcy, cDist = Math.hypot(cdx, cdy);
+			if(cDist > PLAYER_LEASH){ tx = pcx + cdx / cDist * PLAYER_LEASH; ty = pcy + cdy / cDist * PLAYER_LEASH; }
+			steerMinionToward(m, tx, ty, 40);
+		} else if(combat){
+			const cdx = combat.x + combat.w/2 - m.x - m.w/2;
+			const side = minionHoldSide(m, cdx);
+			const holdX = combat.x + combat.w/2 + side * Math.max(24, keepDist * 0.45);
+			steerMinionToward(m, holdX, combat.y + combat.h/2, keepDist);
 		} else {
-			// No enemies nearby — follow the player
-			const pdx = player.x + player.w/2 - m.x - m.w/2;
-			const pdy = player.y + player.h/2 - m.y - m.h/2;
-			const pDist = Math.hypot(pdx, pdy);
-			const followDist = 120; // stay this close
-			const tpDist = 1500; // teleport if too far
-			if(pDist > tpDist){
-				// Too far away — teleport near player
-				m.x = player.x + (Math.random()-0.5) * 100;
-				m.y = player.y - m.h;
-				m.vx = 0; m.vy = 0;
-			} else if(pDist > followDist){
-				const speed = m.moveSpeed || 2.5;
-				if(m.isNecroSummon && !m.necroFlies){
-					// Ground: move horizontally toward player, jump if needed
-					m.vx += (pdx / Math.abs(pdx||1)) * speed * 0.1;
-					if(pdy < -40 && m.onGround) m.vy = -10;
-				} else {
-					// Flying/orb: move directly toward player
-					m.vx += (pdx / pDist) * speed * 0.08;
-					m.vy += (pdy / pDist) * speed * 0.08;
-				}
-				m.facing = pdx > 0 ? 1 : -1;
-			}
+			steerMinionToward(m, pcx, pcy, PLAYER_FOLLOW);
 		}
-		// Physics: gravity for non-flying necro summons
+		// Physics: ground necro uses gravity; flyers only phase walls if that enemy type can
 		if(m.isNecroSummon && !m.necroFlies){
 			m.vy += GRAVITY;
 			if(m.vy > 18) m.vy = 18;
 			m.vx *= 0.88;
+			moveEntityTile(m);
+		} else if(m.isNecroSummon && m.necroFlies && !enemyPhasesWalls(m)){
+			m.vx *= 0.92; m.vy *= 0.92;
 			moveEntityTile(m);
 		} else {
 			m.vx*=0.92;m.vy*=0.92;
@@ -27456,6 +28707,9 @@ function update(){
 		if(m.isNecroSummon){
 			// Necro summons use same AI as real enemies
 			if(m.attackAnimTimer > 0) m.attackAnimTimer--;
+			if(m.necroType === 'zenith'){
+				updateNecroZenith(m, nearest);
+			} else {
 			const nTypeDef = ENEMY_TYPES[m.necroType];
 			if(nTypeDef && nTypeDef.spells){
 				const spells = nTypeDef.spells;
@@ -27480,14 +28734,14 @@ function update(){
 				}
 				// Boss global cooldown
 				if(isBoss && (m.bossGlobalCD||0) > 0){ m.bossGlobalCD--; }
-				else if(nearest){
+				else if(nearest && !m.fireKit && !m.iceKit && !m.earthKit && !m.forgeKit && !m.wildesKit){
 					const targetDist = Math.hypot(nearest.x+nearest.w/2-m.x-m.w/2, nearest.y+nearest.h/2-m.y-m.h/2);
 					const cap = Math.min(spells.length, maxSpellIdx);
 					for(let attempt=0; attempt<cap; attempt++){
 						const si = ((m.currentSpell||0) + attempt) % cap;
 						if(m.spellCooldowns[si]>0) continue;
 						const sp = spells[si];
-						if(targetDist <= sp.range){
+						if(targetDist <= enemyAtkRange(sp.range)){
 							const fn = CAST_FNS[sp.castFn];
 							if(fn){
 								const savedPX=player.x, savedPY=player.y, savedPW=player.w, savedPH=player.h;
@@ -27501,41 +28755,39 @@ function update(){
 										player.x=necroTarget.x; player.y=necroTarget.y;
 										player.w=necroTarget.w; player.h=necroTarget.h;
 										const _epB=enemyProjectiles.length;
+										window._necroEnemyMarkStart = enemies.length;
 										const _prevST=window.setTimeout, _prevSI=window.setInterval;
 										window.setTimeout=function(ic,d){return _origST.call(window,_necroWrap(ic),d);};
 										window.setInterval=function(ic,d){return _origSI.call(window,_necroWrap(ic),d);};
 										try{cb.apply(this,arguments);}catch(e){}
 										window.setTimeout=_prevST; window.setInterval=_prevSI;
-										for(let _ei=_epB;_ei<enemyProjectiles.length;_ei++){
-											enemyProjectiles[_ei].necroFriendly=true;
-											const dvSummonMult = activeDomain && activeDomain._dvSummonPow ? (1 + activeDomain._dvSummonPow * 0.10) : 1;
-											enemyProjectiles[_ei].power=Math.round(enemyProjectiles[_ei].power*0.6*dvSummonMult);
-										}
+										tagNecroProjectiles(_epB, m);
+										adoptNecroSpawnedEnemies(m);
 										player.x=_sp; player.y=_spy; player.w=_spw; player.h=_sph;
 										player.vx=_svx; player.vy=_svy;
 									};
 								}
 								window.setTimeout=function(cb,d){return _origST.call(window,_necroWrap(cb),d);};
-								window.setInterval=function(cb,d){return _origSI.call(window,_necroWrap(cb),d);};
+								window.setInterval=function(ic,d){return _origSI.call(window,_necroWrap(ic),d);};
 								player.x=nearest.x; player.y=nearest.y; player.w=nearest.w; player.h=nearest.h;
 								const epLen = enemyProjectiles.length;
+								window._necroEnemyMarkStart = enemies.length;
 								const fakeEn = { x:m.x, y:m.y, w:m.w, h:m.h, facing:m.facing, typeDef:nTypeDef, type:m.necroType, animTimer:m.animTimer, vx:m.vx, vy:m.vy, bossPhase:m.bossPhase||1 };
-								try{ fn(fakeEn); }catch(e){}
+								try{ fn(((FIRE_KIT_TYPES && FIRE_KIT_TYPES[m.necroType]) || (ICE_KIT_TYPES && ICE_KIT_TYPES[m.necroType]) || (EARTH_KIT_TYPES && EARTH_KIT_TYPES[m.necroType]) || (FORGE_KIT_TYPES && FORGE_KIT_TYPES[m.necroType]) || (WILDES_KIT_TYPES && WILDES_KIT_TYPES[m.necroType]) || (LATE_KIT_TYPES && LATE_KIT_TYPES[m.necroType])) ? m : fakeEn); }catch(e){}
 								window.setTimeout=_origST; window.setInterval=_origSI;
 								player.x=savedPX; player.y=savedPY; player.w=savedPW; player.h=savedPH;
-								for(let ei=epLen; ei<enemyProjectiles.length; ei++){
-									enemyProjectiles[ei].necroFriendly = true;
-									enemyProjectiles[ei].power = Math.round(enemyProjectiles[ei].power * 0.6);
-								}
+								tagNecroProjectiles(epLen, m);
+								adoptNecroSpawnedEnemies(m);
 								m.attackAnimTimer = ATTACK_ANIM_DURATION;
-								m.spellCooldowns[si] = Math.round(sp.cooldown * cdMult * DIFF_CD_MULT);
+								m.spellCooldowns[si] = Math.round(sp.cooldown * cdMult * DIFF_CD_MULT * necroAttackCdMult(m));
 								m.currentSpell = (si+1) % cap;
-								if(isBoss) m.bossGlobalCD = m.necroType==='seraphel' ? (m.bossPhase >= 2 ? 60 : 100) : (m.bossPhase >= 2 ? 90 : 140);
+								if(isBoss) m.bossGlobalCD = Math.round((m.necroType==='seraphel' ? (m.bossPhase >= 2 ? 60 : 100) : (m.bossPhase >= 2 ? 90 : 140)) * necroAttackCdMult(m));
 								break;
 							}
 						}
 					}
 				}
+			}
 			}
 		} else {
 			// Normal summons: fire next spell phase periodically
@@ -27818,42 +29070,30 @@ function update(){
 		activeDomain._dvEnemyPow = dvb.domainEnemyPow || 0;
 
 		// Necromancer domain: spawn strong summons over time
-		if(activeDomain.necroSummonIds && activeDomain.necroSummonCount < activeDomain.necroSummonMax && activeDomain.age >= activeDomain.necroNextSummonAge){
-			const ids = activeDomain.necroSummonIds;
-			const typeId = ids[Math.floor(Math.random() * ids.length)];
-			const et = ENEMY_TYPES[typeId];
-			const spawnX = domCX + (Math.random()-0.5) * activeDomain.w * 0.4;
-			const spawnY = domCY + (Math.random()-0.5) * activeDomain.h * 0.2;
-			const sPow = activeDomain.necroSummonPower;
-			const _dcPh = activeDomain.necroSpellPh || {};
-			const _dcHealthBonus = (_dcPh.summonHealth||0) * 10;
-			const _dcSpeedMult = 1 + (_dcPh.summonSpeed||0) * 0.08;
-			const _dcRangeBonus = (_dcPh.summonRange||0) * 60;
-			const scaledHp = Math.round(et.hp * 0.65 + sPow * 25 + _dcHealthBonus);
-			playerMinions.push({
-				x:spawnX, y:spawnY, w:et.w, h:et.h,
-				vx:0, vy:0,
-				color: et.color,
-				power: sPow * 1.5,
-				hp: scaledHp, maxHp: scaledHp,
-				age: 0, maxAge: activeDomain.maxAge - activeDomain.age,
-				animTimer: 0, attackAnimTimer: 0,
-				facing: Math.random() < 0.5 ? 1 : -1,
-				onGround: false, target: null, summonClose: true,
-				isNecroSummon: true, necroType: typeId,
-				necroName: et.name, necroFlies: !!et.flies,
-				fireTimer: 0, fireCooldown: Math.round(FPS * 2.5),
-				detectRange: (et.detectRange || 500) + _dcRangeBonus,
-				moveSpeed: Math.min((et.moveSpeed || 1.5) * _dcSpeedMult, 5),
-				spellCooldowns: et.spells ? et.spells.map(() => Math.round(FPS*2)) : [],
-				// Archmage dual-class: domain necro summons inherit elemental behaviors
-				archmageElement: hasClass('archmage') && pendingNecroSummon ? (pendingNecroSummon.effects && pendingNecroSummon.effects[0] ? pendingNecroSummon.effects[0] : null) : null,
-			});
-			dmgNumbers.push({x:spawnX,y:spawnY-30,text:`💀 ${et.name} Champion!`,age:0,color:'#8e44ad'});
-			spawnImpact(spawnX, spawnY, '#8e44ad');
-			shakeScreen(8, 12);
-			activeDomain.necroSummonCount++;
-			// Next summon ~18 seconds later
+		if(activeDomain.necroSummonIds && activeDomain.age >= activeDomain.necroNextSummonAge){
+			const domainUlt = !!(activeDomain.isUltimate || activeDomain.sourceSlot === 9);
+			const ids = activeDomain.necroSummonIds.filter(id => ENEMY_TYPES[id] && canAffordNecroSummon(id, true)
+				&& !(typeof isUltOnlyNecroType === 'function' && isUltOnlyNecroType(id) && !domainUlt));
+			if(ids.length){
+				const typeId = ids[Math.floor(Math.random() * ids.length)];
+				const spawnX = domCX + (Math.random()-0.5) * activeDomain.w * 0.4;
+				const spawnY = domCY + (Math.random()-0.5) * activeDomain.h * 0.2;
+				const _dcPh = activeDomain.necroSpellPh || {};
+				const raised = raiseNecroMinion({
+					x:spawnX, y:spawnY,
+					power: activeDomain.necroSummonPower,
+					maxAge: activeDomain.maxAge - activeDomain.age,
+					ph: _dcPh,
+					facing: Math.random() < 0.5 ? 1 : -1,
+					effects: _dcPh.effects || [],
+					isUltimate: domainUlt,
+					sourceSlot: activeDomain.sourceSlot,
+				}, typeId, true);
+				if(raised){
+					shakeScreen(8, 12);
+					activeDomain.necroSummonCount++;
+				}
+			}
 			activeDomain.necroNextSummonAge = activeDomain.age + Math.round(18 * FPS) + Math.floor(Math.random() * 120);
 		}
 
@@ -27979,6 +29219,14 @@ function update(){
 	if(typeof updateChallengerBoss === 'function') updateChallengerBoss();
 	_coopBossDmg = false;
 	updateEnemies();
+	if(typeof DungeonEnv !== 'undefined' && DungeonEnv.update) DungeonEnv.update();
+	if(typeof DungeonEnv !== 'undefined' && DungeonEnv.collideMovers) DungeonEnv.collideMovers(player);
+	if(typeof updateFireDungeonWorld === 'function') updateFireDungeonWorld();
+	if(typeof updateIceDungeonWorld === 'function') updateIceDungeonWorld();
+	if(typeof updateEarthDungeonWorld === 'function') updateEarthDungeonWorld();
+	if(typeof updateForgeKitWorld === 'function') updateForgeKitWorld();
+	if(typeof updateWildesWorld === 'function') updateWildesWorld();
+	if(typeof updateLateWorld === 'function') updateLateWorld();
 	_coopBossDmg = IS_COOP;
 	updateSeraphelFight();
 	_coopBossDmg = false;
@@ -32610,6 +33858,13 @@ function render(){
 		}
 
 		// Draw enemies
+		if(typeof DungeonEnv !== 'undefined' && DungeonEnv.draw) DungeonEnv.draw(ctx);
+		if(typeof drawFireDungeonWorld === 'function') drawFireDungeonWorld();
+		if(typeof drawIceDungeonWorld === 'function') drawIceDungeonWorld();
+		if(typeof drawEarthDungeonWorld === 'function') drawEarthDungeonWorld();
+		if(typeof drawForgeKitWorld === 'function') drawForgeKitWorld();
+		if(typeof drawWildesWorld === 'function') drawWildesWorld();
+		if(typeof drawLateWorld === 'function') drawLateWorld();
 		for(const en of enemies){
 			if(en.dead) continue;
 			drawEnemy(en);
@@ -34851,6 +36106,13 @@ function render(){
 
 	_renderAura();
 	/* Render enemies */
+	if(typeof DungeonEnv !== 'undefined' && DungeonEnv.draw) DungeonEnv.draw(ctx);
+	if(typeof drawFireDungeonWorld === 'function') drawFireDungeonWorld();
+	if(typeof drawIceDungeonWorld === 'function') drawIceDungeonWorld();
+	if(typeof drawEarthDungeonWorld === 'function') drawEarthDungeonWorld();
+	if(typeof drawForgeKitWorld === 'function') drawForgeKitWorld();
+	if(typeof drawWildesWorld === 'function') drawWildesWorld();
+	if(typeof drawLateWorld === 'function') drawLateWorld();
 	for(const en of enemies){
 		if(en.dead){
 			if(en.deathTimer<60){
@@ -34869,6 +36131,7 @@ function render(){
 
 	/* Player minions */
 	for(const m of playerMinions){
+		if(m._fireHidden || m._iceHidden || m._earthHidden || m._wildesHidden || m._lateHidden) continue;
 		const mx=m.x-camera.x,my=m.y-camera.y;
 		if(mx+m.w<-50||mx>canvas.width+50)continue;
 		const bob=Math.sin(m.animTimer*0.08)*3;
@@ -34925,9 +36188,9 @@ function render(){
 						const frame = Math.min(m._seraphelFrame || 0, maxF - 1);
 						const sx = frame * fW;
 						const sy = animDef.row * fH;
-						const s = SPRITE_SCALE['seraphel'] || 1.6;
-						const rW = m.w * s;
-						const rH = m.h * s;
+						const destS = enemySpriteDestSize(m, fW, fH);
+						const rW = destS.rW;
+						const rH = destS.rH;
 						ctx.save();
 						ctx.filter = 'grayscale(1) brightness(0.85)';
 						ctx.globalAlpha = 0.8;
@@ -34946,27 +36209,30 @@ function render(){
 			const spriteImg = ENEMY_SPRITE_SHEETS[m.necroType];
 			const typeDef = ENEMY_TYPES[m.necroType];
 			if(spriteImg && spriteImg.complete && spriteImg.naturalWidth > 0 && typeDef){
-				const cols = SPRITE_COLS_OVERRIDE[m.necroType] || SPRITE_COLS;
-				const rows = SPRITE_ROWS_OVERRIDE[m.necroType] || SPRITE_ROWS;
+				const meta = enemySheetMeta(m.necroType);
+				const cols = (meta && meta.cols) || SPRITE_COLS_OVERRIDE[m.necroType] || SPRITE_COLS;
+				const rows = (meta && meta.rows) || SPRITE_ROWS_OVERRIDE[m.necroType] || SPRITE_ROWS;
+				const startCol = (meta && meta.startCol) || 0;
 				const fW = spriteImg.naturalWidth / cols;
 				const fH = spriteImg.naturalHeight / rows;
 				// Determine sprite row
 				let row = SPRITE_ROW.idle;
 				if(m.attackAnimTimer > 0) row = SPRITE_ROW.attack;
 				else if(Math.abs(m.vx) > 0.3) row = SPRITE_ROW.walk;
+				const usable = enemySheetUsable(m.necroType, row, false);
 				let frame;
 				if(row === SPRITE_ROW.attack && m.attackAnimTimer > 0){
-					const attackDur = SPRITE_FPS * cols;
+					const attackDur = SPRITE_FPS * usable;
 					const elapsed = attackDur - Math.min(m.attackAnimTimer, attackDur);
-					frame = Math.min(Math.floor(elapsed / SPRITE_FPS), cols - 1);
+					frame = startCol + Math.min(Math.floor(elapsed / SPRITE_FPS), usable - 1);
 				} else {
-					frame = Math.floor(m.animTimer / SPRITE_FPS) % cols;
+					frame = startCol + (Math.floor(m.animTimer / SPRITE_FPS) % usable);
 				}
 				const sx = frame * fW;
 				const sy = Math.min(row, rows - 1) * fH;
-				const s = SPRITE_SCALE[m.necroType] || 1.5;
-				const rW = m.w * s;
-				const rH = m.h * s;
+				const dest = enemySpriteDestSize(m, fW, fH);
+				const rW = dest.rW;
+				const rH = dest.rH;
 				const isFlying = typeDef.flies;
 				const drawX2 = mx + m.w/2 - rW/2;
 				const drawY2 = isFlying ? (my + m.h/2 - rH/2) : (my + m.h - rH);
@@ -35381,6 +36647,30 @@ break;}
 	for(const p of enemyProjectiles){
 		const px=p.x-camera.x,py=p.y-camera.y;
 		if(!p._isLaser&&(px<-200||px>canvas.width+200||py<-200||py>canvas.height+200))continue;
+		if(p._fireStyle && typeof drawFireKitProj === 'function'){
+			drawFireKitProj(p);
+			continue;
+		}
+		if(p._iceStyle && typeof drawIceKitProj === 'function'){
+			drawIceKitProj(p);
+			continue;
+		}
+		if(p._earthStyle && typeof drawEarthKitProj === 'function'){
+			drawEarthKitProj(p);
+			continue;
+		}
+		if(p._forgeStyle && typeof drawForgeKitProj === 'function'){
+			drawForgeKitProj(p);
+			continue;
+		}
+		if(p._wildesStyle && typeof drawWildesKitProj === 'function'){
+			drawWildesKitProj(p);
+			continue;
+		}
+		if(p._lateStyle && typeof drawLateKitProj === 'function'){
+			drawLateKitProj(p);
+			continue;
+		}
 
 		// Boss laser beam: render from startX/startY along beamAngle for beamLen pixels
 		if(p._isLaser){
@@ -36576,9 +37866,24 @@ break;}
 		ctx.font='bold 12px Arial';ctx.fillStyle='#ffcc00';ctx.textAlign='center';
 		ctx.fillText('⚡ Stunned',player.x+player.w/2-camera.x,player.y-25-camera.y);
 	}
-	if(player.slowTimer>0){
-		ctx.font='bold 11px Arial';ctx.fillStyle='#66ccff';ctx.textAlign='center';
-		ctx.fillText('❄️ Slowed',player.x+player.w/2-camera.x,player.y-35-camera.y);
+	if(player.slowTimer>0 || (player._iceDrag||0)>0.08 || (player._kitSlow||0)>0.08){
+		ctx.font='bold 11px Arial';ctx.fillStyle=(player._kitSlow||0)>0.08 && !(player._iceDrag>0.08) ? '#c9a66b' : '#66ccff';ctx.textAlign='center';
+		ctx.fillText((player._kitSlow||0)>0.08 && !(player._iceDrag>0.08) ? 'Slow' : '❄️ Slowed',player.x+player.w/2-camera.x,player.y-35-camera.y);
+	}
+	if(player._iceWhiteout>0){
+		const wo=Math.min(1, player._iceWhiteout/18);
+		ctx.save();
+		ctx.setTransform(1,0,0,1,0,0);
+		ctx.fillStyle='rgba(220,236,255,'+(0.38*wo)+')';
+		ctx.fillRect(0,0,canvas.width,canvas.height);
+		const hole=Math.max(70, Math.min(canvas.width,canvas.height)*0.16);
+		const vig=ctx.createRadialGradient(canvas.width/2,canvas.height/2,hole*0.2,canvas.width/2,canvas.height/2,Math.max(canvas.width,canvas.height)*0.55);
+		vig.addColorStop(0,'rgba(255,255,255,0)');
+		vig.addColorStop(0.45,'rgba(200,220,240,0.28)');
+		vig.addColorStop(1,'rgba(180,205,230,0.55)');
+		ctx.fillStyle=vig;
+		ctx.fillRect(0,0,canvas.width,canvas.height);
+		ctx.restore();
 	}
 	if(player.blindTimer>0){
 		const bw=canvas.width, bh=canvas.height;
@@ -37317,10 +38622,10 @@ function drawSeraphelSprite(en){
 	const sx = frame * fW;
 	const sy = anim.row * fH;
 
-	// Render size
-	const s = SPRITE_SCALE['seraphel'] || 1.6;
-	const rW = en.w * s;
-	const rH = en.h * s;
+	// Render size — keep the sheet cell's aspect ratio
+	const destS = enemySpriteDestSize(en, fW, fH);
+	const rW = destS.rW;
+	const rH = destS.rH;
 	const ex = en.x - camera.x;
 	const ey = en.y - camera.y;
 	const cx = ex + en.w / 2;
@@ -37340,41 +38645,75 @@ function drawSeraphelSprite(en){
 }
 
 function getEnemySpriteRow(en){
-	if(en.dead)                                   return SPRITE_ROW.defeat;
+	if(typeof fireKitSpriteRow === 'function'){
+		const kitRow = fireKitSpriteRow(en);
+		if(kitRow != null) return kitRow;
+	}
+	if(typeof iceKitSpriteRow === 'function'){
+		const kitRow = iceKitSpriteRow(en);
+		if(kitRow != null) return kitRow;
+	}
+	if(typeof earthKitSpriteRow === 'function'){
+		const kitRow = earthKitSpriteRow(en);
+		if(kitRow != null) return kitRow;
+	}
+	if(typeof forgeKitSpriteRow === 'function'){
+		const kitRow = forgeKitSpriteRow(en);
+		if(kitRow != null) return kitRow;
+	}
+	if(typeof wildesKitSpriteRow === 'function'){
+		const kitRow = wildesKitSpriteRow(en);
+		if(kitRow != null) return kitRow;
+	}
+	if(typeof lateKitSpriteRow === 'function'){
+		const kitRow = lateKitSpriteRow(en);
+		if(kitRow != null) return kitRow;
+	}
+	if(en.dead){
+		const type = en.necroType || en.type;
+		const meta = enemySheetMeta(type);
+		const rows = (meta && meta.rows) || SPRITE_ROWS_OVERRIDE[type] || SPRITE_ROWS;
+		return rows - 1;
+	}
 	if(en.charging || en.attackAnimTimer > 0)      return SPRITE_ROW.attack;
 	if(Math.abs(en.vx) > 0.3)                     return SPRITE_ROW.walk;
 	return SPRITE_ROW.idle;
 }
 function drawSpriteEnemy(en, img){
 	if(!img.complete || !img.naturalWidth) return false;
-	const cols = SPRITE_COLS_OVERRIDE[en.type] || SPRITE_COLS;
-	const rows = SPRITE_ROWS_OVERRIDE[en.type] || SPRITE_ROWS;
+	const sheetType = en.necroType || en.type;
+	const meta = enemySheetMeta(sheetType);
+	const fireG = (typeof fireKitSheetGrid === 'function') ? fireKitSheetGrid(en, img) : null;
+	const iceG = (typeof iceKitSheetGrid === 'function') ? iceKitSheetGrid(en, img) : null;
+	const g = fireG || iceG;
+	const cols = (meta && meta.cols) || (g && g.cols) || SPRITE_COLS_OVERRIDE[sheetType] || SPRITE_COLS;
+	const rows = (meta && meta.rows) || (g && g.rows) || SPRITE_ROWS_OVERRIDE[sheetType] || SPRITE_ROWS;
+	const startCol = (meta && meta.startCol) || 0;
 	const fW = img.naturalWidth  / cols;
 	const fH = img.naturalHeight / rows;
 	const row = Math.min(getEnemySpriteRow(en), rows - 1);
+	const usable = enemySheetUsable(sheetType, row, !!en.dead);
 
 	// Frame index
-	let frame;
-	if(row === SPRITE_ROW.defeat){
-		// Play once, hold last frame
-		frame = Math.min(Math.floor(en.deathTimer / SPRITE_FPS), cols - 1);
+	let local;
+	if(en.dead){
+		local = Math.min(Math.floor(en.deathTimer / SPRITE_FPS), usable - 1);
 	} else if(row === SPRITE_ROW.attack && en.attackAnimTimer > 0 && !en.charging){
-		// Attack from cast — play from start
-		const attackDur = SPRITE_FPS * cols;
+		const attackDur = SPRITE_FPS * usable;
 		const elapsed = attackDur - Math.min(en.attackAnimTimer, attackDur);
-		frame = Math.min(Math.floor(elapsed / SPRITE_FPS), cols - 1);
+		local = Math.min(Math.floor(elapsed / SPRITE_FPS), usable - 1);
 	} else {
-		// Idle / walk / charge — loop
-		frame = Math.floor(en.animTimer / SPRITE_FPS) % cols;
+		local = Math.floor(en.animTimer / SPRITE_FPS) % usable;
 	}
+	const frame = startCol + local;
 
 	const sx = frame * fW;
 	const sy = row  * fH;
 
-	// Render size (larger than collision box for visual detail)
-	const s  = SPRITE_SCALE[en.type] || 1.5;
-	const rW = en.w * s;
-	const rH = en.h * s;
+	// Render size — scale uniformly so the frame is not stretched
+	const dest = enemySpriteDestSize(en, fW, fH);
+	const rW = dest.rW;
+	const rH = dest.rH;
 
 	const ex = en.x - camera.x;
 	const ey = en.y - camera.y;
@@ -37403,7 +38742,24 @@ function drawSpriteEnemy(en, img){
 /* =============================================================
    DRAW ENEMY
    ============================================================= */
+function drawMagmaWarden(en){
+	if(typeof DungeonEnv !== 'undefined' && DungeonEnv.drawWardenFallback){
+		DungeonEnv.drawWardenFallback(en);
+		return;
+	}
+	const ex = en.x - camera.x, ey = en.y - camera.y;
+	ctx.fillStyle = en.flash > 0 ? '#ffcc88' : '#221810';
+	ctx.fillRect(ex + 8, ey + 16, en.w - 16, en.h - 16);
+	ctx.fillStyle = '#ff6622';
+	ctx.fillRect(ex + en.w / 2 - 10, ey + 48, 20, 28);
+}
 function drawEnemy(en){
+	if(en._fireHidden || en._iceHidden || en._earthHidden || en._wildesHidden || en._lateHidden) return;
+	if(en.type === 'magmaWarden' && !en.dead){
+		drawMagmaWarden(en);
+		drawEnemyHpBar(en);
+		return;
+	}
 	const ex=en.x-camera.x, ey=en.y-camera.y;
 	if(ex+en.w<-50||ex>canvas.width+50||ey+en.h<-50||ey>canvas.height+50)return;
 
@@ -39736,7 +41092,14 @@ function updateDebugPanel(){
 	document.getElementById('debugContent').textContent=txt;
 }
 </script>
-<script src="challenger-raid.js?v=33"></script>
+<script src="dungeon-env.js?v=4"></script>
+<script src="fire-dungeon-kit.js?v=5"></script
+<script src="ice-dungeon-kit.js?v=2"></script>
+<script src="earth-dungeon-kit.js?v=3"></script>
+<script src="forge-wildes-kit.js?v=3"></script>
+<script src="wildes-dungeon-kit.js?v=1"></script>
+<script src="late-dungeon-kit.js?v=1"></script>
+<script src="challenger-raid.js?v=34"></script>
 <script>
 function loop(){
 	const t0=performance.now();

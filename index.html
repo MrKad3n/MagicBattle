@@ -792,6 +792,13 @@
 				</div>
 				<button id="resetAllProgressBtn" style="padding:6px 16px;border:none;border-radius:6px;background:#8b0000;color:#fff;font-weight:bold;cursor:pointer;white-space:nowrap;">Reset All</button>
 			</div>
+			<div class="setting-row">
+				<div>
+					<div class="setting-label">📖 Unlock All Bestiary</div>
+					<div class="setting-desc">Marks every enemy as discovered so they appear in the Bestiary and as necro summons.</div>
+				</div>
+				<button id="unlockBestiaryBtn" style="padding:6px 16px;border:none;border-radius:6px;background:#8e44ad;color:#fff;font-weight:bold;cursor:pointer;white-space:nowrap;">Unlock All</button>
+			</div>
 
 			<!-- Spell Slot Keybinds -->
 			<div style="margin-top:12px;border-top:1px solid rgba(255,255,255,0.15);padding-top:14px;">
@@ -1433,6 +1440,19 @@
 			keys.forEach(k => localStorage.removeItem(k));
 			settingsOverlay.classList.remove('open');
 			alert('All progress has been reset. Refresh the page to start fresh.');
+		});
+
+		document.getElementById('unlockBestiaryBtn').addEventListener('click', () => {
+			const ids = ['imp','flameSerpent','emberMage','magmaGolem','fireSprite','fireDragon','frostWraith','iceArcher','snowBeast','cryoMage','glacierSentinel','frostColossus','rockGolem','vineCrawler','caveSpider','crystalMage','mudElemental','earthColossus','ironSentinel','forgeDrone','slagBrute','ironColossus','thornWolf','sporeFungus','mossWraith','willowWisp','glowBeetle','stalactiteBat','skyVine','windSylph','elderTreant','stormRaptor','deepRootHorror','darkVineCrawler','darkThornWolf','darkMossWraith','boneWraith','babyDragon','flameSalamander','magmaImp','fireColossus','abyssalGuardian','coralSentinel','depthSerpent','sandWraith','tombGuardian','desertSerpent','mummyWarrior','scarabSwarm','sandstormDjinn','seraphel','voidArbiter','infernalKitten','zenith'];
+			let data = {};
+			try { data = JSON.parse(localStorage.getItem('magicBattle_bestiary') || '{}') || {}; } catch(e){ data = {}; }
+			let added = 0;
+			for(const id of ids){
+				if(!data[id]) added++;
+				data[id] = Math.max(data[id] || 0, 1);
+			}
+			localStorage.setItem('magicBattle_bestiary', JSON.stringify(data));
+			alert(added ? ('Unlocked '+added+' new bestiary entries. All necro summons are now available.') : 'Every enemy was already unlocked.');
 		});
 
 		/* ============ WORLD MAP ============ */

@@ -3,6 +3,7 @@
    ============================================================ */
 .nb-modal{
 	width:min(96vw,1320px)!important;max-height:94vh;min-height:min(86vh,820px);
+	color-scheme:dark;
 	background:
 		radial-gradient(900px 240px at 10% 0%, rgba(162,155,254,.12), transparent 55%),
 		linear-gradient(180deg,#12101c 0%,#18152a 100%);
@@ -165,7 +166,11 @@
 	font-size:12px;
 }
 .nb-toggle select,.nb-extra select,.nb-extra input[type=color],.nb-toggle input[type=color]{
-	background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);color:#fff;border-radius:6px;padding:4px 6px;
+	background:#1c1a30;border:1px solid rgba(255,255,255,.14);color:#e8eaff;border-radius:6px;padding:4px 6px;
+	color-scheme:dark;
+}
+.nb-toggle select option,.nb-extra select option,.nb-dd-panel,.nb-dd-opt{
+	background:#1c1a30;color:#e8eaff;
 }
 
 .nb-link-pop{

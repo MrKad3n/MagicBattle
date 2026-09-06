@@ -1430,7 +1430,7 @@
 		shakeScreen(28, 50);
 		spawnHit({ kind:'sprite', x: cx, y: FLOOR, w: 620 * SZ * 1.26, h: 280 * SZ * 1.26, max: 44, img: FX.crater, dmg: 0 });
 		spawnShockPair(cx, { knockY: -12 });
-		hitBox(cx - 277, FLOOR - 202, 554, 227, DIRECT, [], -10);
+		hitBox(cx - 520, FLOOR - 380, 1040, 420, DIRECT, [], -10);
 		challengerBoss.horizonCrack = Math.min(1, (challengerBoss.horizonCrack || 0) + 0.45);
 		if(typeof particles !== 'undefined'){
 			for(let i = 0; i < 36; i++){

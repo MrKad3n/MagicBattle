@@ -4,7 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Magic Battle — Inventory</title>
-<link rel="stylesheet" href="spell-builder.css?v=8"/>
+<link rel="stylesheet" href="spell-builder.css?v=9"/>
 <script src="auth-gate.js?v=4"></script>
 <style>
 /* ============================================================
@@ -23,7 +23,8 @@
 *{box-sizing:border-box;margin:0;padding:0;font-family:Arial,sans-serif}
 html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text)}
 button{cursor:pointer;font-family:inherit}
-input,select{font-family:inherit}
+input,select{font-family:inherit;color-scheme:dark}
+select,select option{background:#1c1a30;color:#e8eaff}
 
 /* ============================================================
    LAYOUT – three-column with top bar
@@ -227,12 +228,14 @@ input,select{font-family:inherit}
 .prow label{font-size:11px;color:var(--muted)}
 .prow select,.prow input[type=range],.prow input[type=number],.prow input[type=color]{
 	width:100%;font-size:12px;padding:4px 6px;
-	background:rgba(255,255,255,.07);border:1px solid var(--border);border-radius:4px;
-	color:#fff;
+	background:#1c1a30;border:1px solid var(--border);border-radius:4px;
+	color:#e8eaff;color-scheme:dark;
 }
 .prow input[type=range]{padding:2px 0;cursor:pointer}
 .prow input[type=color]{height:28px;padding:2px;cursor:pointer}
-.prow select option{background:#1c1a30;color:#e8eaff;padding:6px 8px}
+.prow select option,.prow select optgroup{
+	background:#1c1a30;color:#e8eaff;padding:6px 8px;
+}
 .prow select:focus{border-color:var(--accent);outline:none}
 .prow select{cursor:pointer}
 .prow .range-row{display:flex;align-items:center;gap:6px}
@@ -594,9 +597,9 @@ input,select{font-family:inherit}
 <!-- ============================================================
      JAVASCRIPT
      ============================================================ -->
-<script src="scrolls.js?v=1"></script>
-<script src="spell-cost.js?v=2"></script>
-<script src="spell-builder.js?v=12"></script>
+<script src="scrolls.js?v=2"></script>
+<script src="spell-cost.js?v=14"></script>
+<script src="spell-builder.js?v=22"></script>
 <script>
 /* =============================================================
    DATA DEFINITIONS
@@ -616,7 +619,7 @@ const SHAPES = {
 	spike:    { label:'Spike',    icon:'🔱', controlReq:3,  manaCost:8,  desc:'Pointed projectile that faces its direction and pierces', dmgNote:'' },
 	polygon:  { label:'Polygon',  icon:'⬡',  controlReq:3,  manaCost:9,  desc:'Customizable polygon with any number of sides', dmgNote:'' },
 	allyOrb:  { label:'Ally Orb',  icon:'💚', controlReq:1,  manaCost:6,  desc:'Orb that hits you / allies instead of enemies', dmgNote:'heals' },
-	summon:   { label:'Summon',   icon:'👾', controlReq:8,  manaCost:20, desc:'Summons minions — increase range/health/speed for mana. Fires next spell phase.', dmgNote:'indirect' },
+	summon:   { label:'Summon',   icon:'👾', controlReq:8,  manaCost:20, desc:'Summons minions. Speed, Spell Power, Duration, and Size set move speed, health, lifetime, and body/projectile scale. Fires next spell phase.', dmgNote:'indirect' },
 	meteor:   { label:'Meteor',   icon:'☄️', controlReq:6,  manaCost:16, desc:'Blazing comet: +distance dmg, AoE explosion on impact/expire (50% splash)', dmgNote:'-25% dmg' },
 	slash:    { label:'Slash',    icon:'🌙', controlReq:2,  manaCost:7,  desc:'Curved crescent arc projectile', dmgNote:'' },
 	vortex:   { label:'Vortex',   icon:'🌀', controlReq:7,  manaCost:18, desc:'Slow-moving void that pulls enemies in', dmgNote:'' },
@@ -738,7 +741,7 @@ const MAGE_RANKS = [
    ============================================================= */
 const MAGE_CLASSES = [
 	{ id:'none',       name:'Unspecialized', icon:'⚪', color:'#aaaaaa', desc:'No specialization chosen. A balanced mage with no class bonuses.' },
-	{ id:'necromancer', name:'Necromancer',  icon:'💀', color:'#8e44ad', desc:'Masters of death magic. Summon behavior lets you raise defeated enemies from the bestiary. Costs total mana. Max 3 necro-summons.' },
+	{ id:'necromancer', name:'Necromancer',  icon:'💀', color:'#8e44ad', desc:'Masters of death magic. Summon shape raises defeated Bestiary foes. Preselect a type in the builder. Point cap 15 (50 in Domain).' },
 	{ id:'dominion',    name:'Dominion Master', icon:'👁️', color:'#e74c3c', desc:'Controllers of the battlefield. Domain range +30%, domain damage +40%. Greater control over the arena.' },
 	{ id:'ranger',      name:'Ranger',       icon:'🏹', color:'#27ae60', desc:'Swift and precise. Spells gain massive range and deal more damage the farther they travel. Slightly reduced max HP.' },
 	{ id:'warrior',     name:'Warrior',      icon:'⚔️', color:'#f39c12', desc:'Close-range combat specialist. Bonus melee damage, reduced spell range. Press F for Spell Blade to reflect projectiles. Speed & defence buffed.' },
@@ -1154,7 +1157,7 @@ function defaultPlayerState(){
 		spells: new Array(10).fill(null),  // each slot: null or spell object
 		vows: [null, null, null],  // 3 vow slots
 		domainVow: null,  // 4th special domain vow slot
-		loadouts: [],      // saved spell loadouts: [{name, spells, type:'standard'|'transformation'}]
+		loadouts: [],      // saved spell loadouts: [{name, spells, type, mageClass, mageClass2, vows, domainVow}]
 		activeLoadoutIdx: -1, // which loadout is active (-1 = unsaved)
 		transformSpells: new Array(10).fill(null), // transformation loadout spells
 		gold: (typeof SCROLL_STARTING_GOLD === 'number' ? SCROLL_STARTING_GOLD : 350),
@@ -1251,6 +1254,41 @@ function saveState(){
 /* =============================================================
    LOADOUT MANAGER
    ============================================================= */
+function snapshotLoadoutExtras(){
+	return {
+		mageClass: STATE.mageClass || 'none',
+		mageClass2: STATE.mageClass2 || 'none',
+		vows: JSON.parse(JSON.stringify(STATE.vows || [null, null, null])),
+		domainVow: STATE.domainVow ? JSON.parse(JSON.stringify(STATE.domainVow)) : null
+	};
+}
+function writeExtrasToLoadout(ld){
+	if(!ld) return;
+	Object.assign(ld, snapshotLoadoutExtras());
+}
+function writeExtrasToActiveLoadout(){
+	if(STATE.activeLoadoutIdx >= 0 && STATE.activeLoadoutIdx < STATE.loadouts.length)
+		writeExtrasToLoadout(STATE.loadouts[STATE.activeLoadoutIdx]);
+}
+function applyLoadoutExtras(ld){
+	if(!ld) return;
+	if(ld.mageClass == null && !ld.vows){
+		writeExtrasToLoadout(ld);
+		return;
+	}
+	if(ld.mageClass != null) STATE.mageClass = ld.mageClass;
+	if(ld.mageClass2 != null) STATE.mageClass2 = ld.mageClass2;
+	if(ld.vows) STATE.vows = JSON.parse(JSON.stringify(ld.vows));
+	if('domainVow' in ld) STATE.domainVow = ld.domainVow ? JSON.parse(JSON.stringify(ld.domainVow)) : null;
+	const dualVow = STATE.vows && STATE.vows.find(v => v && v.boostType === 'dualClass' && v.secondClass);
+	STATE.mageClass2 = dualVow ? dualVow.secondClass : (STATE.mageClass2 || 'none');
+}
+function notifyGameSpellsChanged(){
+	try {
+		if(window.parent && window.parent !== window)
+			window.parent.postMessage({ type:'magicBattle_spellsChanged' }, '*');
+	} catch(e){}
+}
 function renderLoadoutModal(){
 	const body = document.getElementById('loadoutModalBody');
 	if(!body) return;
@@ -1295,7 +1333,9 @@ function renderLoadoutModal(){
 			// also sync transformSpells if transformation loadout
 			if(ld.type === 'transformation') STATE.transformSpells = JSON.parse(JSON.stringify(ld.spells));
 			STATE.activeLoadoutIdx = idx;
-			saveState(); renderSpellSlots(); renderLoadoutModal();
+			applyLoadoutExtras(ld);
+			saveState(); renderSpellSlots(); renderLoadoutModal(); renderStats(); renderVowSlots();
+			notifyGameSpellsChanged();
 		});
 	});
 	// Delete handlers
@@ -1323,11 +1363,15 @@ function openLoadoutModal(){
 function createNewLoadout(type){
 	const name = prompt('Name this '+(type==='transformation'?'Transformation ':'')+'loadout:', type==='transformation'?'Transform Loadout '+(STATE.loadouts.filter(l=>l.type==='transformation').length+1):'Loadout '+(STATE.loadouts.length+1));
 	if(!name) return;
-	const emptySpells = new Array(10).fill(null);
-	STATE.loadouts.push({ name: name.trim(), spells: emptySpells, type });
+	const copied = JSON.parse(JSON.stringify(STATE.spells || []));
+	while(copied.length < 10) copied.push(null);
+	copied.length = 10;
+	const extras = snapshotLoadoutExtras();
+	STATE.loadouts.push({ name: name.trim(), spells: copied, type, ...extras });
 	STATE.activeLoadoutIdx = STATE.loadouts.length - 1;
-	if(type === 'transformation') STATE.transformSpells = JSON.parse(JSON.stringify(emptySpells));
+	if(type === 'transformation') STATE.transformSpells = JSON.parse(JSON.stringify(copied));
 	saveState(); renderLoadoutModal(); renderSpellSlots();
+	notifyGameSpellsChanged();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -1342,8 +1386,10 @@ document.addEventListener('DOMContentLoaded', () => {
 			return;
 		}
 		STATE.loadouts[STATE.activeLoadoutIdx].spells = JSON.parse(JSON.stringify(STATE.spells));
+		writeExtrasToLoadout(STATE.loadouts[STATE.activeLoadoutIdx]);
 		if(STATE.loadouts[STATE.activeLoadoutIdx].type==='transformation') STATE.transformSpells = JSON.parse(JSON.stringify(STATE.spells));
 		saveState(); renderLoadoutModal();
+		notifyGameSpellsChanged();
 		const btn = document.getElementById('loadoutSaveCurrentBtn');
 		const orig = btn.textContent;
 		btn.textContent='✓ Saved!';
@@ -1543,7 +1589,8 @@ function inventoryManaOpts(slot, spell){
 		manaEfficiency: vb.manaEfficiency||0,
 		slot,
 		isUltimate: !!(spell && spell.isUltimate && slot===9),
-		mageClass: STATE.mageClass
+		mageClass: STATE.mageClass,
+		mageClass2: STATE.mageClass2
 	};
 }
 
@@ -1636,7 +1683,9 @@ function openClassSelect(){
 
 function selectMageClass(id){
 	STATE.mageClass = id;
+	writeExtrasToActiveLoadout();
 	saveState();
+	notifyGameSpellsChanged();
 	const modal = document.getElementById('classSelectModal');
 	if(modal) modal.remove();
 	renderStats();
@@ -1900,6 +1949,7 @@ function writeSpellToSlot(slotIdx, spell){
 	saveState();
 	renderSpellSlots();
 	renderInventory();
+	notifyGameSpellsChanged();
 }
 
 function closeScrollPicker(){
@@ -1979,7 +2029,7 @@ const DICT_SHAPE_DETAILS = {
 	spike:    { phaseNote:'Pointed projectile that faces its movement direction. Pierces through targets.', domainNote:'Spike domain projectiles erupt from the ground upward instead of homing. Uses straight behavior.', extraNote:'Spawns at ground level, shoots upward' },
 	polygon:  { phaseNote:'Customizable polygon — set any number of sides. Visual variety.', domainNote:'Per-frame push effect — enemies inside domain are pushed away from center.', extraNote:'Push strength: 1.2' },
 	allyOrb:  { phaseNote:'Heals you or allies instead of damaging enemies. Self-cast / underfoot / around-self / stationary orbs buff you immediately. Traveling orbs fly to allies (including co-op partners) and apply on contact — they no longer eat themselves on the caster at spawn. Works with Damage Heal for stored-damage healing.', domainNote:'Random spawn positions with homing (heals instead of damages).', extraNote:'Healing / buff projectile. Co-op: traveling Ally Orbs home to and hit allied players.' },
-	summon:   { phaseNote:'Summons minions. Increase range/health/speed sliders for more mana. Minion fires the next spell phase as its attack.', domainNote:'Necromancer class + Summon domain: raises 3 strong defeated enemies from Bestiary over the domain duration.', extraNote:'Summon mana: +4/range, +3/health, +3/speed' },
+	summon:   { phaseNote:'Summons minions. Speed moves them and slightly raises necro attack speed. Spell Power sets health (and necro damage). Duration is lifetime (necro max 60s, 90s on Ultimate). Size scales body and necro projectiles. Necromancers default to Random Summon; raid/secret bosses only from the Ultimate slot. Point cap 15 (basic=1, Fire Dragon=5, Zenith-tier=15). Domain summons use a separate 50-point cap.', domainNote:'Necromancer + Summon domain: raises chosen, random, or strong Bestiary foes over the domain duration (50-point cap). Raid/secret bosses still need an Ultimate domain.', extraNote:'Summon mana: +4/range, 3× and × point cost for necro. Max size/speed cost the same across types. Health and speed come from Spell Power and Speed.' },
 	meteor:   { phaseNote:'Blazing comet that gains damage with travel distance (up to +200%). Explodes on impact for 50% splash AoE. Has −25% base damage nerf.', domainNote:'Meteor domain projectiles rain from the top of the domain downward (straight behavior, not homing). Deal +75% damage.', extraNote:'Distance scaling: +1% per 3px, max +200%. Base nerf: ×0.75' },
 	vortex:   { phaseNote:'Slow-moving void (35% speed) that pulls nearby enemies in and deals DoT (30% stored as ongoing). Lasts 2× longer. Customizable duration slider.', domainNote:'Per-frame pull effect — enemies inside domain are pulled toward center.', extraNote:'Speed: ×0.35 | Duration: ×2 × vortexDuration slider | Pull: 1.5 str' },
 	slash:    { phaseNote:'Curved crescent arc projectile.', domainNote:'Slash domain sub-phase projectiles spawn at player position rather than random domain positions.', extraNote:'' },
@@ -2140,13 +2190,17 @@ function renderDictClasses(){
 			overview:'Masters of death magic. Summon spells are completely transformed — instead of generic minions, you raise defeated enemies from your Bestiary as powerful undead servants.',
 			general:[
 				'Summon shape raises actual defeated enemies from the Bestiary as undead minions',
-				'Each summon costs your full current mana at cast time',
-				'Maximum 3 necro-summons active simultaneously',
+				'Uses the same orders as other summons: stay at range, follow enemy, follow cursor, lock on',
+				'Speed, Spell Power, and Duration control move speed, health/damage, and lifetime (max 60s, or 90s on Ultimate)',
+				'Each summon costs total mana based on the enemy. Buff mana also scales with the foe\'s point cost',
+				'Default is Random Summon. You can also preselect a Bestiary foe or choose when you cast',
+				'Raid and secret bosses (Zenith, Seraphel, Void Arbiter, Infernal Kitten) only raise from the Ultimate slot',
+				'Summons cost points (basic fire foes = 1, Fire Dragon = 5, Zenith-tier = 15). Cap 15, or 50 for Domain summons',
 				'Bestiary enemies must be defeated first before they can be raised'
 			],
 			shapes:[
-				{ name:'Summon \ud83d\udc7e', note:'Raises a random defeated enemy from Bestiary. Inherits the enemy\'s full stats, scaled to your power. Max 3 active at once. Costs all current mana.' },
-				{ name:'Domain (Summon shape)', note:'Raises 3 strong defeated enemies from the Bestiary over the domain\'s full duration. Standard domain behavior otherwise.' }
+				{ name:'Summon \ud83d\udc7e', note:'Random, preselected, or chosen Bestiary enemy. Inherits its stats, scaled to your power. Point cap 15 (basic=1, Fire Dragon=5, Zenith-tier=15). Raid bosses need the Ultimate slot.' },
+				{ name:'Domain (Summon shape)', note:'Raises summons over the domain duration using a separate 50-point cap. Uses Random Summon, your preselected type, or a strong discovered foe.' }
 			],
 			behaviors:[], effects:[]
 		},
@@ -3178,45 +3232,45 @@ const BESTIARY_ENTRIES = [
 	{ id:'cryoMage',        name:'Cryo Mage',         icon:'❄️', hp:160,   zone:'Ice Dungeon', boss:false },
 	{ id:'glacierSentinel', name:'Glacier Sentinel',  icon:'🧊', hp:700,   zone:'Ice Dungeon', boss:false },
 	{ id:'frostColossus',   name:'Frost Colossus',    icon:'🏔️', hp:15000, zone:'Ice Dungeon', boss:true },
-	{ id:'rockGolem',       name:'Rock Golem',        icon:'🪨', hp:700,   zone:'Earth Dungeon', boss:false },
-	{ id:'vineCrawler',     name:'Vine Crawler',      icon:'🌱', hp:250,   zone:'Earth Dungeon', boss:false },
-	{ id:'caveSpider',      name:'Cave Spider',       icon:'🕷️', hp:100,   zone:'Earth Dungeon', boss:false },
-	{ id:'crystalMage',     name:'Crystal Mage',      icon:'💎', hp:170,   zone:'Earth Dungeon', boss:false },
-	{ id:'mudElemental',    name:'Mud Elemental',     icon:'🟤', hp:400,   zone:'Earth Dungeon', boss:false },
+	{ id:'rockGolem',       name:'Rock Golem',        icon:'🪨', hp:900,   zone:'Earth Dungeon', boss:false },
+	{ id:'vineCrawler',     name:'Vine Crawler',      icon:'🌱', hp:380,   zone:'Earth Dungeon', boss:false },
+	{ id:'caveSpider',      name:'Cave Spider',       icon:'🕷️', hp:280,   zone:'Earth Dungeon', boss:false },
+	{ id:'crystalMage',     name:'Crystal Mage',      icon:'💎', hp:340,   zone:'Earth Dungeon', boss:false },
+	{ id:'mudElemental',    name:'Mud Elemental',     icon:'🟤', hp:560,   zone:'Earth Dungeon', boss:false },
 	{ id:'earthColossus',   name:'Earth Colossus',    icon:'⛰️', hp:15000, zone:'Earth Dungeon', boss:true },
-	{ id:'ironSentinel',    name:'Iron Sentinel',     icon:'🛡️', hp:800,   zone:'Iron Forge', boss:false },
-	{ id:'forgeDrone',      name:'Forge Drone',       icon:'⚙️', hp:350,   zone:'Iron Forge', boss:false },
-	{ id:'slagBrute',       name:'Slag Brute',        icon:'🔩', hp:1200,  zone:'Iron Forge', boss:false },
+	{ id:'ironSentinel',    name:'Iron Sentinel',     icon:'🛡️', hp:980,   zone:'Iron Forge', boss:false },
+	{ id:'forgeDrone',      name:'Forge Drone',       icon:'⚙️', hp:450,   zone:'Iron Forge', boss:false },
+	{ id:'slagBrute',       name:'Slag Brute',        icon:'🔩', hp:1450,  zone:'Iron Forge', boss:false },
 	{ id:'ironColossus',    name:'Iron Colossus',     icon:'🤖', hp:25000, zone:'Iron Forge', boss:true },
-	{ id:'thornWolf',       name:'Thorn Wolf',        icon:'🐺', hp:280,   zone:'Sylvaris Wildes', boss:false },
-	{ id:'sporeFungus',     name:'Spore Fungus',      icon:'🍄', hp:350,   zone:'Sylvaris Wildes', boss:false },
-	{ id:'mossWraith',      name:'Moss Wraith',       icon:'👻', hp:220,   zone:'Sylvaris Wildes', boss:false },
-	{ id:'willowWisp',      name:'Willow Wisp',       icon:'✨', hp:140,   zone:'Sylvaris Wildes', boss:false },
-	{ id:'glowBeetle',      name:'Glow Beetle',       icon:'🪲', hp:180,   zone:'Sylvaris Wildes', boss:false },
-	{ id:'stalactiteBat',   name:'Stalactite Bat',    icon:'🦇', hp:120,   zone:'Sylvaris Wildes', boss:false },
-	{ id:'skyVine',         name:'Sky Vine',          icon:'🌿', hp:260,   zone:'Sylvaris Wildes', boss:false },
-	{ id:'windSylph',       name:'Wind Sylph',        icon:'💨', hp:180,   zone:'Sylvaris Wildes', boss:false },
-	{ id:'elderTreant',     name:'Elder Treant',      icon:'🌳', hp:5000,  zone:'Sylvaris Wildes', boss:true },
+	{ id:'thornWolf',       name:'Thorn Wolf',        icon:'🐺', hp:400,   zone:'Sylvaris Wildes', boss:false },
+	{ id:'sporeFungus',     name:'Spore Fungus',      icon:'🍄', hp:420,   zone:'Sylvaris Wildes', boss:false },
+	{ id:'mossWraith',      name:'Moss Wraith',       icon:'👻', hp:340,   zone:'Sylvaris Wildes', boss:false },
+	{ id:'willowWisp',      name:'Willow Wisp',       icon:'✨', hp:220,   zone:'Sylvaris Wildes', boss:false },
+	{ id:'glowBeetle',      name:'Glow Beetle',       icon:'🪲', hp:380,   zone:'Sylvaris Wildes', boss:false },
+	{ id:'stalactiteBat',   name:'Stalactite Bat',    icon:'🦇', hp:260,   zone:'Sylvaris Wildes', boss:false },
+	{ id:'skyVine',         name:'Sky Vine',          icon:'🌿', hp:520,   zone:'Sylvaris Wildes', boss:false },
+	{ id:'windSylph',       name:'Wind Sylph',        icon:'💨', hp:300,   zone:'Sylvaris Wildes', boss:false },
+	{ id:'elderTreant',     name:'Elder Treant',      icon:'🌳', hp:4000,  zone:'Sylvaris Wildes', boss:true },
 	{ id:'stormRaptor',     name:'Storm Raptor',      icon:'⚡', hp:4000,  zone:'Sylvaris Wildes', boss:true },
 	{ id:'deepRootHorror',  name:'Deep Root Horror',  icon:'🌑', hp:25000, zone:'Corrupted Roots', boss:true },
-	{ id:'darkVineCrawler', name:'Darkened Vine Crawler', icon:'🖤', hp:800, zone:'Corrupted Roots', boss:false },
-	{ id:'darkThornWolf',   name:'Darkened Thorn Wolf',   icon:'🐺', hp:900, zone:'Corrupted Roots', boss:false },
-	{ id:'darkMossWraith',  name:'Darkened Moss Wraith',  icon:'👤', hp:700, zone:'Corrupted Roots', boss:false },
-	{ id:'boneWraith',      name:'Bone Wraith',       icon:'💀', hp:280,   zone:'Dragon Graveyard', boss:false },
+	{ id:'darkVineCrawler', name:'Darkened Vine Crawler', icon:'🖤', hp:820, zone:'Corrupted Roots', boss:false },
+	{ id:'darkThornWolf',   name:'Darkened Thorn Wolf',   icon:'🐺', hp:920, zone:'Corrupted Roots', boss:false },
+	{ id:'darkMossWraith',  name:'Darkened Moss Wraith',  icon:'👤', hp:740, zone:'Corrupted Roots', boss:false },
+	{ id:'boneWraith',      name:'Bone Wraith',       icon:'💀', hp:360,   zone:'Dragon Graveyard', boss:false },
 	{ id:'babyDragon',      name:'Baby Dragon',       icon:'🐲', hp:5000,  zone:'Dragon Graveyard', boss:true },
-	{ id:'flameSalamander', name:'Flame Salamander',  icon:'🔥', hp:600,   zone:'Storm Islands', boss:false },
-	{ id:'magmaImp',        name:'Magma Imp',         icon:'👹', hp:450,   zone:'Storm Islands', boss:false },
+	{ id:'flameSalamander', name:'Flame Salamander',  icon:'🔥', hp:640,   zone:'Storm Islands', boss:false },
+	{ id:'magmaImp',        name:'Magma Imp',         icon:'👹', hp:480,   zone:'Storm Islands', boss:false },
 	{ id:'fireColossus',    name:'Pyraxis',           icon:'🌋', hp:20000, zone:'Storm Islands', boss:true },
-	{ id:'abyssalGuardian', name:'Abyssal Guardian',  icon:'🛡️', hp:850,   zone:'Sea Temple', boss:false },
-	{ id:'coralSentinel',   name:'Coral Sentinel',    icon:'🪸', hp:750,   zone:'Sea Temple', boss:false },
-	{ id:'depthSerpent',    name:'Depth Serpent',      icon:'🐍', hp:700,   zone:'Sea Temple', boss:false },
+	{ id:'abyssalGuardian', name:'Abyssal Guardian',  icon:'🛡️', hp:900,   zone:'Sea Temple', boss:false },
+	{ id:'coralSentinel',   name:'Coral Sentinel',    icon:'🪸', hp:800,   zone:'Sea Temple', boss:false },
+	{ id:'depthSerpent',    name:'Depth Serpent',      icon:'🐍', hp:740,   zone:'Sea Temple', boss:false },
 	// Black Sands Desert / Pyramid
-	{ id:'sandWraith',      name:'Sand Wraith',        icon:'👻', hp:1500,  zone:'Desert Pyramid', boss:false },
-	{ id:'tombGuardian',    name:'Tomb Guardian',      icon:'🗿', hp:2500,  zone:'Desert Pyramid', boss:false },
-	{ id:'desertSerpent',   name:'Desert Serpent',     icon:'🐍', hp:1800,  zone:'Desert Pyramid', boss:false },
-	{ id:'mummyWarrior',    name:'Mummy Warrior',      icon:'⚔️', hp:2200,  zone:'Desert Pyramid', boss:false },
-	{ id:'scarabSwarm',     name:'Scarab Swarm',       icon:'🪲', hp:1200,  zone:'Desert Pyramid', boss:false },
-	{ id:'sandstormDjinn',  name:'Sandstorm Djinn',    icon:'🌪️', hp:3000,  zone:'Desert Pyramid', boss:false },
+	{ id:'sandWraith',      name:'Sand Wraith',        icon:'👻', hp:1800,  zone:'Desert Pyramid', boss:false },
+	{ id:'tombGuardian',    name:'Tomb Guardian',      icon:'🗿', hp:3000,  zone:'Desert Pyramid', boss:false },
+	{ id:'desertSerpent',   name:'Desert Serpent',     icon:'🐍', hp:2200,  zone:'Desert Pyramid', boss:false },
+	{ id:'mummyWarrior',    name:'Mummy Warrior',      icon:'⚔️', hp:2600,  zone:'Desert Pyramid', boss:false },
+	{ id:'scarabSwarm',     name:'Scarab Swarm',       icon:'🪲', hp:1500,  zone:'Desert Pyramid', boss:false },
+	{ id:'sandstormDjinn',  name:'Sandstorm Djinn',    icon:'🌪️', hp:3500,  zone:'Desert Pyramid', boss:false },
 	// Floating Cathedral
 	{ id:'seraphel',        name:'Seraphel, the Severed Light', icon:'✨', hp:85000, zone:'Floating Cathedral', boss:true },
 	// The Void
@@ -3226,71 +3280,72 @@ const BESTIARY_ENTRIES = [
 	// The Convergence
 	{ id:'zenith', name:'Zenith, The Final Convergence', icon:'✦', hp:120000, zone:'The Convergence', boss:true },
 ];
+if(typeof window !== 'undefined') window.BESTIARY_ENTRIES = BESTIARY_ENTRIES;
 
 /* ============================================================
    BESTIARY EXTENDED DATA — stats, drops, descriptions
    ============================================================ */
 const BESTIARY_DATA = {
 	// Fire Dungeon
-	imp:             { atk:3, def:2, spd:5, desc:'Small mischievous fire demons that attack with rapid aerial assaults. They hurl Pyroclastic Orbs that detonate into ember rings, volley Volcanic Darts that spiral outward, and Smoke Dash through targets while dropping smoldering clouds.', drops:[{icon:'🔥',name:'Ember Shard',chance:'60%'},{icon:'✨',name:'Arcane Dust',chance:'40%'}] },
-	flameSerpent:    { atk:4, def:2, spd:6, desc:'Scaled creatures infused with living flame. They leave Scorch Trails of burning ground during high-speed dashes, crash down with a Coil Slam that sends out a shockwave ring, and spit a Venom Flame glob that applies both poison and burn.', drops:[{icon:'🐍',name:'Serpent Scale',chance:'55%'},{icon:'🔥',name:'Ember Shard',chance:'45%'},{icon:'☠️',name:'Venom Gland',chance:'25%'}] },
-	emberMage:       { atk:5, def:2, spd:3, desc:'Renegade mages who traded their sanity for fire power. They unleash a Spellbook Zigzag beam of ricocheting fire, sweep the room with a Flamethrower Sweep arc, and summon rising Lava Pillars beneath the player.', drops:[{icon:'🔥',name:'Ember Shard',chance:'65%'},{icon:'✨',name:'Arcane Dust',chance:'50%'}] },
-	magmaGolem:      { atk:6, def:7, spd:2, desc:'Animated constructs of solid lava rock. Nearly immune to physical force — they open ground fissures with a Seismic Fist shockwave, launch a Lava Crown of radial magma shards, and detonate a Molten Armor burst that sprays magma in all directions.', drops:[{icon:'🌋',name:'Molten Core',chance:'35%'},{icon:'🔥',name:'Ember Shard',chance:'70%'},{icon:'🧱',name:'Stone Chip',chance:'55%'}] },
-	fireSprite:      { atk:2, def:1, spd:8, desc:'Tiny flame elementals that dart about with frightening speed. They unleash an Ember Whirl arc of rapid fire embers, hurl a Meteor Seed that falls back as a devastating meteor, and vanish with Phase Flicker before striking from behind.', drops:[{icon:'🔥',name:'Ember Shard',chance:'50%'},{icon:'🔶',name:'Lava Essence',chance:'30%'}] },
+	imp:             { atk:3, def:2, spd:5, desc:'A hyper-mobile harasser that makes you track two threats at once. Ember Orbit launches delayed fireballs from where you were standing, Cinder Fakeout sells a fake dash, Inferno Pinball speeds up off the walls, and Wildfire Trail carves the floor into shrinking safe lanes.', drops:[{icon:'🔥',name:'Ember Shard',chance:'60%'},{icon:'✨',name:'Arcane Dust',chance:'40%'}] },
+	flameSerpent:    { atk:4, def:2, spd:6, desc:'A ground predator that hunts lanes. Watch the glowing burrow line before it erupts behind you, leave the Burning Coil before the head slam, dodge Magma Fang\'s lead/lag globules, and keep moving through Eruption Chase.', drops:[{icon:'🐍',name:'Serpent Scale',chance:'55%'},{icon:'🔥',name:'Ember Shard',chance:'45%'},{icon:'☠️',name:'Venom Gland',chance:'25%'}] },
+	emberMage:       { atk:5, def:2, spd:3, desc:'An area-control caster. Fire Sigils close into a damaging triangle, Rebound Flames ricochet until their paths cross, and Combustion Mark follows you before detonating into four outbound fireballs.', drops:[{icon:'🔥',name:'Ember Shard',chance:'65%'},{icon:'✨',name:'Arcane Dust',chance:'50%'}] },
+	magmaGolem:      { atk:6, def:7, spd:2, desc:'A slow titan whose attacks demand respect. Faultline cracks erupt after a pause, Magma Core is a vulnerable risk window, Volcanic Fists hit twice from the same craters, and Molten Collapse turns its body into ground hazards.', drops:[{icon:'🌋',name:'Molten Core',chance:'35%'},{icon:'🔥',name:'Ember Shard',chance:'70%'},{icon:'🧱',name:'Stone Chip',chance:'55%'}] },
+	fireSprite:      { atk:2, def:1, spd:8, desc:'A pinprick of living flame. Ember Blink leaves delayed pops, Comet Dive ricochets across the room, Ember Mines chase if you stray close, and Flicker Swarm hides the real sprite behind copies that flash.', drops:[{icon:'🔥',name:'Ember Shard',chance:'50%'},{icon:'🔶',name:'Lava Essence',chance:'30%'}] },
 	fireDragon:      { atk:9, def:8, spd:5, desc:'An ancient fire dragon sealed within the dungeon\'s deepest chamber. Its scales are impervious, its breath incinerates stone, and its roar shakes the very walls around it.', drops:[{icon:'🐉',name:'Dragon Scale',chance:'100%'},{icon:'🦷',name:'Inferno Fang',chance:'80%'},{icon:'🌋',name:'Molten Core',chance:'100%'},{icon:'🔥',name:'Ember Shard',chance:'100%'}] },
 	// Ice Dungeon
-	frostWraith:     { atk:3, def:2, spd:5, desc:'The restless spirits of those who froze to death in the ice caverns. They phase through walls and drain warmth from anyone living nearby.', drops:[{icon:'👻',name:'Spirit Wisp',chance:'55%'},{icon:'🧊',name:'Ice Crystal',chance:'40%'}] },
-	iceArcher:       { atk:4, def:2, spd:4, desc:'Cursed huntresses encased in enchanted ice armor. Their arrows trail frost and pin targets in place momentarily on impact.', drops:[{icon:'🧊',name:'Ice Crystal',chance:'60%'},{icon:'❄️',name:'Permafrost',chance:'30%'}] },
-	snowBeast:       { atk:5, def:5, spd:3, desc:'Massive ursine beasts adapted to the sub-zero depths. Their thick fur and iron constitution make them surprisingly resilient to most spells.', drops:[{icon:'🐾',name:'Beast Hide',chance:'65%'},{icon:'❄️',name:'Permafrost',chance:'40%'},{icon:'🧊',name:'Ice Crystal',chance:'35%'}] },
-	cryoMage:        { atk:5, def:2, spd:3, desc:'Ice mages who pushed their art past the point of safety, their hands permanently fused with frozen magic. They unleash glacial beams that slow movement.', drops:[{icon:'🧊',name:'Ice Crystal',chance:'65%'},{icon:'✨',name:'Arcane Dust',chance:'50%'}] },
-	glacierSentinel: { atk:6, def:7, spd:2, desc:'Towering guardians carved from living glacier. Created millennia ago to bar passage to the inner sanctum, their purpose remains absolute even as the world changes.', drops:[{icon:'❄️',name:'Permafrost',chance:'70%'},{icon:'💎',name:'Frost Core',chance:'40%'},{icon:'🧊',name:'Ice Crystal',chance:'60%'}] },
+	frostWraith:     { atk:3, def:2, spd:5, desc:'A phasing assassin that splits your attention. Frozen Reflection leaves a delayed ice clone of its last path, Ice Veil is tracked by a fading frost trail, Shard Possession hops between planted shards with freeze bursts, and Frozen Moment slows you harder the longer you stay in the expanding field.', drops:[{icon:'👻',name:'Spirit Wisp',chance:'55%'},{icon:'🧊',name:'Ice Crystal',chance:'40%'}] },
+	iceArcher:       { atk:4, def:2, spd:4, desc:'A precision ranger that punishes lazy dodges. Ricochet Arrow comes back from a wall, Frostline grows ice toward you and leaves slick ground, Three-Point Shot marks current/ahead/behind, and Hunter\'s Mark curves every later arrow until you cleanse it in a warm pocket.', drops:[{icon:'🧊',name:'Ice Crystal',chance:'60%'},{icon:'❄️',name:'Permafrost',chance:'30%'}] },
+	snowBeast:       { atk:5, def:5, spd:3, desc:'A huge bruiser that controls the floor. Avalanche Charge pushes a growing snow wave and turns if you stay close, Frostquake sends three uneven shockwaves, Iceback sheds outbound shards when struck, and Whiteout Roar hides it behind footprints before a late charge.', drops:[{icon:'🐾',name:'Beast Hide',chance:'65%'},{icon:'❄️',name:'Permafrost',chance:'40%'},{icon:'🧊',name:'Ice Crystal',chance:'35%'}] },
+	cryoMage:        { atk:5, def:2, spd:3, desc:'A battlefield-control caster. Frost Geometry turns floor lines into walls then shoots the gaps, Temperature Shift is safer near the center and deadly if you linger there, Ice Echo copies the next spell from a landed duplicate, and Crystal Coffin grows four walls before a finishing shot.', drops:[{icon:'🧊',name:'Ice Crystal',chance:'65%'},{icon:'✨',name:'Arcane Dust',chance:'50%'}] },
+	glacierSentinel: { atk:6, def:7, spd:2, desc:'A slow space-control tank. Moving Fortress shoves you with an advancing shield, Glacier Hammer leaves ice walls that carve the arena, Frozen Orbit launches blocking chunks one at a time, and Absolute Guard reflects shots then leaves it stunned and punishable.', drops:[{icon:'❄️',name:'Permafrost',chance:'70%'},{icon:'💎',name:'Frost Core',chance:'40%'},{icon:'🧊',name:'Ice Crystal',chance:'60%'}] },
 	frostColossus:   { atk:9, def:8, spd:3, desc:'A colossus of eternal ice older than the dungeon itself. It exhales blizzards, summons ice spikes from the floor, and can freeze entire sections of the arena solid.', drops:[{icon:'💎',name:'Frost Core',chance:'100%'},{icon:'🔷',name:'Glacial Shard',chance:'80%'},{icon:'🌟',name:'Starlight Dew',chance:'60%'},{icon:'❄️',name:'Permafrost',chance:'100%'}] },
 	// Earth Dungeon
-	rockGolem:       { atk:5, def:6, spd:2, desc:'Lumbering stone giants animated by earth magic. They rain boulders from above and can temporarily root themselves to become nearly immovable defensive walls.', drops:[{icon:'🧱',name:'Stone Chip',chance:'65%'},{icon:'🪨',name:'Terra Core',chance:'30%'}] },
-	vineCrawler:     { atk:3, def:3, spd:5, desc:'Serpentine plant creatures propelled by rapidly extending vine limbs. They burrow through soft earth and erupt beneath unsuspecting adventurers.', drops:[{icon:'🌾',name:'Thorned Vine',chance:'60%'},{icon:'🪹',name:'Root Heartwood',chance:'25%'}] },
-	caveSpider:      { atk:3, def:2, spd:7, desc:'Giant spiders that coat the cave ceilings in webs. Fast movers that drop onto victims from above, their venom causes a persistent burning sensation.', drops:[{icon:'🧵',name:'Raw Silk',chance:'65%'},{icon:'☠️',name:'Venom Gland',chance:'45%'}] },
-	crystalMage:     { atk:5, def:3, spd:3, desc:'Earth mages who have crystallized part of their body for power. They fire razor crystal shards and can phase through solid rock walls at will.', drops:[{icon:'💠',name:'Crystal Fragment',chance:'60%'},{icon:'✨',name:'Arcane Dust',chance:'50%'},{icon:'🟠',name:'Ancient Amber',chance:'30%'}] },
-	mudElemental:    { atk:4, def:5, spd:2, desc:'Primordial sludge given sentience by underground earth magic. They absorb physical impacts, pull victims into themselves, and reform after apparent destruction.', drops:[{icon:'🟠',name:'Ancient Amber',chance:'55%'},{icon:'🌿',name:'Mana Herb',chance:'35%'}] },
+	rockGolem:       { atk:5, def:6, spd:2, desc:'A slow positional tank. Boulder Roll bounces off walls before cracking into smaller rocks, Fault Step splits from one crack into two (jump it), Stone Decoy soaks hits while the real golem walks away, and Gravity Grip cages you in pillars before dropping boulders into the gap.', drops:[{icon:'🧱',name:'Stone Chip',chance:'65%'},{icon:'🪨',name:'Terra Core',chance:'30%'}] },
+	vineCrawler:     { atk:3, def:3, spd:5, desc:'A fast ambusher that rewrites your footing. Vine Tunnel shows two underground paths and only one is real, Thorn Wheel climbs the wall then dives back down, Grasping Ground plants dormant roots that snap inward together, and Seed Bomb grows thorn plants that stay and change the arena.', drops:[{icon:'🌾',name:'Thorned Vine',chance:'60%'},{icon:'🪹',name:'Root Heartwood',chance:'25%'}] },
+	caveSpider:      { atk:3, def:2, spd:7, desc:'Fragile but slippery. Ceiling Drop feints its landing at the last second, Web Swing can release anywhere in the arc, Egg Sac hatches chasing spiderlings while the parent strikes from above, and Web Maze slows you inside silk the spider still treats as open ground.', drops:[{icon:'🧵',name:'Raw Silk',chance:'65%'},{icon:'☠️',name:'Venom Gland',chance:'45%'}] },
+	crystalMage:     { atk:5, def:3, spd:3, desc:'A relay caster — watch the nodes, not just the mage. Crystal Relay hops a beam from crystal to crystal, Shard Rain falls in a rotating safe lane, Prism Clone copies the next attack a beat late, and Crystal Prison closes four rotating gaps before bursting inward.', drops:[{icon:'💠',name:'Crystal Fragment',chance:'60%'},{icon:'✨',name:'Arcane Dust',chance:'50%'},{icon:'🟠',name:'Ancient Amber',chance:'30%'}] },
+	mudElemental:    { atk:4, def:5, spd:2, desc:'A control enemy that makes every step worse. Mud Wave coats the floor instead of bursting, Bog Clone rises for one fake attack then collapses, Sinkhole pulls you in while mud flies at the rim, and Mudslide turns the elemental into the wave itself, leaving a slowing strip behind.', drops:[{icon:'🟠',name:'Ancient Amber',chance:'55%'},{icon:'🌿',name:'Mana Herb',chance:'35%'}] },
 	earthColossus:   { atk:9, def:9, spd:2, desc:'The mountain given form and fury. The Earth Colossus commands geological forces, splitting the arena with earthquakes and calling down avalanches on its enemies.', drops:[{icon:'🪨',name:'Terra Core',chance:'100%'},{icon:'⛰️',name:'Titan Shard',chance:'80%'},{icon:'🌑',name:'Void Shard',chance:'50%'},{icon:'🟠',name:'Ancient Amber',chance:'100%'}] },
 	// Iron Forge
-	ironSentinel:    { atk:6, def:7, spd:3, desc:'Autonomous iron constructs assigned to patrol the forge. Their hammers strike with hydraulic force and their plating deflects most magical attacks easily.', drops:[{icon:'🔩',name:'Iron Plate',chance:'70%'},{icon:'⚙️',name:'Forge Core',chance:'25%'}] },
-	forgeDrone:      { atk:4, def:4, spd:5, desc:'Small mechanical drones that swarm intruders. Individually manageable, a horde of forge drones can overwhelm even seasoned mages with sheer endless attrition.', drops:[{icon:'🔩',name:'Iron Plate',chance:'55%'},{icon:'⬛',name:'Forge Coal',chance:'50%'}] },
-	slagBrute:       { atk:7, def:6, spd:3, desc:'Iron automata fused with slag from overloaded forges. They absorb heat and release it explosively when struck, making physical combat especially dangerous.', drops:[{icon:'🔧',name:'Colossus Gear',chance:'30%'},{icon:'🔩',name:'Iron Plate',chance:'65%'},{icon:'⬛',name:'Forge Coal',chance:'55%'}] },
+	ironSentinel:    { atk:6, def:7, spd:3, desc:'An armored defender — go around it. Shield March blocks the front and ends in a bash, Counter Spark punishes anyone who swings during the guard, Magnetic Pull steals metal then hurls it outward, and Assembly Strike telegraphs flying arm pieces before a long-range reconnect punch.', drops:[{icon:'🔩',name:'Iron Plate',chance:'70%'},{icon:'⚙️',name:'Forge Core',chance:'25%'}] },
+	forgeDrone:      { atk:4, def:4, spd:5, desc:'A flying support that reshapes the room. Welding Beam raises metal walls, Spark Mines link into tripwire nets when you get close, Overheat can be interrupted by killing it mid-charge, and Drone Dive ricochets for a second pass instead of stopping.', drops:[{icon:'🔩',name:'Iron Plate',chance:'55%'},{icon:'⬛',name:'Forge Coal',chance:'50%'}] },
+	slagBrute:       { atk:7, def:6, spd:3, desc:'A heavy bruiser that ruins the floor. Slag Hammer leaves a burning fist crater, Furnace Heart grows its reach unless you hit the open chest, Slag Throw sticks then erupts upward, and Foundry Collapse sheds blocking chunks before a body slam.', drops:[{icon:'🔧',name:'Colossus Gear',chance:'30%'},{icon:'🔩',name:'Iron Plate',chance:'65%'},{icon:'⬛',name:'Forge Coal',chance:'55%'}] },
 	ironColossus:    { atk:9, def:10, spd:2, desc:'The Iron Forge\'s ultimate defense — a towering mechanical titan with a furnace heart. It fires superheated rivets, swings artillery-weight fists, and locks the battlefield with magnetic fields.', drops:[{icon:'🔧',name:'Colossus Gear',chance:'100%'},{icon:'⚙️',name:'Forge Core',chance:'100%'},{icon:'🌑',name:'Void Shard',chance:'60%'},{icon:'🔩',name:'Iron Plate',chance:'100%'}] },
 	// Sylvaris Wildes
-	thornWolf:       { atk:4, def:3, spd:6, desc:'Wolves whose fur has fused with the enchanted bark of the wild forest. They hunt in pairs and their thorns shed on contact, lodging in wounds and causing lingering damage.', drops:[{icon:'🐾',name:'Beast Hide',chance:'60%'},{icon:'🌾',name:'Thorned Vine',chance:'50%'},{icon:'🦴',name:'Fang Fragment',chance:'40%'}] },
-	sporeFungus:     { atk:3, def:4, spd:2, desc:'Giant sentient fungi that release toxic spore clouds when threatened. The spores cause hallucinations and mana disruption in affected casters.', drops:[{icon:'🍄',name:'Luminous Spore',chance:'70%'},{icon:'🌿',name:'Mana Herb',chance:'40%'}] },
-	mossWraith:      { atk:3, def:2, spd:5, desc:'Forest spirits bound to decayed moss and fungi. They are more mischievous than malicious and use illusions before resorting to their necrotic touch.', drops:[{icon:'👻',name:'Spirit Wisp',chance:'55%'},{icon:'💨',name:'Wind Essence',chance:'35%'}] },
-	willowWisp:      { atk:2, def:1, spd:8, desc:'Luminous forest spirits that lure wanderers deeper into the wilderness. Their light pulses with hypnotic rhythm, and their touch disrupts magical channeling.', drops:[{icon:'✨',name:'Arcane Dust',chance:'60%'},{icon:'💨',name:'Wind Essence',chance:'45%'}] },
-	glowBeetle:      { atk:2, def:3, spd:4, desc:'Bioluminescent beetles that use their light to disorient prey before swarming. Their shells are surprisingly tough and can be harvested for crafting.', drops:[{icon:'✨',name:'Arcane Dust',chance:'50%'},{icon:'🧵',name:'Raw Silk',chance:'35%'}] },
-	stalactiteBat:   { atk:3, def:2, spd:7, desc:'Cave-dwelling bats with stalactite-like growths fused to their wings. They drop from the ceiling in silence before slashing with razor-edged stone protrusions.', drops:[{icon:'🦇',name:'Wing Membrane',chance:'65%'},{icon:'🧱',name:'Stone Chip',chance:'40%'}] },
-	skyVine:         { atk:3, def:3, spd:4, desc:'Animated treetop vines with deceptive reach. They snatch victims from the canopy floor, drawing them upward before releasing them to a long fall.', drops:[{icon:'🌾',name:'Thorned Vine',chance:'70%'},{icon:'🪹',name:'Root Heartwood',chance:'30%'}] },
-	windSylph:       { atk:4, def:2, spd:8, desc:'Ethereal wind spirits that express themselves through violent gusts. They are nearly impossible to pin down and can redirect projectiles mid-flight.', drops:[{icon:'💨',name:'Wind Essence',chance:'70%'},{icon:'✨',name:'Arcane Dust',chance:'45%'}] },
+	thornWolf:       { atk:4, def:3, spd:6, desc:'A pack hunter even when it is alone. Hunting Circle laps you with a thorn trail then cuts the center, Thorn Pounce sprays thorns opposite its landing, Pack Echo replays the dash twice with weaker ghosts, and Predatory Feint cancels a lunge into a side-step real bite.', drops:[{icon:'🐾',name:'Beast Hide',chance:'60%'},{icon:'🌾',name:'Thorned Vine',chance:'50%'},{icon:'🦴',name:'Fang Fragment',chance:'40%'}] },
+	sporeFungus:     { atk:4, def:5, spd:2, desc:'An area-denial plant. Spore Clouds hang then rain pollen (standing under them gets worse), Toxic Burst fires three rings with a gap in the middle, Fungal Growth sprouts shooting mushrooms that stop if you kill the parent, and Mycelium Network connects floor lines into travel lanes for later shots.', drops:[{icon:'🍄',name:'Luminous Spore',chance:'70%'},{icon:'🌿',name:'Mana Herb',chance:'40%'}] },
+	mossWraith:      { atk:4, def:2, spd:6, desc:'A phasing ambusher. Moss Grasp sinks then hands erupt at your last lane before it rises from a different one, Verdant Drain pulls you until you break line of sight, Moss Double syncs harmless copies, and Fade Strike circles invisible on a moss trail before one visible hit.', drops:[{icon:'👻',name:'Spirit Wisp',chance:'55%'},{icon:'💨',name:'Wind Essence',chance:'35%'}] },
+	willowWisp:      { atk:3, def:1, spd:8, desc:'A tiny liar. Wisp Bolt flies away then hooks behind you, Wisp Flare pops shards and relocates, Enchant Pulse reverses nearby shots and tugs them in, and Light Trail paints the room before the lines become walls and it dives from above.', drops:[{icon:'✨',name:'Arcane Dust',chance:'60%'},{icon:'💨',name:'Wind Essence',chance:'45%'}] },
+	glowBeetle:      { atk:4, def:6, spd:4, desc:'A shell tank. Shell Charge ricochets faster each bounce, Luminance Beam rotates across the room, Glow Burst stacks a solid ring, a gapped ring, and a reversing ring, and Shell Reflect bounces your shots while it creeps in — stop swinging and move.', drops:[{icon:'✨',name:'Arcane Dust',chance:'50%'},{icon:'🧵',name:'Raw Silk',chance:'35%'}] },
+	stalactiteBat:   { atk:4, def:2, spd:7, desc:'Ceiling control. Sonic Shriek is narrow up close and huge at range, Dive Bomb tracks a floor shadow then locks, Echo Blast plants orbs that later beam to the bat, and Ceiling Drop mixes real rocks with fakes before the bat dives from the last pile.', drops:[{icon:'🦇',name:'Wing Membrane',chance:'65%'},{icon:'🧱',name:'Stone Chip',chance:'40%'}] },
+	skyVine:         { atk:5, def:4, spd:2, desc:'A stationary lane-cutter. Vine Lash sweeps overlapping arcs, Leaf Barrage fires straight/curve/spiral/boomerang leaves, Vine Grab leaves missed roots as walls, and Canopy Collapse covers the screen then drops panels one at a time.', drops:[{icon:'🌾',name:'Thorned Vine',chance:'70%'},{icon:'🪹',name:'Root Heartwood',chance:'30%'}] },
+	windSylph:       { atk:5, def:2, spd:8, desc:'A momentum thief. Cyclone Spin rides a curved tornado and leaves a pushing wake, Air Slash starts slow then accelerates, Wind Gust shoves you into a follow-up slash, and Pressure Drop goes dead silent before an almost-invisible shockwave.', drops:[{icon:'💨',name:'Wind Essence',chance:'70%'},{icon:'✨',name:'Arcane Dust',chance:'45%'}] },
 	elderTreant:     { atk:7, def:8, spd:1, desc:'One of the oldest living beings in the Wildes — a tree that woke with anger. The Elder Treant commands vines across the entire arena and can root itself to unleash devastating branch sweeps.', drops:[{icon:'💚',name:'Treant Heartstone',chance:'100%'},{icon:'🪵',name:'Enchanted Bark',chance:'100%'},{icon:'🪹',name:'Root Heartwood',chance:'80%'}] },
 	stormRaptor:     { atk:8, def:5, spd:7, desc:'A massive thunder-bird that nests in the highest canopy. It calls lightning from clear skies, dives with talons charged to tens of thousands of volts, and screams with sound that stuns.', drops:[{icon:'🦅',name:'Raptor Crest',chance:'100%'},{icon:'⚡',name:'Electric Plume',chance:'100%'},{icon:'💨',name:'Wind Essence',chance:'80%'}] },
 	// Corrupted Roots
 	deepRootHorror:  { atk:8, def:7, spd:2, desc:'Something ancient that lived beneath the Wildes\' roots, corrupted by contact with void energy. It has too many arms, too many eyes, and a hunger that predates the dungeon itself.', drops:[{icon:'🐙',name:'Horror Tendril',chance:'100%'},{icon:'🖤',name:'Shadow Essence',chance:'80%'},{icon:'🌑',name:'Void Shard',chance:'60%'}] },
-	darkVineCrawler: { atk:5, def:3, spd:5, desc:'Vine crawlers warped by corruption seeping up from below. Their thorns now carry a necrotic poison that slowly converts victims to corruption too.', drops:[{icon:'🌾',name:'Thorned Vine',chance:'60%'},{icon:'🫧',name:'Dark Residue',chance:'50%'}] },
-	darkThornWolf:   { atk:5, def:4, spd:6, desc:'Thorn wolves whose forest magic twisted into something darker. Their howl disrupts magical concentration and their corrupted bark-skin resists elemental damage.', drops:[{icon:'🐾',name:'Beast Hide',chance:'55%'},{icon:'🫧',name:'Dark Residue',chance:'50%'},{icon:'🦴',name:'Fang Fragment',chance:'40%'}] },
-	darkMossWraith:  { atk:5, def:3, spd:5, desc:'Moss wraiths consumed by void corruption, now spreading it wherever they drift. They can phase between solid objects and inflict mana decay on spell-users.', drops:[{icon:'🖤',name:'Shadow Essence',chance:'55%'},{icon:'👻',name:'Spirit Wisp',chance:'50%'}] },
+	darkVineCrawler: { atk:6, def:4, spd:5, desc:'Not a recolor — it infects the floor. Void Vine Whip leaves expanding black patches, Corrupted Root Snare hops underground before erupting, Black Bloom thorns curve into those patches, and Rotting Tunnel shows a moving trail then explodes upward.', drops:[{icon:'🌾',name:'Thorned Vine',chance:'60%'},{icon:'🫧',name:'Dark Residue',chance:'50%'}] },
+	darkThornWolf:   { atk:6, def:4, spd:7, desc:'A false-commit predator. Dark Bite can cancel mid-lunge and leap back, Shadow Dash leaves an afterimage that repeats the dash, Corrupted Spines stick then fire extra thorns, and Predator\'s Mark speeds it only while it chases — create space to drop the mark.', drops:[{icon:'🐾',name:'Beast Hide',chance:'55%'},{icon:'🫧',name:'Dark Residue',chance:'50%'},{icon:'🦴',name:'Fang Fragment',chance:'40%'}] },
+	darkMossWraith:  { atk:6, def:3, spd:6, desc:'A liar in the dark. Void Grasp comes from nearby shadows instead of under you, Corruption Drain spreads patches along a tether instead of pulling, Shadow Copies attack on their own while the real one hides, and Dark Fade shows eyes opposite the real strike.', drops:[{icon:'🖤',name:'Shadow Essence',chance:'55%'},{icon:'👻',name:'Spirit Wisp',chance:'50%'}] },
 	// Dragon Graveyard
-	boneWraith:      { atk:4, def:2, spd:5, desc:'Spirits of dragons who died unfulfilled, now bound to the graveyard\'s remains. They phase through dragonbone hulks and emit a wail that briefly paralyzes the living.', drops:[{icon:'💀',name:'Bone Dust',chance:'65%'},{icon:'👻',name:'Spirit Wisp',chance:'40%'}] },
-	babyDragon:      { atk:7, def:6, spd:5, desc:'A young frost dragon recently hatched from ancient remains in the graveyard. Despite its youth it breathes devastating ice cones and will not yield while protecting its nest.', drops:[{icon:'🐲',name:'Hatchling Fang',chance:'100%'},{icon:'💎',name:'Frost Core',chance:'80%'},{icon:'🧊',name:'Ice Crystal',chance:'100%'}] },
+	boneWraith:      { atk:4, def:2, spd:5, desc:'A dimensional undead. Shadow Bolts vanish mid-flight and come from another angle, Phase Strike is harmless until the delayed slash on its path, Soul Echo sends three spectrals (one real) that all leave trails, and Grave Rift raises a moving wall of bones.', drops:[{icon:'💀',name:'Bone Dust',chance:'65%'},{icon:'👻',name:'Spirit Wisp',chance:'40%'}] },
+	babyDragon:      { atk:7, def:6, spd:5, desc:'Chaotic baby ice dragon. Ice Breath sweeps back and forth, Frost Nova leaves slowing ice, Icicle Barrage falls ahead of your movement, and Frozen Dive drops as an ice ball that shatters. Phase 2 still uses wind and tempest.', drops:[{icon:'🐲',name:'Hatchling Fang',chance:'100%'},{icon:'💎',name:'Frost Core',chance:'80%'},{icon:'🧊',name:'Ice Crystal',chance:'100%'}] },
 	// Storm Islands
-	flameSalamander: { atk:4, def:3, spd:5, desc:'Fire lizards native to the volcanic islands. Their body heat burns on touch, and the markings on their flanks flash as a warning before they spit clusters of fireballs.', drops:[{icon:'🦎',name:'Salamander Tail',chance:'60%'},{icon:'🔥',name:'Ember Shard',chance:'55%'},{icon:'🔶',name:'Lava Essence',chance:'35%'}] },
-	magmaImp:        { atk:5, def:3, spd:6, desc:'Mischievous volcanic demons whose cracked obsidian skin glows with inner heat. They leap unpredictably and hurl magma bolts that splatter on impact, coating the area in burning lava.', drops:[{icon:'🩸',name:'Magma Droplet',chance:'65%'},{icon:'🔶',name:'Lava Essence',chance:'45%'},{icon:'🔥',name:'Ember Shard',chance:'50%'}] },
+	flameSalamander: { atk:4, def:3, spd:5, desc:'Constant motion and burning ground. Fire Spit splits then curves back in, Flame Dash chains fire lines from new angles, Ember Trail circles you then ignites every ember at once, and Magma Roll bounces off walls.', drops:[{icon:'🦎',name:'Salamander Tail',chance:'60%'},{icon:'🔥',name:'Ember Shard',chance:'55%'},{icon:'🔶',name:'Lava Essence',chance:'35%'}] },
+	magmaImp:        { atk:5, def:3, spd:6, desc:'A ground trickster. Magma Bolts stick then erupt (several can sit at once), Lava Splash boxes you toward the Imp, Imp Leap splits its landing shadow, and Magma Traps look inert until you step near them.', drops:[{icon:'🩸',name:'Magma Droplet',chance:'65%'},{icon:'🔶',name:'Lava Essence',chance:'45%'},{icon:'🔥',name:'Ember Shard',chance:'50%'}] },
 	fireColossus:    { atk:10, def:9, spd:2, desc:'Pyraxis — the living mountain. An ancient volcanic titan sealed beneath the Storm Islands. Its eruption from the earth triggers catastrophic environmental changes and every step causes lava geysers.', drops:[{icon:'☄️',name:'Pyraxis Ember',chance:'100%'},{icon:'🌋',name:'Molten Core',chance:'100%'},{icon:'🦷',name:'Inferno Fang',chance:'80%'},{icon:'🔥',name:'Ember Shard',chance:'100%'}] },
 	// Sea Temple
-	abyssalGuardian: { atk:6, def:7, spd:3, desc:'Ancient fish-warriors encased in barnacle-armored plate. Assigned to defend the temple\'s outer halls, they have stood sentinel for so long their armor has fused permanently to their bodies.', drops:[{icon:'🖋️',name:'Abyssal Ink',chance:'50%'},{icon:'🧱',name:'Stone Chip',chance:'45%'},{icon:'🪸',name:'Coral Shard',chance:'35%'}] },
-	coralSentinel:   { atk:5, def:6, spd:3, desc:'Living coral constructs animated by deep-sea magic. They regenerate their coral plating during battle and fire volleys of calcified spines with enough force to penetrate metal.', drops:[{icon:'🪸',name:'Coral Shard',chance:'70%'},{icon:'🖋️',name:'Abyssal Ink',chance:'35%'}] },
-	depthSerpent:    { atk:5, def:4, spd:7, desc:'Fast and lethal sea serpents that stalk the temple\'s flooded lower chambers. Their venom glows green and causes cascading elemental weakness in its victim.', drops:[{icon:'🐍',name:'Serpent Scale',chance:'65%'},{icon:'☠️',name:'Venom Gland',chance:'55%'},{icon:'🖋️',name:'Abyssal Ink',chance:'30%'}] },
+	abyssalGuardian: { atk:6, def:7, spd:3, desc:'Heavy water melee. The water blade starts slow then accelerates, Tidal Bash comes from behind it (jumping the wave eats the follow-up), Depth Crush shrinks around you with the only gap toward the Guardian, and Undertow pulls inward while shots fly out.', drops:[{icon:'🖋️',name:'Abyssal Ink',chance:'50%'},{icon:'🧱',name:'Stone Chip',chance:'45%'},{icon:'🪸',name:'Coral Shard',chance:'35%'}] },
+	coralSentinel:   { atk:5, def:6, spd:3, desc:'It builds the arena. Coral Spine travels in a gapped line, Burst chunks become floor hazards, Calcify Shield sheds more hazards when you hit it, and Coral Garden nodes shoot until you break one and chain the rest.', drops:[{icon:'🪸',name:'Coral Shard',chance:'70%'},{icon:'🖋️',name:'Abyssal Ink',chance:'35%'}] },
+	depthSerpent:    { atk:5, def:4, spd:7, desc:'The ripple lags the real bite. Venom bubbles merge then burst, Coiling Strike tightens a spiral then launches the center, and Abyssal Current pushes you along its path before it reverses through the wake.', drops:[{icon:'🐍',name:'Serpent Scale',chance:'65%'},{icon:'☠️',name:'Venom Gland',chance:'55%'},{icon:'🖋️',name:'Abyssal Ink',chance:'30%'}] },
 	// Desert Pyramid
-	sandWraith:      { atk:6, def:4, spd:5, desc:'Half-living entities bound to the desert sands. They emerge from dunes to drag the living underground, and their form is near-impossible to injure while phased into the sand.', drops:[{icon:'🏜️',name:'Sand Pearl',chance:'55%'},{icon:'👻',name:'Spirit Wisp',chance:'45%'}] },
-	tombGuardian:    { atk:7, def:7, spd:2, desc:'Stone guardians carved from the pyramid\'s own walls and given unlife to serve forever. Their hieroglyphic inscriptions deflect curse-type spells.', drops:[{icon:'🧱',name:'Stone Chip',chance:'60%'},{icon:'🩹',name:'Mummy Wrap',chance:'40%'}] },
-	desertSerpent:   { atk:6, def:5, spd:6, desc:'Giant ceremonial serpents bred by the pyramid\'s original inhabitants. They now hunt freely, and their crystallized scales serve as both armor and weapon.', drops:[{icon:'🐍',name:'Serpent Scale',chance:'70%'},{icon:'🏜️',name:'Sand Pearl',chance:'40%'}] },
-	mummyWarrior:    { atk:7, def:6, spd:3, desc:'Ancient soldiers preserved by burial rituals still performing their eternal post. The wrappings that bind them are enchanted and conduct powerful curse energy.', drops:[{icon:'🩹',name:'Mummy Wrap',chance:'65%'},{icon:'💀',name:'Bone Dust',chance:'50%'}] },
-	scarabSwarm:     { atk:4, def:3, spd:6, desc:'A vast swarm of enchanted scarab beetles acting as a single mind. They eat through enchanted armor, overwhelm magical barriers, and use their shells to deflect spells.', drops:[{icon:'🪲',name:'Scarab Shell',chance:'75%'},{icon:'🏜️',name:'Sand Pearl',chance:'35%'}] },
-	sandstormDjinn:  { atk:7, def:5, spd:6, desc:'A powerful wind spirit bound through ancient ritual to serve the pyramid\'s inner sanctum. It controls desert weather at will and can call full sandstorms that shroud the arena entirely.', drops:[{icon:'🌀',name:'Djinn Essence',chance:'65%'},{icon:'💨',name:'Wind Essence',chance:'55%'},{icon:'🏜️',name:'Sand Pearl',chance:'45%'}] },
+	sandWraith:      { atk:6, def:4, spd:5, desc:'A liar in the sand. Sand Blast curves while it rotates, Dust Devil grows then dumps hazards, Mirages attack on their own and the real Wraith returns from the side you looked at least, and Buried Strike hides among fake moving patches.', drops:[{icon:'🏜️',name:'Sand Pearl',chance:'55%'},{icon:'👻',name:'Spirit Wisp',chance:'45%'}] },
+	tombGuardian:    { atk:7, def:7, spd:2, desc:'Stay close — Stone Smash shockwaves hit harder farther out. Ancient Curse leaves a rotating glyph, Sandstone Shield eats shots then throws the slab back, and Tombquake raises uneven platforms before it attacks from the highest one.', drops:[{icon:'🧱',name:'Stone Chip',chance:'60%'},{icon:'🩹',name:'Mummy Wrap',chance:'40%'}] },
+	desertSerpent:   { atk:6, def:5, spd:6, desc:'A burrower. Venomous Fang leaves falling droplets, Sand Burrow ridges can split (only one is real), Constricting Coil shrinks until you escape, and Dune Ambush can erupt from any dune with a sand shockwave.', drops:[{icon:'🐍',name:'Serpent Scale',chance:'70%'},{icon:'🏜️',name:'Sand Pearl',chance:'40%'}] },
+	mummyWarrior:    { atk:7, def:6, spd:3, desc:'Persistent pressure. The last Cursed Swing reaches much farther, Wrapping Binds yank it across the room, Tomb Rage speeds up and leaves cursed trails, and Burial Snare contracts before it charges the center.', drops:[{icon:'🩹',name:'Mummy Wrap',chance:'65%'},{icon:'💀',name:'Bone Dust',chance:'50%'}] },
+	scarabSwarm:     { atk:4, def:3, spd:6, desc:'One enemy, hundreds of pieces. Swarm Bite splits around you and reforms behind, Plague Cloud sheds diving clumps, Burst Scatter returns along every path, and Living Carpet leaves only a few safe zones as the wave crawls.', drops:[{icon:'🪲',name:'Scarab Shell',chance:'75%'},{icon:'🏜️',name:'Sand Pearl',chance:'35%'}] },
+	sandstormDjinn:  { atk:7, def:5, spd:6, desc:'Arena-scale sand. The bolt becomes a moving storm after it vanishes, tornadoes run clockwise and counter-clockwise, fake mirage shots look real until they reach you (the real one is a beat late), and Prison contracts with a moving glowing gap.', drops:[{icon:'🌀',name:'Djinn Essence',chance:'65%'},{icon:'💨',name:'Wind Essence',chance:'55%'},{icon:'🏜️',name:'Sand Pearl',chance:'45%'}] },
 	// Floating Cathedral
 	seraphel:        { atk:9, def:8, spd:7, desc:'Seraphel, the Severed Light — a divine being whose connection to the heavens was cut. Unmoored from purpose and consumed by grief, she wages war on all who enter her sanctuary across two phases and multiple dimensional planes.', drops:[{icon:'🪽',name:'Seraphel Feather',chance:'100%'},{icon:'🌟',name:'Starlight Dew',chance:'100%'},{icon:'🐉',name:'Dragon Scale',chance:'80%'},{icon:'✨',name:'Arcane Dust',chance:'100%'}] },
 	// The Void
@@ -3314,6 +3369,16 @@ const BESTIARY_FILE_OVERRIDE = {
 };
 // Sprite sheet overrides: cols, rows, walkRow (row index for walk animation), scale multiplier
 const BESTIARY_SPRITE_INFO = {
+	imp:            { src:'images/newEnemies/fireImp.png', cols:10, rows:6, scale:1.15 },
+	flameSerpent:   { src:'images/newEnemies/flameSerpent.png', cols:8, rows:6, scale:1.15 },
+	emberMage:      { src:'images/newEnemies/emberMage.png', cols:12, rows:6, scale:1.15 },
+	magmaGolem:     { src:'images/newEnemies/magmaGolem.png', cols:10, rows:6, scale:1.15 },
+	fireSprite:     { src:'images/newEnemies/fireSprite.png', cols:10, rows:6, scale:1.2 },
+	frostWraith:    { src:'images/newEnemies/frostWraith.png', cols:10, rows:6, scale:1.15 },
+	iceArcher:      { src:'images/newEnemies/iceArcher.png', cols:10, rows:6, scale:1.15 },
+	snowBeast:      { src:'images/newEnemies/snowBeast.png', cols:8, rows:6, startCol:0, walkFrames:6, scale:1.15 },
+	cryoMage:       { src:'images/newEnemies/cryoMage.png', cols:10, rows:6, scale:1.15 },
+	glacierSentinel:{ src:'images/newEnemies/glacierSentinel.png', cols:10, rows:6, scale:1.15 },
 	fireDragon:     { cols:4, rows:4, scale:1.1 },
 	frostColossus:  { cols:4, rows:4, scale:1.1 },
 	earthColossus:  { cols:4, rows:4, scale:1.1 },
@@ -3323,7 +3388,13 @@ const BESTIARY_SPRITE_INFO = {
 	stormRaptor:    { cols:4, rows:4, scale:1.1 },
 	deepRootHorror: { cols:4, rows:4, scale:1.0 },
 	fireColossus:   { file:'fire-colossus.png', cols:4, rows:4, scale:1.1 },
-	crystalMage:    { cols:7, rows:4 },
+	rockGolem:      { src:'images/newEnemies/rockGolem.png', cols:10, rows:6, scale:1.15 },
+	caveSpider:     { src:'images/newEnemies/caveSpider.png', cols:10, rows:6, scale:1.15 },
+	crystalMage:    { src:'images/newEnemies/crystalMage.png', cols:10, rows:6, scale:1.15 },
+	mudElemental:   { src:'images/newEnemies/mudElemental.png', cols:10, rows:6, scale:1.15 },
+	ironSentinel:   { src:'images/newEnemies/ironSentinel.png', cols:10, rows:6, scale:1.15 },
+	forgeDrone:     { src:'images/newEnemies/forgeDrone.png', cols:10, rows:6, scale:1.15 },
+	slagBrute:      { src:'images/newEnemies/slagBrute.png', cols:10, rows:6, scale:1.15 },
 	skyVine:        { cols:8, rows:4 },
 	windSylph:      { cols:8, rows:4 },
 	darkMossWraith: { cols:8, rows:4 },
@@ -3427,7 +3498,7 @@ function openBestiaryPopup(entry){
 	_bafImg = new Image();
 	_bafImg._failed = false;
 	_bafImg.onerror = () => { _bafImg._failed = true; };
-	_bafImg.src = 'images/enemies/' + fileBase;
+	_bafImg.src = info.src || ('images/enemies/' + fileBase);
 
 	_bafFrame = 0; _bafAnimF = 0; _bafPx = 60; _bafDir = 1;
 
@@ -3492,6 +3563,8 @@ function _drawBestiaryCanvas(entry, info){
 	const rows    = info.rows    !== undefined ? info.rows    : 4;
 	const walkRow = info.walkRow !== undefined ? info.walkRow : 1;
 	const scaleM  = info.scale   !== undefined ? info.scale   : 1.0;
+	const startCol = info.startCol || 0;
+	const walkFrames = info.walkFrames || Math.max(1, cols - startCol);
 
 	if(_bafImg && !_bafImg._failed && _bafImg.naturalWidth > 0){
 		const fW = _bafImg.naturalWidth  / cols;
@@ -3501,7 +3574,7 @@ function _drawBestiaryCanvas(entry, info){
 		const autoScale = targetH / fH;
 		const sc = autoScale * scaleM;
 		const dW = fW * sc, dH = fH * sc;
-		const col = _bafAnimF % cols;
+		const col = startCol + (_bafAnimF % walkFrames);
 		const drawY = floorY - dH + 2;
 
 		// Walk back and forth
@@ -3786,14 +3859,17 @@ function renderSpellSlots(){
 		el.style.cssText = 'display:flex;align-items:center;gap:4px';
 		const kbKey = keybinds[i] || '';
 		if(sp){
-			const cost = displayedSpellMana(sp, inventoryManaOpts(i, sp));
+			const opts = inventoryManaOpts(i, sp);
+			const cost = displayedSpellMana(sp, opts);
+			const raise = typeof necroSpellRaiseCosts==='function' ? necroSpellRaiseCosts(sp, opts) : null;
 			const req  = calcSpellControlReq(sp);
 			const canUse = stats.magicControl >= req;
+			const manaLabel = (isUlt ? cost+' ⚡' : cost+' 💧') + (raise ? ' · '+raise.total+'✦' : '');
 			el.innerHTML = `
 				<span class="sp-num">${isUlt ? '⚡0' : (i+1)}</span>
 				<span class="sp-color" style="background:${sp.phases[0]?.color||'#888'}"></span>
 				<span class="sp-name" style="${canUse?'':'color:var(--red);text-decoration:line-through'}">${sp.name}</span>
-				<span class="sp-mana">${isUlt ? cost+' ⚡' : cost+' 💧'}</span>
+				<span class="sp-mana">${manaLabel}</span>
 				<button class="kb-btn" data-slot="${i}" title="Click to set keybind for this spell" style="margin-left:auto;padding:1px 6px;font-size:.75em;background:var(--panel2);border:1px solid var(--border);border-radius:4px;cursor:pointer;color:var(--text);flex-shrink:0">${kbKey ? '🔑 '+kbKey : '🔑 —'}</button>
 			`;
 			if(!canUse) el.title = `Requires ${req} Control (you have ${stats.magicControl})`;
@@ -4742,8 +4818,10 @@ function handleVowSave(){
 		if(spent > pts){ alert('Not enough domain vow points!'); return; }
 		STATE.domainVow = domainVowEditor;
 		domainVowEditor = null;
+		writeExtrasToActiveLoadout();
 		saveState();
 		renderVowSlots();
+		notifyGameSpellsChanged();
 		document.getElementById('vowModal').style.display='none';
 	} else {
 		const pts = calcVowPoints(vowEditor, editingVowSlot);
@@ -4773,9 +4851,11 @@ function handleVowSave(){
 		// Sync mageClass2 from active dual class boost
 		const dualVow = STATE.vows.find(v => v && v.boostType === 'dualClass' && v.secondClass);
 		STATE.mageClass2 = dualVow ? dualVow.secondClass : 'none';
+		writeExtrasToActiveLoadout();
 		saveState();
 		renderVowSlots();
 		renderSpellSlots();
+		notifyGameSpellsChanged();
 		document.getElementById('vowModal').style.display='none';
 	}
 }
@@ -4783,17 +4863,21 @@ function handleVowClear(){
 	if(domainVowEditor){
 		STATE.domainVow = null;
 		domainVowEditor = null;
+		writeExtrasToActiveLoadout();
 		saveState();
 		renderVowSlots();
+		notifyGameSpellsChanged();
 		document.getElementById('vowModal').style.display='none';
 	} else {
 		STATE.vows[editingVowSlot] = null;
 		// Sync mageClass2 after clearing
 		const dualVow = STATE.vows.find(v => v && v.boostType === 'dualClass' && v.secondClass);
 		STATE.mageClass2 = dualVow ? dualVow.secondClass : 'none';
+		writeExtrasToActiveLoadout();
 		saveState();
 		renderVowSlots();
 		renderSpellSlots();
+		notifyGameSpellsChanged();
 		document.getElementById('vowModal').style.display='none';
 	}
 }
@@ -4819,7 +4903,7 @@ function newPhase(){
 		rainHeight:150,
 		barrageHeight:200,
 		groundRadius:200, groundAutoLock:true,
-		summonRange:0, summonHealth:0, summonSpeed:0, summonClose:false, summonSelfReliance:false,
+		summonRange:0, summonHealth:0, summonSpeed:0, summonClose:false, summonSelfReliance:false, necroSummonType:'random',
 		effectPower:1, effectDuration:1,
 		randomDelayMax:0.5,
 		evenDelayDuration:0.5,
@@ -4872,6 +4956,7 @@ document.getElementById('saveSpellBtn').addEventListener('click', () => {
 	saveState();
 	closeSpellBuilder();
 	renderSpellSlots();
+	notifyGameSpellsChanged();
 });
 document.getElementById('clearSpellBtn').addEventListener('click', () => {
 	STATE.spells[editingSlot] = null;
@@ -4884,6 +4969,7 @@ document.getElementById('clearSpellBtn').addEventListener('click', () => {
 	saveState();
 	closeSpellBuilder();
 	renderSpellSlots();
+	notifyGameSpellsChanged();
 });
 
 /* ---------- Spell Code System (Export / Import) ---------- */
@@ -5049,7 +5135,8 @@ function renderBuilder(){
 		// Check if spell has transformation (affects subsequent phases)
 		const spellHasTransformation = builderSpell.phases[0]?.behavior === 'transformation';
 
-		// Behavior
+		// Behavior (summons have no projectile path)
+		if(ph.shape !== 'summon'){
 		html += `<div class="prow"><label>Behavior</label><select data-idx="${idx}" data-prop="behavior">`;
 		for(const [k,v] of Object.entries(BEHAVIORS).sort((a,b)=>(BEHAVIOR_RANK_REQ[a[0]]??99)-(BEHAVIOR_RANK_REQ[b[0]]??99)||a[1].controlReq-b[1].controlReq)){
 			const behItemReq = BEH_ITEM_REQ[k];
@@ -5069,6 +5156,9 @@ function renderBuilder(){
 			html += `<option value="${k}" ${ph.behavior===k?'selected':''} ${locked?'disabled':''}>${v.label} (ctrl ${v.controlReq}+)${v.dmgNote?' ['+v.dmgNote+']':''}${lockLabel}</option>`;
 		}
 		html += `</select></div>`;
+		} else {
+			ph.behavior = 'straight';
+		}
 
 		// Domain-specific settings (phase 1 only)
 		if(isDomainPhase){
@@ -5185,9 +5275,11 @@ function renderBuilder(){
 		const rankPowerCap = getRankMaxPower();
 		const basePowerMax = domainPowerCap ? 10 : transEnhanced ? 15 : (isUlt ? 20 : 10);
 		const powerMax = Math.min(basePowerMax, rankPowerCap);
-		const sizeMax = transEnhanced ? 5.5 : isBigShape?(isUlt?10:6):(isUlt?8:3);
-		const durMax = (ph.behavior==='stationary'||ph.behavior==='selfCast'||ph.behavior==='ground'||ph.behavior==='control'||ph.shape==='beam'||(ph.effects&&ph.effects.includes('solidify')))?30:isUlt?10:5;
+		const sizeMax = ph.shape==='summon' ? 2 : (transEnhanced ? 5.5 : isBigShape?(isUlt?10:6):(isUlt?8:3));
+		const durMax = ph.shape==='summon' ? 60 : ((ph.behavior==='stationary'||ph.behavior==='selfCast'||ph.behavior==='ground'||ph.behavior==='control'||ph.shape==='beam'||(ph.effects&&ph.effects.includes('solidify')))?30:isUlt?10:5);
 		if(ph.duration > durMax) ph.duration = durMax;
+		if(ph.width > sizeMax) ph.width = sizeMax;
+		if(ph.height > sizeMax) ph.height = sizeMax;
 		const sliders = [
 			{ prop:'width',    label:'Width',    min:0.3, max:sizeMax, step:0.1 },
 			{ prop:'height',   label:'Height',   min:0.3, max:sizeMax, step:0.1 },
@@ -5276,26 +5368,20 @@ function renderBuilder(){
 				<input type="range" min="100" max="800" step="50" value="${ph.groundRadius}" data-idx="${idx}" data-prop="groundRadius"/></div>`;
 		}
 
-		// summon-specific settings (range, health, speed)
+		// summon-specific settings (range and orders)
 		if(ph.shape === 'summon'){
 			if(ph.summonRange==null) ph.summonRange = 0;
-			if(ph.summonHealth==null) ph.summonHealth = 0;
-			if(ph.summonSpeed==null) ph.summonSpeed = 0;
 			if(ph.summonSelfReliance==null) ph.summonSelfReliance = false;
 			html += `<div class="prow" style="border-top:1px solid var(--border);padding-top:6px"><label style="color:var(--accent2)">Summon Upgrades</label></div>`;
 			html += `<div class="prow"><label>+Range: ${ph.summonRange} (${600+ph.summonRange*100}px)</label>
 				<input type="range" min="0" max="10" step="1" value="${ph.summonRange}" data-idx="${idx}" data-prop="summonRange"/></div>`;
-			html += `<div class="prow"><label>+Health: ${ph.summonHealth} (${40+ph.summonHealth*10} HP)</label>
-				<input type="range" min="0" max="10" step="1" value="${ph.summonHealth}" data-idx="${idx}" data-prop="summonHealth"/></div>`;
-			html += `<div class="prow"><label>+Speed: ${ph.summonSpeed} (${(1.0+ph.summonSpeed*0.5).toFixed(1)})</label>
-				<input type="range" min="0" max="10" step="1" value="${ph.summonSpeed}" data-idx="${idx}" data-prop="summonSpeed"/></div>`;
-			html += `<div class="prow"><label>Close Range</label><select data-idx="${idx}" data-prop="summonClose">
-				<option value="false" ${!ph.summonClose?'selected':''}>No — stay at range</option>
-				<option value="true" ${ph.summonClose?'selected':''}>Yes — rush enemies</option>
+			html += `<div class="prow"><label>Approach</label><select data-idx="${idx}" data-prop="summonClose">
+				<option value="false" ${!ph.summonClose?'selected':''}>Stay at range</option>
+				<option value="true" ${ph.summonClose?'selected':''}>Follow enemy</option>
 			</select></div>`;
-			html += `<div class="prow"><label>Self Reliance</label><select data-idx="${idx}" data-prop="summonSelfReliance">
-				<option value="false" ${!ph.summonSelfReliance?'selected':''}>No — follow cursor</option>
-				<option value="true" ${ph.summonSelfReliance?'selected':''}>Yes — auto-target enemies</option>
+			html += `<div class="prow"><label>Orders</label><select data-idx="${idx}" data-prop="summonSelfReliance">
+				<option value="false" ${!ph.summonSelfReliance?'selected':''}>Follow cursor</option>
+				<option value="true" ${ph.summonSelfReliance?'selected':''}>Lock on to enemy</option>
 			</select></div>`;
 		}
 		} // end if(!isDomainPhase)
