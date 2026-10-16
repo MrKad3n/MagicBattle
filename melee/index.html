@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Melee Training</title>
+<link rel="stylesheet" href="melee.css"/>
+</head>
+<body>
+<canvas id="view"></canvas>
+<div id="hud">
+	<div id="leftHud">
+		<div id="hpBar"><div id="hpFill"></div></div>
+		<div id="hpText">100 / 100</div>
+		<div id="dashPip" class="ready"></div>
+	</div>
+	<div id="rightHud">
+		<div id="zoneName">1  Flat ground</div>
+		<div id="zoneHint">Run, stop, turn, jump</div>
+		<div id="combatReadout">idle</div>
+	</div>
+</div>
+<div id="help">
+	A/D move · Space jump · W up attack · S fast-fall / plunge · J attack · Shift dash · F parry · F3 debug · R reset
+</div>
+<button id="debugBtn" type="button">Debug</button>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

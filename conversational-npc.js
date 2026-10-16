@@ -885,7 +885,7 @@ function clearGameInputState() {
 }
 
 function openConversationalChat(npc) {
-	if (!npc.conversationalProfile) return;
+	return;
 	aiChatNpc = npc;
 	aiChatBrain = new ConversationalNPCBrain(npc.conversationalProfile);
 	aiChatActive = true;

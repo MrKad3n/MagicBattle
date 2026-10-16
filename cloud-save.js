@@ -267,6 +267,7 @@
 			ready = true; return;
 		}
 		sb = global.supabase.createClient(CFG.url, CFG.anonKey, {
+			realtime: { params: { eventsPerSecond: 60 } },      // PvP sends ~20 state packets a second plus events
 			auth: { persistSession: true, autoRefreshToken: true },
 		});
 		const { data } = await sb.auth.getSession();

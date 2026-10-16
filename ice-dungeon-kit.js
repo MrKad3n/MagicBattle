@@ -19,9 +19,19 @@ function iceAim(en){
 	return { x: player.x + player.w / 2, y: player.y + player.h / 2, vx: player.vx || 0, vy: player.vy || 0, box: player };
 }
 function iceFriendly(en){ return !!(en && (en.isNecroSummon || en.necroFriendly)); }
-function atkS(n){
-	return n * ((typeof ENEMY_ATK_SCALE === 'number') ? ENEMY_ATK_SCALE : 1.3);
+/* Size/speed threat on top of the global projectile scale.
+   Normal +22%, easy +12%, hard/nightmare +65%. */
+function iceThreat(){
+	const d = (typeof DIFFICULTY !== 'undefined') ? DIFFICULTY : 'normal';
+	if(d === 'hard' || d === 'nightmare' || d === 'expert') return 1.65;
+	if(d === 'easy') return 1.12;
+	return 1.22;
 }
+function atkS(n){
+	const g = (typeof ENEMY_ATK_SCALE === 'number') ? ENEMY_ATK_SCALE : 1.3;
+	return n * g * iceThreat();
+}
+function iceSpd(n){ return n * iceThreat(); }
 function iceDmg(n){
 	const diff = (typeof DIFF_DMG_MULT === 'number') ? DIFF_DMG_MULT : 1;
 	return Math.round(n * 1.4 * diff);
@@ -50,7 +60,11 @@ function iceSpawn(en, x, y, vx, vy, opts){
 	opts = opts || {};
 	if(!opts.effects) opts.effects = ['freeze'];
 	if(!opts.trail) opts.trail = 'ice';
-	const p = spawnEnemyProj(x, y, vx, vy, opts);
+	const t = iceThreat();
+	if(opts.width) opts.width *= t;
+	if(opts.height) opts.height *= t;
+	if(opts.aoeRadius) opts.aoeRadius *= t;
+	const p = spawnEnemyProj(x, y, vx * t, vy * t, opts);
 	if(p){
 		p._iceStyle = opts._iceStyle || 'shard';
 		if(iceFriendly(en)){
@@ -150,50 +164,44 @@ function castWraithFrozenMoment(en){
 	beginIceKit(en, 'frozenMoment', { busy: true, cx: en.x + en.w / 2, cy: en.y + en.h / 2, r: 20 });
 }
 
-/* ---------- ARCHER ---------- */
+/* ---------- ARCHER — fast, precise, high damage ---------- */
+function iceLead(aim, frames){
+	return { x: aim.x + (aim.vx || 0) * frames, y: aim.y + (aim.vy || 0) * frames };
+}
 function castArcherRicochetArrow(en){
 	const aim = iceAim(en);
 	const ox = en.x + en.w / 2, oy = en.y + en.h * 0.4;
-	const miss = Math.atan2(aim.y - oy, aim.x - ox) + (Math.random() < 0.5 ? 0.55 : -0.55);
-	const p = iceSpawn(en, ox, oy, Math.cos(miss) * 7.2, Math.sin(miss) * 7.2, {
-		color: '#88ddff', color2: '#e8f6ff', power: 18, width: 36, height: 14,
-		shape: 'blade', effects: ['freeze'], trail: 'ice', maxAge: 220, _iceStyle: 'arrow'
+	const lead = iceLead(aim, 9);
+	const dx = lead.x - ox, dy = lead.y - oy, d = Math.hypot(dx, dy) || 1;
+	const p = iceSpawn(en, ox, oy, dx / d * 13.6, dy / d * 13.6, {
+		color: '#d8f6ff', color2: '#ffffff', power: 28, width: 42, height: 12,
+		shape: 'blade', effects: ['freeze'], trail: 'ice', maxAge: 150, _iceStyle: 'arrow'
 	});
-	if(p){ p._iceRicochet = true; p._iceBounces = 0; p._iceBounceMax = 2; }
+	if(p){ p._iceRicochet = true; p._iceBounces = 0; p._iceBounceMax = 1; }
 	beginIceKit(en, 'ricochetArrow', { busy: false });
-	setTimeout(function(){ if(en.iceKit && en.iceKit.kind === 'ricochetArrow') iceEnd(en); }, 360);
+	setTimeout(function(){ if(en.iceKit && en.iceKit.kind === 'ricochetArrow') iceEnd(en); }, 200);
 }
 function castArcherFrostline(en){
 	const aim = iceAim(en);
 	const ox = en.x + en.w / 2, oy = en.y + en.h * 0.4;
-	const impactX = aim.x + (aim.vx >= 0 ? 70 : -70);
-	const floor = iceFloorY(impactX, aim.y);
-	const dx = impactX - ox, dy = floor - 8 - oy, d = Math.hypot(dx, dy) || 1;
-	iceSpawn(en, ox, oy, dx / d * 8.5, dy / d * 8.5, {
-		color: '#99e6ff', color2: '#ffffff', power: 12, width: 22, height: 22,
-		shape: 'circle', effects: ['freeze'], trail: 'ice', maxAge: 40, _iceStyle: 'arrow'
+	const lead = iceLead(aim, 7);
+	const floor = iceFloorY(lead.x, lead.y);
+	const dx = lead.x - ox, dy = (floor - 8) - oy, d = Math.hypot(dx, dy) || 1;
+	iceSpawn(en, ox, oy, dx / d * 12.8, dy / d * 12.8, {
+		color: '#9ae6ff', color2: '#ffffff', power: 22, width: 26, height: 26,
+		shape: 'circle', effects: ['freeze'], trail: 'ice', maxAge: 30, _iceStyle: 'arrow'
 	});
-	beginIceKit(en, 'frostline', { busy: true, ix: impactX, iy: floor - 4, tx: aim.x, grew: 0, segs: [] });
+	beginIceKit(en, 'frostline', { busy: true, ix: lead.x, iy: floor - 4, tx: lead.x + ((aim.vx || 0) >= 0 ? 80 : -80), grew: 0, segs: [] });
 }
 function castArcherThreePointShot(en){
 	const aim = iceAim(en);
-	const lead = 78;
-	const spots = [
-		{ x: aim.x, y: aim.y },
-		{ x: aim.x + (aim.vx >= 0 ? lead : -lead), y: aim.y + aim.vy * 6 },
-		{ x: aim.x - (aim.vx >= 0 ? lead : -lead) * 0.85, y: aim.y }
-	];
-	for(let i = 0; i < spots.length; i++) spawnTelegraph(spots[i].x - 16, spots[i].y - 16, 32, 32, 36, 'rgba(160,220,255,0.35)', 'circle', '');
-	beginIceKit(en, 'threePointShot', { busy: true, spots, fired: false });
+	const spots = [iceLead(aim, 5), iceLead(aim, 12), iceLead(aim, 19)];
+	for(let i = 0; i < spots.length; i++) spawnTelegraph(spots[i].x - 12, spots[i].y - 12, 24, 24, 16 + i * 4, 'rgba(160,220,255,0.42)', 'circle', '');
+	beginIceKit(en, 'threePointShot', { busy: true, spots, fired: 0 });
 }
 function castArcherHuntersMark(en){
-	const aim = iceAim(en);
-	player._iceMark = 220;
-	const wx = aim.x + (Math.random() < 0.5 ? -220 : 220);
-	const wy = iceFloorY(wx, aim.y) - 10;
-	iceWorldFX.push({ kind: 'warm', x: wx, y: wy, r: atkS(42), age: 0, max: 220 });
-	beginIceKit(en, 'huntersMark', { busy: false });
-	setTimeout(function(){ if(en.iceKit && en.iceKit.kind === 'huntersMark') iceEnd(en); }, 400);
+	player._iceMark = 200;
+	beginIceKit(en, 'huntersMark', { busy: true, fired: false });
 }
 
 /* ---------- BEAST ---------- */
@@ -355,11 +363,11 @@ function tickWraith(en, kit){
 function tickArcher(en, kit){
 	const aim = iceAim(en);
 	if(kit.kind === 'frostline'){
-		if(kit.t > 18 && kit.grew < 1){
-			kit.grew = Math.min(1, (kit.t - 18) / 36);
-			const n = Math.floor(kit.grew * 14);
+		if(kit.t > 10 && kit.grew < 1){
+			kit.grew = Math.min(1, (kit.t - 10) / 20);
+			const n = Math.floor(kit.grew * 16);
 			while(kit.segs.length < n){
-				const t = kit.segs.length / 14;
+				const t = kit.segs.length / 16;
 				kit.segs.push({
 					x: kit.ix + (kit.tx - kit.ix) * t,
 					y: kit.iy
@@ -368,25 +376,38 @@ function tickArcher(en, kit){
 		}
 		for(let i = 0; i < kit.segs.length; i++){
 			const s = kit.segs[i];
-				if(circRect(s.x, s.y, atkS(16), aim.box.x, aim.box.y, aim.box.w, aim.box.h)){
+			if(circRect(s.x, s.y, atkS(18), aim.box.x, aim.box.y, aim.box.w, aim.box.h)){
 				iceDragSet(0.55);
 				if(!iceFriendly(en)) player._iceSlip = 20;
 			}
 		}
-		if(kit.t > 110) iceEnd(en);
+		if(kit.t > 70) iceEnd(en);
 	} else if(kit.kind === 'threePointShot'){
-		if(kit.t === 38 && !kit.fired){
-			kit.fired = true;
+		const times = [14, 20, 26];
+		if(kit.fired < 3 && kit.t >= times[kit.fired]){
+			const i = kit.fired;
 			const ox = en.x + en.w / 2, oy = en.y + en.h * 0.4;
-			for(let i = 0; i < kit.spots.length; i++){
-				const dx = kit.spots[i].x - ox, dy = kit.spots[i].y - oy, d = Math.hypot(dx, dy) || 1;
-				iceSpawn(en, ox, oy, dx / d * 8.2, dy / d * 8.2, {
-					color: '#aadfff', color2: '#ffffff', power: 16, width: 34, height: 12,
-					shape: 'blade', effects: ['freeze'], trail: 'ice', maxAge: 90, _iceStyle: 'arrow'
-				});
-			}
+			const dx = kit.spots[i].x - ox, dy = kit.spots[i].y - oy, d = Math.hypot(dx, dy) || 1;
+			iceSpawn(en, ox, oy, dx / d * 13.2, dy / d * 13.2, {
+				color: '#c8f4ff', color2: '#ffffff', power: 24, width: 36, height: 11,
+				shape: 'blade', effects: ['freeze'], trail: 'ice', maxAge: 80, _iceStyle: 'arrow'
+			});
+			kit.fired++;
 		}
-		if(kit.t > 50) iceEnd(en);
+		if(kit.t > 38) iceEnd(en);
+	} else if(kit.kind === 'huntersMark'){
+		if(kit.t === 8 && !kit.fired){
+			kit.fired = true;
+			const lead = iceLead(aim, 11);
+			const ox = en.x + en.w / 2, oy = en.y + en.h * 0.4;
+			const dx = lead.x - ox, dy = lead.y - oy, d = Math.hypot(dx, dy) || 1;
+			const p = iceSpawn(en, ox, oy, dx / d * 15.4, dy / d * 15.4, {
+				color: '#ffffff', color2: '#88ddff', power: 32, width: 46, height: 12,
+				shape: 'blade', effects: ['freeze'], trail: 'ice', maxAge: 120, _iceStyle: 'arrow'
+			});
+			if(p){ p.homing = true; p.homingStrength = 0.06; }
+		}
+		if(kit.t > 22) iceEnd(en);
 	}
 }
 
@@ -534,6 +555,7 @@ function tickSentinel(en, kit){
 		}
 		if(kit.launched >= kit.chunks.length && kit.t > kit.next + 8) iceEnd(en);
 	} else if(kit.kind === 'absoluteGuard'){
+		if(kit.t === 36) en._iceNoHit = false;
 		if(kit.t === 100){
 			en._iceGuard = false; en._iceNoHit = false; en._iceVulnerable = true;
 			en.stunTimer = Math.max(en.stunTimer || 0, 70);
@@ -655,7 +677,7 @@ function iceKitBlockPlayerProj(p){
 			if(ch.gone) continue;
 			const cx = en.x + en.w / 2 + Math.cos(ch.ang) * ch.r;
 			const cy = en.y + en.h / 2 + Math.sin(ch.ang) * ch.r * 0.7;
-			if(circRect(cx, cy, atkS(16), p.x - 6, p.y - 6, 12, 12)){
+			if(circRect(cx, cy, atkS(10), p.x - 4, p.y - 4, 8, 8)){
 				p.hasHit = true;
 				iceSpark(cx, cy, 6);
 				return true;

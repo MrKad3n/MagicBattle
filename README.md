@@ -315,7 +315,14 @@ A spell is an array of **phases**. When you cast:
 - Phase 1: Nova explosion (AoE burst on impact) → `onExpire`
 - Phase 2: Rain of spikes (falling projectiles from where the nova was)
 
-Each additional phase adds **+3 Magic Control requirement** and multiplies mana cost by `0.6 + phases × 0.25`.
+Each additional phase adds **+3 Magic Control requirement** and multiplies mana cost by `0.6 + phases × 0.25` (1-phase ×0.85, 2-phase ×1.10, 3-phase ×1.35). Extra cost also scales with how many projectiles and Phase Forks you chain across phases.
+
+**Phase caps (before vow Extra Phase):**
+- Normal spells: **3** phases
+- Ultimates (key `0`): **5** phases
+- Domain Expansion: **2** phases (domain + one sub-phase)
+- Transformation ultimate: **4** phases
+- Vow **Extra Phase** adds +1 max phase per point (does not raise Domain above 2)
 
 ---
 
@@ -334,9 +341,9 @@ Magic Control also acts as a **gating requirement** — complex shapes, behavior
 
 ---
 
-### Shapes (17 types)
+### Shapes (18 types)
 
-The shape defines the visual appearance, hitbox geometry, and any special mechanical behavior of each projectile.
+The shape defines the visual appearance, hitbox geometry, and any special mechanical behavior of each projectile. **Solidify is no longer a shape** — it is an Overall effect you attach to a projectile to turn it into a walkable platform.
 
 #### Missile
 - **Mana: 5 · Control: 0**
@@ -353,23 +360,24 @@ The shape defines the visual appearance, hitbox geometry, and any special mechan
 #### Ally Orb
 - **Mana: 6 · Control: 1**
 - Green-tinted circle (radius = width × 1.3) with a light inner glow.
-- **Cannot damage enemies.** Instead, it targets and heals the player when effects like `healSelf` or `damageHeal` are attached.
-- **Niche:** Combine with `selfCast` or `underfoot` behavior for reliable self-healing. The `damageHeal` effect converts accumulated damage (from `damageStore`) into a heal on contact.
+- **Cannot damage enemies.** Heals / buffs you or allies when effects like `healSelf` or `damageHeal` are attached.
+- Self-cast, underfoot, around-self, and stationary orbs apply immediately. Traveling orbs fly to allies (including co-op partners) and apply on contact — they no longer eat themselves on the caster at spawn.
+- **Niche:** Combine with `selfCast` or `underfoot` for reliable self-healing. `damageHeal` converts stored damage into a heal on contact.
 
 #### Blade
-- **Mana: 7 · Control: 2 · Requires: Dragon Heart**
+- **Mana: 7 · Control: 2**
 - Rotating rectangle that spins at `age × 0.3` radians per frame.
 - Circular hitbox (radius = width × 0.85). Visually distinct from orbs due to the spin.
 - **Niche:** The constant spin makes it feel like a slashing melee attack. Works well with `straight` or `boomerang` behavior for a throwing-blade fantasy.
 
 #### Spike
-- **Mana: 8 · Control: 3 · Requires: Crystal Crown**
+- **Mana: 8 · Control: 3**
 - Pointed diamond shape that auto-rotates to face its velocity direction.
 - Slightly smaller hitbox (radius × 0.9) than standard. Looks sharp and aggressive.
 - **Niche:** In a domain expansion, spike-shaped projectiles erupt **upward from the ground** instead of spawning randomly, creating a field-of-spikes effect. Also forced to `straight` behavior in domains (not converted to homing like other shapes).
 
 #### Polygon
-- **Mana: 9 · Control: 3 · Requires: Crystal Crown**
+- **Mana: 9 · Control: 3**
 - Regular polygon (default 6-sided hexagon) with a white inner star. Rotates slowly at `age × 0.04`.
 - Customizable via the `polygonSides` property (6, 8, or 10 sides).
 - **Niche:** In a domain expansion, polygon shape creates a **push effect** — all enemies inside the domain are continuously pushed away from center (1.2 strength per frame). Standard hitbox (radius = width × 1.0).
@@ -389,31 +397,25 @@ The shape defines the visual appearance, hitbox geometry, and any special mechan
 - **Niche:** The beam shape is one of the few shapes that can hit multiple enemies in a line per frame. Excellent for hallway fights. Affected by ceiling/floor collision — the beam stops at walls.
 
 #### Ring
-- **Mana: 12 · Control: 5 · Requires: Sun Medallion**
+- **Mana: 12 · Control: 5**
 - Expanding circular ring that grows over its lifetime. Final radius = `(age / maxAge) × width × 8`.
 - Hitbox is a circle at the expanding radius — hits enemies as the ring passes through them.
 - **Niche:** In a domain expansion, ring causes projectiles to spawn **from the domain's center point** rather than random positions. Good for radial AoE warning zones.
 
 #### Cone
-- **Mana: 10 · Control: 4 · Requires: Sun Medallion**
+- **Mana: 10 · Control: 4**
 - Triangle shape that expands over time: width = `(age / maxAge) × 200 × width`, height = 40% of width.
 - **Directional hitbox:** Triangular area check, not circular. Points forward (toward cursor aim) or downward (if rain behavior).
+- **−65% damage** (`× 0.35`) to compensate for the huge coverage.
 - **Special rain/barrage interaction:** When combined with rain or barrage behavior, the cone's horizontal velocity is zeroed — it points straight down instead of forward.
 - **Niche:** The only shape with a true triangular hitbox. Best for wide-angle breath/blast attacks. Pairs well with `straight` behavior for a spreading flame breath.
 
 #### Wall
-- **Mana: 12 · Control: 6 · Requires: Celestial Robe**
+- **Mana: 12 · Control: 6**
 - Large vertical rectangle (width × 2 wide, height × 6 tall) with a visible border.
 - **Rectangular hitbox** (extends ±width horizontally, ±height × 3 vertically).
 - **Blocks enemy projectiles** on contact. Functions as a physical barrier.
 - **Niche:** In a domain expansion, wall shape makes the entire domain **50% larger** (1.5× size multiplier). As a normal spell, it's a defensive tool — place it between you and enemies to absorb incoming fire. Combine with `stationary` behavior for a lasting barricade.
-
-#### Solidify (Platform)
-- **Mana: 10 · Control: 4**
-- Flat rectangle (width × 3 wide, height × 1.5 tall).
-- Rectangular hitbox (±width × 1.5, ±height × 0.75). Deals no damage.
-- **Becomes a solid platform** the player can physically stand on. Creates temporary terrain.
-- **Niche:** Pure utility. Use it to reach high places, create bridges, or block off paths. The platform disappears when the projectile's duration expires.
 
 #### Nova
 - **Mana: 15 · Control: 7**
@@ -422,7 +424,7 @@ The shape defines the visual appearance, hitbox geometry, and any special mechan
 - **Niche:** In a domain expansion, nova triggers an **instant shockwave on activation** that hits all enemies inside the domain for `power × 5` damage and knocks them away from center with 40 shockwave particles. The most explosive domain opener.
 
 #### Meteor
-- **Mana: 16 · Control: 6 · Requires: Stardust Staff**
+- **Mana: 16 · Control: 6**
 - Rocky sphere with a heat glow, molten interior, and core detail. Rotates to face velocity.
 - **Larger hitbox** than default (radius = max(width, height) × 1.5).
 - Deals **-25% base damage** (0.75× nerf), but gets **up to +200% bonus damage** based on distance traveled (calculated as `1 + min(distance / 300, 2.0)`). The farther it flies, the harder it hits.
@@ -430,7 +432,7 @@ The shape defines the visual appearance, hitbox geometry, and any special mechan
 - **Niche:** In a domain expansion, meteor projectiles **rain from the top of the domain** downward with a +75% damage bonus. Also forced to `straight` behavior in domains (not converted to homing). Best for long-range bombardment — pair with `lob` behavior for maximum distance bonus.
 
 #### Vortex
-- **Mana: 18 · Control: 7 · Requires: Void Staff**
+- **Mana: 18 · Control: 7**
 - Dark void gradient ring with rotating distortion tendrils and crackling energy.
 - **Growing hitbox:** radius = `width × 3 + width × 2 × (age / maxAge)`. Gets bigger over time.
 - Automatically **slows itself** (velocity × 0.985 per frame) — gradually comes to a halt.
@@ -438,7 +440,7 @@ The shape defines the visual appearance, hitbox geometry, and any special mechan
 - **Niche:** In a domain expansion, vortex creates a continuous **pull-to-center effect** (1.5 pull strength per frame) on all enemies inside the domain for the entire duration. A crowd control domain.
 
 #### Chain
-- **Mana: 18 · Control: 9 · Requires: Elder Staff**
+- **Mana: 18 · Control: 9**
 - Visually identical to missile (small circle, radius = width × 0.7).
 - **Bounces between enemies**: after hitting one target, it seeks the nearest unhit enemy within 500px and redirects toward them. Chains up to `chainMax` times (default 3). Resets pierce tracking every 60 frames.
 - Customizable `chainStunTime` property — adds stun to each chain link (costs +25 mana per point of stun time).
@@ -447,9 +449,18 @@ The shape defines the visual appearance, hitbox geometry, and any special mechan
 #### Summon
 - **Mana: 20 · Control: 8**
 - Rotating circles with radiating spokes and a glow effect.
-- **No direct hitbox** — does not damage enemies. Instead, spawns an allied minion entity.
+- **No direct hitbox** — does not damage enemies. Spawns an allied minion. Speed, Spell Power, Duration, and Size set move speed, health, lifetime, and body/projectile scale. Extra mana: +4 per range point.
 - Minions fire the spell's **next phase** as their attack. The summon itself is just a delivery mechanism.
-- **Niche:** In a domain expansion with `summon` shape + Necromancer class, the domain spawns **3 powerful enemy allies** from your bestiary over its duration (first at 2s, then every ~18s). Summon power scales at `(phase power) × 2.5`. Without Necromancer class, summon in domain has no special behavior.
+- **Necromancer:** Summon raises defeated Bestiary foes instead of generic minions. Default is Random Summon; you can preselect a type or choose on cast. Point cap **15** (basic fire foes = 1, Fire Dragon = 5, Zenith-tier = 15). Lifetime max 60s (90s on Ultimate). Raid/secret bosses (Zenith, Seraphel, Void Arbiter, Infernal Kitten) only raise from the Ultimate slot.
+- **Niche:** In a domain expansion with `summon` + Necromancer, the domain raises chosen, random, or strong Bestiary foes over its duration using a separate **50-point** cap. Without Necromancer, summon in domain has no special raise behavior.
+
+#### Explosion
+- **Mana: 14 · Control: 5**
+- Fixed-size projectile visual. Detonates on hit, expire, wall, enemy projectile, or dispel contact.
+- Width/Height scale the **blast radius**, not the flying sprite. Blast damage is `power × 14` with sqrt falloff to the edge.
+- **Self-damage:** 30% of the falloff damage if you are inside the blast (knockback away from center). Transformation **Explosion Immunity** blocks the HP loss but still applies on-hit effects.
+- Cannot take the Solidify effect (blocked with vortex, summon, and ally orb).
+- **Niche:** In a domain expansion, treats as a default random-spawn / homing wave. Best as a lobbed bomb or a phase-2 detonation after a seeker.
 
 #### Same
 - **Mana: 0 · Control: 0**
@@ -458,9 +469,9 @@ The shape defines the visual appearance, hitbox geometry, and any special mechan
 
 ---
 
-### Behaviors (16 types)
+### Behaviors (19 types)
 
-The behavior controls how the projectile moves through space after being spawned.
+The behavior controls how the projectile moves through space after being spawned. **Domain Expansion** and **Transformation** are Ultimate-only (key `0`).
 
 #### Straight
 - **Mana: 0 · Control: 0**
@@ -481,13 +492,13 @@ The behavior controls how the projectile moves through space after being spawned
 - **Niche:** In domain expansions, almost all projectile shapes get force-converted to homing behavior (exceptions: meteor and spike keep straight). This makes homing the de-facto domain behavior. The -50% penalty still applies to domain projectiles, which is why meteor domains (forced straight) deal more per-projectile damage.
 
 #### Boomerang
-- **Mana: 4 · Control: 3 · Requires: Chaos Orb**
+- **Mana: 4 · Control: 3**
 - Travels outward in a straight line, then **returns to the player** at 45% of its total lifetime.
 - Resets its `hitTargets` set on the return trip — can hit the same enemy twice (once going out, once coming back).
 - **Niche:** Effectively doubles your hit count on a single enemy. Synergizes with effects that trigger per-hit like `lifesteal`, `burn`, and `damageStore`.
 
 #### Ground Surge
-- **Mana: 5 · Control: 4 · Requires: World Seed**
+- **Mana: 5 · Control: 4**
 - Applies +0.6 gravity per frame but **bounces** off the ground and platforms (reverses to -1.5 vertical velocity on impact).
 - Rolls along the floor in low bouncing arcs. Horizontal velocity is frozen on initial contact until it hits something.
 - **Niche:** Automatically follows terrain contours. Good for clearing ground-level enemies in uneven environments. Less useful against flying enemies.
@@ -504,6 +515,8 @@ The behavior controls how the projectile moves through space after being spawned
 - **Mana: 8 · Control: 7**
 - Spawns projectiles high above the player (y = origin - 150px) spread across an area. Projectiles fall straight down with ±0.8 random horizontal drift.
 - **+50% damage bonus** — highest damage multiplier of any behavior.
+- Extra projectiles are cheap: count mana uses `× 0.1` per extra shot instead of `× 0.4`.
+- Optional **stacked rain** (+50 mana) piles the volley in a tight column instead of spreading it.
 - Cone and beam shapes have their horizontal velocity zeroed when combined with rain, pointing straight down.
 - **Niche:** The +50% damage is enormous. Pair with high-power meteor shape for devastating area bombardment. The tradeoff is unpredictability — you can't precisely aim where rain lands. Best in large rooms.
 
@@ -517,7 +530,7 @@ The behavior controls how the projectile moves through space after being spawned
 #### Stationary
 - **Mana: 0 · Control: 0**
 - Spawns at the cast point and stays fixed. No velocity. Lingers for full duration.
-- No damage modifier. Acts as a persistent area-of-effect zone.
+- **×2.0 power bonus** on the phase (the projectile hits much harder because it never travels).
 - **Niche:** Combine with `wall` shape for a lasting barrier, or `vortex` shape for a stationary gravity pull. Also great for `nova` — a stationary expanding explosion.
 
 #### Underfoot
@@ -531,9 +544,9 @@ The behavior controls how the projectile moves through space after being spawned
 - **Niche:** The dedicated healing/buff behavior. No offensive capability. Use with ally orb + healSelf for a pure heal, or with forceJump for a rocket-jump effect.
 
 #### Around Self
-- **Mana: 5 · Control: 3**
+- **Mana: 6 × around-self count · Control: 3**
 - Spawns a ring of projectiles orbiting the player. Each is evenly spaced around a circle at `aroundSelfRadius` (default 50px).
-- The total count is determined by the phase's `count` parameter — that many projectiles orbit simultaneously.
+- Count comes from the **Around Self Count** slider, not the normal count slider.
 - Unlike Orbit Caster, these never launch. They stay orbiting until duration expires.
 - **Tunable:** `aroundSelfCount` (2–8), `aroundSelfRadius` (30–150).
 - **Niche:** Defensive ring that damages anything that touches you. Combine with `burn` or `freeze` effects for a persistent elemental aura.
@@ -551,129 +564,144 @@ The behavior controls how the projectile moves through space after being spawned
 - Moves in the aimed direction but oscillates sideways in a sine wave. Amplitude = `40 + width × 0.5`, frequency = 0.09 radians/frame.
 - **Niche:** Harder for enemies to dodge (in PvP contexts). The weaving path also gives wider coverage than straight. Larger projectiles (higher width) zigzag with wider amplitude.
 
+#### Spiral
+- **Mana: 6 · Control: 5**
+- Corkscrews along the aimed path — orbits around the straight centerline toward the cursor.
+- No damage modifier.
+- **Niche:** Coverage between zigzag and orbit. Good for hallways and for making hitboxes sweep a lane without the orbit launch.
+
 #### Teleport
-- **Mana: 7 · Control: 6 · Requires: Celestial Robe**
+- **Mana: 7 · Control: 6**
 - Blinks forward 60px every 20 frames along its aim direction. Between blinks, it's invisible/intangible.
 - Automatically **re-aims at nearby enemies** after each blink — has built-in homing between teleport jumps.
 - Spawns visual particles on each teleport.
 - Auto-advances to the next phase on enemy contact.
 - **Niche:** Bypasses obstacles and closes gaps. The periodic re-targeting makes it semi-homing without the -50% damage penalty. One of the stronger advanced behaviors.
 
+#### Control
+- **Mana: 30 · Control: 3**
+- The projectile **follows your cursor**. It starts at the player and glides toward the cursor each frame.
+- **−85% damage** (`× 0.15`) — you are steering a searchlight, not a cannon.
+- Duration can be set up to **30 seconds**.
+- **Niche:** Manual aim for Solidify bridges, Gravity Wells, Ally Orb heals, and precise detonations. Pair with Explosion or timed phases. Weak as raw DPS.
+
 #### Domain
-- **Mana: 1000 · Control: 10**
-- Must be the **first phase (Phase 0)** of a spell. Can only be cast as an **Ultimate** (slot 10).
-- Creates a massive domain expansion field. See the **Domain Expansion** section below for full details.
+- **Mana: 1000 · Control: 10 · Ultimate only**
+- Must be the **first phase (Phase 0)** of a spell. Can only be cast as an **Ultimate** (key `0`).
+- Creates a massive domain expansion field. Total domain/transformation cost is **capped at 25k** Total Mana. See the **Domain Expansion** section below.
+
+#### Transformation
+- **Mana: 1000 · Control: 10 · Ultimate only**
+- Must be Phase 0 of an Ultimate. Transforms you for **60 seconds** and swaps your hotbar to a **Transformation loadout**.
+- See the **Transformation** section below. Cannot be used as a spell inside a Transformation loadout.
 
 ---
 
-### Effects (24 types)
+### Effects (30 types)
 
 Effects are applied on-hit (or on-cast for self-targeting effects). Each phase can have multiple effects, but some categories are exclusive (only one per phase):
 
-- **Elemental** (exclusive): burn, freeze, poison, stun, shatter
-- **Movement** (exclusive): knockback, pull, forceJump, horizontalLaunch, gravityWell
-- **Support**: healSelf, shield, lifesteal
+- **Elemental** (exclusive): burn, freeze, poison, stun, shatter, lifesteal
+- **Movement** (exclusive): knockback, pull, forceJump, gravityWell
+- **Support**: healSelf, shield
 - **Store**: damageStore, damageRelease, damageHeal
-- **Utility**: timedRelease, phaseFork, resetProjectiles, phaseThrough, ricochet, dispel, randomDelay
-- **CC**: mark
+- **Utility**: timedRelease, phaseFork, resetProjectiles, ricochet, randomDelay, evenDelay, rotate, awayFromPlayer
+- **Overall**: phaseThrough, dispel, solidify, solidObjectBreak
+- **CC**: mark, blind, sticky
 
-Each effect has `effectPower` and `effectDuration` multiplier sliders that scale its strength.
+`horizontalLaunch` still exists on **enemy** attacks; it is not a player builder option. Each effect has `effectPower` and `effectDuration` multiplier sliders that scale its strength.
+
+Mana numbers below are the **canonical costs** from `spell-cost.js` (the builder and dungeon both use these).
 
 #### Burn
-- **Mana: 5 · Control: 2** · Elemental
+- **Mana: 36 · Control: 2** · Elemental
 - Applies fire damage-over-time to the target. Deals **5 ticks** at intervals of 60 frames.
 - Total burn damage = 50% of the base hit damage × `effectDuration` multiplier, divided across 5 ticks.
 - If the player gets hit by a burn effect, they take **20% of the tick damage**.
 - **Niche:** Stacks favorably with boomerang (double application on out + return). The `effectDuration` slider directly multiplies total burn damage, making it one of the most scalable effects. Vow elemental damage bonus (+7% per point) applies to burn spells.
 
 #### Freeze
-- **Mana: 5 · Control: 2** · Elemental
+- **Mana: 36 · Control: 2** · Elemental
 - Slows enemy movement to **50% speed** and prevents attacks for the duration.
 - Duration = 90 frames × `effectDuration` multiplier. Maximum duration wins if reapplied (doesn't stack additively).
 - **Niche:** Pure crowd control. The slow lasts 1.5 seconds base — long enough to create safe windows. Best on fast, high-count projectiles to keep the slow permanently refreshed.
 
 #### Poison
-- **Mana: 5 · Control: 3** · Elemental
+- **Mana: 36 · Control: 3** · Elemental
 - Applies poison DoT. Deals **6 ticks** at intervals of 75 frames (slower than burn but more ticks).
 - Total poison damage = 40% of base hit damage × `effectDuration`, divided across 6 ticks.
 - Visual: Green cloud appears over poisoned enemies. If the player is poisoned, same green cloud.
 - **Niche:** Slightly less total damage than burn but lasts longer (6 ticks × 75 = 450 frames vs burn's 5 × 60 = 300 frames). Better for sustained pressure.
 
 #### Stun
-- **Mana: 7 · Control: 5** · Elemental
-- Prevents all enemy actions (movement, attacks, AI decisions) for the duration.
-- Duration = 60 frames × `effectDuration` multiplier (1 second base). Yellow text indicator appears.
-- **Niche:** The most powerful CC effect. Unlike freeze (which only slows), stun completely locks the target. Higher mana/control cost is justified. Best on chain shape (which can stun multiple targets in sequence).
+- **Mana: 54 · Control: 5** · Elemental
+- Prevents all enemy actions (movement, attacks, AI decisions) for a **short** window.
+- Base lock is about **0.3 seconds** — you cannot permanently stun a target. Enemies gain stun resistance (−25% duration per stack, minimum 10%). Resistance decays about one stack every 2 seconds without a fresh stun.
+- **Niche:** Setup, not lockdown. Chain + stun still works if you respect the resistance curve. Domain chain stun also feeds this resistance.
 
 #### Knockback
-- **Mana: 3 · Control: 1** · Movement
-- Pushes the enemy horizontally away from the caster. Displacement = `facing × 40 × effectPower × ultMultiplier`.
-- Instant, no ramp-up — enemy is shoved immediately.
-- **Niche:** Cheap defensive tool. Keep enemies at range. Pairs well with meteor (knock them away to get distance bonus on the next meteor shot).
+- **Mana: 8 · Control: 1** · Movement
+- Pushes the enemy away from the impact point. Instant, no ramp-up.
+- Self-cast Ally Orbs **dash you toward the cursor**. Launch distance scales with **Spell Power only** — size, speed, and which slot you use do not change how far you travel.
+- **Niche:** Cheap defensive tool, or a Power-scaled dash. Pairs well with meteor (knock them away to get distance bonus on the next meteor shot).
 
 #### Pull
-- **Mana: 4 · Control: 3** · Movement
+- **Mana: 10 · Control: 3** · Movement
 - Drags the enemy toward the player. Force = `50 × effectPower` horizontal + `30 × effectPower` vertical.
 - **Niche:** The opposite of knockback. Group enemies together for AoE follow-up. Combine with nova or ring on the next phase for a pull → explosion combo.
 
 #### Force Jump
-- **Mana: 4 · Control: 2** · Movement
+- **Mana: 10 · Control: 2** · Movement
 - Launches the target upward. Force = `60 × effectPower × ultMultiplier`.
 - When applied to the player (via self-cast), gives an enhanced jump boost instead.
 - **Niche:** Repositioning tool. Launch enemies into the air where they can't attack, or use it on yourself as a rocket jump. Self-cast + forceJump is a mobility tool.
 
-#### Horizontal Launch
-- **Mana: 5 · Control: 2** · Movement
-- Launches the enemy/player based on the **projectile's direction** (not the caster's facing).
-- Force = `projectile.power × 3.5 × effectPower × ultMultiplier`.
-- **Niche:** Differs from knockback in that the launch direction follows the projectile, not the caster. A homing missile that curves around will launch the enemy in the direction it was traveling on impact.
-
 #### Lifesteal
-- **Mana: 8 · Control: 6** · Support · Requires: Blood Staff
+- **Mana: 48 · Control: 3** · Elemental (counts for Domain element matching)
 - Heals the player for **20% of damage dealt** × `effectPower` × `ultMultiplier`.
 - Shows pink healing numbers. Stacks with vow spellVamp bonus.
 - **Niche:** Sustain in prolonged fights. Best on high-damage, multi-hit spells (rain + high count) for massive healing throughput. The 20% base rate scales with effectPower, so maxing effectPower can push it toward 40%+.
 
 #### Heal Self
-- **Mana: 6 · Control: 4** · Support · Requires: Phoenix Feather
+- **Mana: 15 · Control: 4** · Support
 - Heals the player for `power × 5 × effectPower × ultMultiplier × healerBoost`.
 - Healer class gets **+40% healing** on this effect.
 - Green healing numbers appear. Must be on an `allyOrb` shape or `selfCast`/`underfoot` behavior.
 - **Niche:** Direct healing — the only way to cast a dedicated heal spell. Power slider directly controls heal amount. Healer class makes this 40% stronger, making it the class's core mechanic.
 
 #### Shield
-- **Mana: 6 · Control: 4** · Support
+- **Mana: 15 · Control: 4** · Support
 - Grants a temporary damage-absorbing shield: `power × 3 × effectPower × ultMultiplier` points.
 - Displays as a blue shield bar. Absorbs damage before HP. Decays over time.
 - **Niche:** Stacks with existing shield. Casting shield repeatedly builds up a large absorb buffer. Best on fast-cooldown, low-cost spells for constant shield refreshing.
 
 #### Damage Store
-- **Mana: 4 · Control: 2** · Store · Requires: Phoenix Feather
+- **Mana: 10 · Control: 2** · Store
 - Accumulates a percentage of all damage dealt into a stored pool.
 - Default: 50% of each hit stored. Tunable via `damageStorePercent` (10%–100%).
 - Stored damage appears as a ⚡ overlay on your character.
 - **Niche:** Does nothing by itself — requires `damageRelease` or `damageHeal` on another spell to consume the stored pool. Build up massive stored damage, then release it all at once.
 
 #### Damage Release
-- **Mana: 6 · Control: 4** · Store · Requires: Phoenix Feather
-- Consumes all stored damage. Adds **+1 damage per 500 stored** as a flat bonus to the hit.
+- **Mana: 15 · Control: 4** · Store
+- Consumes all stored damage. Multiplies the hit by `× (1 + stored / 500)`.
 - Also slightly increases projectile size on release for visual feedback.
 - Resets `damageStored` to 0 after consumption.
 - **Niche:** The payoff for damageStore. Build up damage with rapid-fire spells on one slot, then release it with a big single-hit spell on another slot. The bonus is multiplied into the full damage formula.
 
 #### Damage Heal
-- **Mana: 5 · Control: 3** · Store · Requires: Phoenix Feather
+- **Mana: 12 · Control: 3** · Store
 - Converts stored damage into healing: `damageStored × 0.5 × healerBoost`.
 - Must be on an ally orb. Healer class gets the +40% bonus here too.
 - **Niche:** Alternative to damageRelease — trade offense for sustain. Store damage with combat spells, then heal with an ally orb + damageHeal spell.
 
 #### Timed Release
-- **Mana: 3 · Control: 2** · Utility
+- **Mana: 8 · Control: 2** · Utility
 - Delays all hits by `timedReleaseDelay` frames (default 0.5 seconds / 30 frames). The projectile's maxAge is auto-extended to accommodate the delay.
 - **Niche:** Queue up multiple projectiles on a target, then they all hit simultaneously when the timer expires. Useful for overwhelming burst damage that bypasses per-hit diminishing returns.
 
 #### Phase Fork
-- **Mana: 6 · Control: 5** · Utility · Requires: Eye of Eternity
+- **Mana: 6 · Control: 5** · Utility
 - When the current phase triggers its next phase, the original projectile **continues existing** instead of being consumed.
 - `phaseForkRepeats` controls how many times the fork spawns (each adds +35 mana cost).
 - **Niche:** Creates branching spell trees. Phase 0 fires a homing orb → on hit, it forks: the orb keeps going AND a nova explodes at the impact point. Without phaseFork, the orb would be consumed.
@@ -685,40 +713,78 @@ Each effect has `effectPower` and `effectDuration` multiplier sliders that scale
 - **Niche:** Required for phase transitions that should feel like a new spell being cast (e.g., an explosion spawning new projectiles) rather than the same projectile transforming.
 
 #### Phase Through
-- **Mana: 20 · Control: 6** · Utility · Requires: Void Robe
+- **Mana: 35 · Control: 6** · Overall
 - Allows the projectile to pass through solid walls and platforms freely.
 - **-45% damage penalty** unless the projectile was spawned by a domain expansion (domain projectiles get phaseThrough free, no penalty).
 - **Niche:** Bypasses terrain. Expensive but essential in tilemap dungeons where walls would otherwise block your shots. In domains, projectiles naturally phase through (no cost needed).
 
 #### Dispel
-- **Mana: 8 · Control: 4** · Utility
+- **Mana: 45 · Control: 4** · Overall
 - Destroys enemy projectiles and spell walls on contact within an AoE radius = `max(width, height) × 0.8`.
 - Shows a 🚫 indicator and purple impact visual.
 - **Niche:** Anti-projectile defense. Shoot a dispel missile into incoming enemy fire to clear it. Larger projectiles (higher width/height) create larger dispel zones.
 
 #### Ricochet
-- **Mana: 18 · Control: 6** · Utility · Requires: Chaos Orb
-- Reflects off walls and solid surfaces. Bounces at the wall's angle and resets pierce tracking on each bounce.
-- Maximum 1 bounce per wall contact. Maintains velocity through bounces.
-- **Niche:** Excellent in enclosed spaces — the projectile keeps bouncing and hitting. Combine with high-duration for maximum bounces. Works well in pyramid corridors and tight dungeon rooms.
+- **Mana: 35 · Control: 6** · Utility
+- Reflects off walls and solid surfaces. Works with homing, lob, and other behaviors.
+- **Up to 5 bounces.** Resets pierce tracking on each bounce.
+- **Niche:** Excellent in enclosed spaces — the projectile keeps bouncing and hitting. Combine with high-duration for maximum bounces.
 
 #### Shatter
-- **Mana: 8 · Control: 6** · Elemental · Requires: Dragon Heart
-- When an enemy dies while shatter is applied, the enemy explodes into **fragments** that deal area damage.
-- Stores `power × 0.3` + the projectile's color for the fragment explosion.
-- **Niche:** Chain-reaction potential. If shatter fragments kill another shattered enemy, it chains. Best on high-power spells fighting groups of weaker enemies.
+- **Mana: 60 · Control: 6** · Elemental
+- On each enemy hit, spawns **12 crystal shards** (5-frame internal cooldown).
+- On enemy death, an enhanced **16-shard burst** erupts from the corpse.
+- **Archmage:** each shard that hits cascades into **3 micro-shards**.
+- **Niche:** Group fights. Shard storms scale off hit rate more than single-target power.
 
 #### Gravity Well
-- **Mana: 10 · Control: 7** · Movement · Requires: World Seed
-- Creates a persistent **pull zone** at the impact point with a 120px radius.
-- The well lasts 120 frames (2 seconds). Power affects pull strength.
+- **Mana: 120** (+ extra from power and size) **· Control: 7** · Movement
+- Creates a persistent **pull zone** at the impact point. Range and strength scale with spell power. Closer to center = much stronger pull. Also pulls solidified objects.
+- The well lasts 120 frames (2 seconds).
 - Animated as a dark void with spinning rings.
-- **Niche:** Area denial + crowd control. Drop a gravity well in a corridor, then follow up with rain or nova on the clustered enemies. Unlike pull (instant), gravity well is persistent and affects all enemies in range over time.
+- **Niche:** Area denial + crowd control. Drop a gravity well in a corridor, then follow up with rain or nova on the clustered enemies. Unlike pull (instant), gravity well is persistent.
 
 #### Mark
-- **Mana: 5 · Control: 4** · CC · Requires: Eye of Eternity
-- Tags the enemy with a debuff marker. Marked enemies take increased incoming damage.
-- **Niche:** Currently a combo-setup mechanic. Mark a tough enemy, then switch to your damage spell — the mark increases all subsequent damage.
+- **Mana: 5 · Control: 4** · CC
+- Tags the enemy. Marked targets take **+30% damage** for **3 seconds**.
+- **Niche:** Combo setup. Mark a boss, then dump your damage spell.
+
+#### Random Delay
+- **Mana: 5 · Control: 1** · Utility
+- Each projectile in a multi-count volley spawns after a **random** delay instead of all at once.
+
+#### Even Delay
+- **Mana: 5 · Control: 1** · Utility
+- Projectiles spawn at **equal intervals** across a set duration. The first fires immediately; the last fires at the end of the window.
+
+#### Rotate
+- **Mana: 8 · Control: 2** · Utility
+- Spins the projectile around its own center as it travels. **Cosmetic** — no hitbox, trajectory, or damage change.
+
+#### Away From Player
+- **Mana: 5 · Control: 2** · Utility
+- Projectiles shoot **away from the player** instead of toward the cursor. Useful for auras, back-steps, and orbiting bombs.
+
+#### Solidify
+- **Mana: 0 listed + 10 stationary / 100 moving (beam +180)** · Control: 4 · Overall
+- Turns the projectile into a **solid platform**: walkable, blocks shots. Moving platforms push enemies with momentum (momentum can deal damage).
+- Phase Through bypasses solidified platforms. Blocked on explosion, vortex, summon, and ally orb.
+- **Niche:** This is the old Solidify *shape*. Build a missile or wall, attach Solidify, and you have terrain.
+
+#### Solid Object Break
+- **Mana: 100 · Control: 1** · Overall
+- On cast, **destroys every solidify platform** at once. One cost, any number of objects.
+
+#### Blind
+- **Mana: 6 · Control: 5** · CC
+- Enemies lose detection range. Players (you, allies, PvP) get a darkened screen.
+- Duration = **0.5s × Spell Power** (0.5s at power 1, 5s at power 10). Shadow Robe: +40% duration.
+
+#### Sticky
+- **Mana: 35 · Control: 5** · CC
+- On **Solidify:** enemies, the player, and other solidify pieces that touch it **stick** to the surface. Player contact grants **wall / ceiling walking for 8 seconds**.
+- On a normal projectile: applies a sticky debuff (heavy slow + contact-chain to nearby enemies).
+- **Niche:** Vertical dungeon movement and trap floors. Pair with Control or Ground to place the web.
 
 ---
 
@@ -734,19 +800,24 @@ Final Damage = power × 8 × [all multipliers below]
 |---|---|---|
 | Magic Power | `1 + magicPower × 0.08` | Always (stat-based) |
 | Homing penalty | `× 0.5` | Homing behavior |
+| Control penalty | `× 0.15` | Control behavior (−85%) |
 | Lob bonus | `× 1.25` | Lob behavior |
 | Orbit penalty | `× 0.7` | Orbit behavior |
 | Rain bonus | `× 1.5` | Rain behavior |
 | Barrage bonus | `× 1.35` | Barrage behavior |
+| Ground bonus | `× 1.4` | Ground behavior |
+| Stationary power | `× 2.0` | Stationary behavior (power, not a late multiplier) |
 | Beam penalty | `× 0.65` | Beam shape |
+| Cone penalty | `× 0.35` | Cone shape (−65%) |
 | Meteor base nerf | `× 0.75` | Meteor shape |
 | Meteor distance bonus | `× (1 + min(dist/300, 2.0))` | Meteor shape (up to +200%) |
+| Explosion blast | `power × 14 × falloff` | Explosion shape detonation (separate from the usual ×8 hit) |
 | Phase-through penalty | `× 0.55` | phaseThrough effect (non-domain) |
 | Spread bonus | `× (1 + spread × 0.0025 × count)` | Multi-projectile spread |
 | Diminishing returns | `× 1 / (1 + hitNum × 0.04)` | Each successive hit on same target |
-| Domain active | `× 1.3` | Player inside active domain |
-| Domain element match | `× 1.5 – 2.25` | Spell element matches domain element |
-| Same-shape domain | `× 1.3` | Projectile shape matches domain shape |
+| Domain active | `× 1.5` | Any spell while a domain is up (`checkDomainElementMatch`) |
+| Domain element match | `× 2.25` | Spell has the same elemental effect as the domain |
+| Same-shape domain | `× 1.3` | Domain Phase 0 shape is Same (extra player spell damage) |
 | Dominion class | `× 1.4` | Domain projectiles + Dominion Master class |
 | Ranger distance | `× (1 + min(dist/1000, 0.8))` | Ranger class (up to +80%) |
 | Warrior melee | `× 1.5 / 1.2 / 1.0` | Warrior class (<200px / <350px / >350px) |
@@ -782,23 +853,24 @@ Domain Expansion is the most powerful mechanic in Magic Battle. It creates a mas
 
 #### How to Set Up a Domain
 
-1. Create a spell with **Phase 0 behavior = "domain"**. This must be your ultimate (slot 10).
+1. Create a spell with **Phase 0 behavior = "domain"**. This must be your **Ultimate** (key `0`).
 2. The Phase 0 shape determines the **domain's special effect** (see table below).
-3. Phase 1+ defines what projectiles the domain automatically spawns in waves.
-4. Hold down cast to charge your ultimate, then release to expand.
+3. Phase 1 defines what projectiles the domain automatically spawns in waves. Domain spells are capped at **2 phases**.
+4. Hold down cast to charge your ultimate (3 seconds), then release to expand.
 
 #### Activation Cost
 
-- **1000 base mana** for the domain behavior alone.
-- Plus all shape/effect costs from other phases, multiplied by the multi-phase formula.
-- Necromancer class doubles the ultimate cost (paying 20k+ instead of 10k+).
-- Consumes your total accumulated mana pool (not regular mana).
+- **1000 base mana** for the domain behavior alone, plus the rest of the spell formula.
+- **Hard cap: 25k Total Mana** for Domain and Transformation, regardless of complexity.
+- Necromancer class doubles a Domain ultimate (paying toward that 25k cap).
+- Consumes **Total Mana** (not regular mana). Normal casts add **2× mana spent** to the Total Mana pool.
+- Charge time is **3 seconds**. You are vulnerable while charging. Every ultimate also grants +6% speed and +5% health for 10 seconds.
 
 #### What Happens Inside a Domain
 
 | Effect | Value |
 |---|---|
-| **Spell damage boost** | +30% to all your spells |
+| **Spell damage boost** | +50% to all your spells (`× 1.5`); matching domain element is `× 2.25` |
 | **Movement speed boost** | +40% player movement |
 | **Incoming damage reduction** | -35% damage taken |
 | **Platform removal** | All platforms inside the domain boundary vanish (restored on collapse) |
@@ -812,38 +884,74 @@ The shape you choose for Phase 0 determines the domain's unique mechanic:
 
 | Shape | Domain Effect |
 |---|---|
-| **Nova** | Instant shockwave on activation — damages all enemies for `power × 5`, knocks them away, 40 shockwave particles |
+| **Nova** | Instant shockwave on activation — damages all enemies for `power × 5`, knocks them away — **and** applies a per-frame slow while the domain is up |
 | **Vortex** | Continuous pull-to-center (1.5 strength/frame) for entire domain duration |
 | **Polygon** | Continuous push-from-center (1.2 strength/frame) — scatter enemies outward |
-| **Chain** | Periodic 30-frame stun on all grounded enemies inside domain |
+| **Chain** | Periodic stun on all grounded enemies (feeds stun resistance) |
 | **Wall** | Domain is 50% larger (1.5× multiplier stacks with Dominion's 1.3×) |
-| **Same** | Buff-only domain — no projectile waves, just the stat boosts |
-| **Spike** | Projectile waves erupt upward from the ground |
-| **Meteor** | Projectile waves rain from the top of the domain (+75% damage) |
-| **Ring** | Projectile waves spawn from domain center outward |
-| **Other** | Projectile waves spawn at random positions throughout the domain |
+| **Same** | Buff-only domain — no projectile waves; +30% player spell damage while active |
+| **Spike** | Projectile waves erupt upward from the ground (straight, not homing) |
+| **Meteor** | Projectile waves rain from the top of the domain (+75% damage, straight) |
+| **Ring** | Projectile waves spawn from the domain center outward |
+| **Slash** | Sub-phase projectiles spawn at the **player** instead of random domain positions |
+| **Summon** | Necromancer: raise Bestiary foes over the duration (50-point cap). Otherwise default waves |
+| **Explosion / other** | Projectile waves spawn at random positions throughout the domain |
 
 #### Domain Projectile Waves
 
-Over the 60-second duration, the domain fires **35 waves** of projectiles from Phase 1+:
-- Waves spawn every 80–130 frames (1.3–2.2 seconds apart).
+Over the 60-second duration, the domain fires waves of projectiles from Phase 1:
+- Each wave is capped at **5 projectiles**. That sub-phase cannot last more than **6 seconds**.
 - All projectiles are **forced to homing behavior** (exceptions: meteor and spike keep straight).
 - Domain projectiles **bypass diminishing returns** (no damage reduction from multi-hit).
 - Domain projectiles with `phaseThrough` effect get **no damage penalty** (normally -45%).
-- Power is capped at `10 × (1 + magicPower × 0.08) × vowPowerMult` per projectile.
+- Sub-phase power is capped at **10** (before Magic Power / vows).
 
 #### Element Matching
 
-The domain has an element (from `domainElement`, default "burn"). When your spells match the domain's element:
-- **Matching element** (e.g., burn spell in burn domain): **225% damage** (2.25×)
-- **Any spell in active domain**: **150% damage** (1.5×) minimum
+The domain has an element (`domainElement`: burn, freeze, poison, stun, or lifesteal):
+- **Any spell while the domain is up:** `× 1.5` (+50%)
+- **Matching element** (e.g. burn spell in a burn domain): `× 2.25` (+125%)
+- **Same shape domain:** extra `× 1.3` player spell damage on top of that
 
 #### Domain Collapse
 
-After 60 seconds, the domain collapses:
+After 60 seconds — or immediately if your mana hits 0 while the domain is up — the domain collapses:
 - "Domain Collapse" message appears.
 - All hidden platforms are restored.
 - All buffs end instantly.
+- Domain-vow buff points also drain mana (1 per total buff point per second) while the domain is active.
+
+---
+
+### Transformation
+
+Transformation is the other **Ultimate-only** behavior (Phase 0, key `0`). It is not a projectile pattern — it **changes you**.
+
+1. Create a **Transformation loadout** in the Loadout Manager (separate from your normal loadouts).
+2. Build an Ultimate with Phase 0 behavior = **Transformation** and point it at that loadout.
+3. On cast (25k Total Mana cap, 3s charge), you transform for **60 seconds**. Your hotbar swaps to the Transformation loadout. When it ends, your original spells return.
+
+**Loadout limits while transformed:**
+- Max power **15** (normal ultimates go to 20)
+- Max size **5.5**
+- Up to **4 phases**
+- You cannot nest another Transformation inside that loadout
+
+**Buff budget:** spend **5 points** on the Transformation spell:
+
+| Buff | Cost | Effect |
+|---|---|---|
+| Speed | 1+/pt | +15% move speed per point |
+| Element Damage | 1+/pt | +10% damage for a chosen element per point |
+| Health | 1+/pt | +15% max HP per point (restored after) |
+| Summon Power | 1+/pt | +10% summon damage per point |
+| Ranger TP | 3 | Teleport with **F** during the form |
+| Archmage Elemental | 3 | Your elemental hits gain Archmage secondary effects |
+| Explosion Immunity | 3 | No self-explosion HP loss (effects still apply) |
+| Summon Absorb | 5 | Absorb current summons on activation (+30% of their HP, +1% damage and +2% speed per summon) |
+| Elemental Immunity | 5 | Immune to burn, freeze, poison, stun for the duration |
+
+**Aura:** pick a style (pulse, orbit, spiral, nova, veil, shatter, corona, storm) and a color. Cosmetic, but it is how the form reads in a fight.
 
 ---
 
@@ -892,7 +1000,8 @@ These are assigned to a specific spell slot via `targetSlot`:
 | **Effects** | +15% effect power/duration | Burn ticks harder, freeze lasts longer, etc. |
 | **Mana Cost** | -5% mana cost for this slot | Slot-specific discount on top of global efficiency |
 | **Cooldown** | -8% cooldown for this slot | Cast this spell more frequently |
-| **Size Bonus** | +50% size (if flagged) | Binary flag — either on or off, gives flat 50% |
+| **Extra Phase** | +1 max phase per point | Raises the 3 / 5 phase caps. Does not raise Domain above 2 phases |
+| **Size Bonus** | +50% size (if flagged) | Binary flag on Power — labeled cosmetic in the editor |
 
 #### Vow Strategy
 
@@ -1022,7 +1131,7 @@ Masters of death magic. The Necromancer's summon mechanic is completely transfor
 - **Ultimate cost doubled:** Domain ultimates cost ×2 mana (20k+ instead of 10k+).
 
 **Summon Domain interaction:**
-When using Domain Expansion with a Summon shape, the domain raises **3 strong defeated enemies from the Bestiary** over the domain's duration (first at 2 seconds, then roughly every 18 seconds thereafter). Summon power at `phase power × 2.5`.
+When using Domain Expansion with a Summon shape, the domain raises Bestiary foes over the duration using a **50-point** cap (Random, preselected type, or a strong discovered foe). Raid/secret bosses still need an Ultimate domain.
 
 **Playstyle:** Farm hard, powerful enemies in the Bestiary. Build summon spells designed to raise specific opponents (e.g., dungeon boss types). The doubled ultimate cost is steep, but fighting alongside 3 boss-tier allies for 60 seconds changes fights entirely.
 
@@ -1075,42 +1184,26 @@ You can unlock a **second mage class** by assigning a **Vow Enhancement of type 
 
 ### Item Grant Quick Map
 
-Some shapes, behaviors, and effects require specific items equipped to unlock:
+**Item-gated catalog unlocks are currently disabled.** `SHAPE_ITEM_REQ`, `BEH_ITEM_REQ`, and `EFFECT_ITEM_REQ` are empty — if your Magic Control and rank are high enough, you can pick the option without wearing a specific staff or relic.
 
-| Item | Unlocks |
-|---|---|
-| **Stardust Staff** | Meteor |
-| **Void Staff** | Vortex |
-| **Blood Staff** | Lifesteal, Leech Mana |
-| **Elder Staff** | Chain |
-| **Shadow Robe** | Blind |
-| **Void Robe** | Phase Through |
-| **Celestial Robe** | Teleport, Wall |
-| **Chaos Orb** | Ricochet, Boomerang |
-| **Sun Medallion** | Cone, Ring |
-| **Moon Pendant** | Spiral, Zigzag |
-| **Crystal Crown** | Polygon, Spike |
-| **Phoenix Feather** | Heal Self, Damage Heal, Damage Store, Damage Release |
-| **Dragon Heart** | Blade, Shatter |
-| **World Seed** | Gravity Well, Ground Surge |
-| **Eye of Eternity** | Phase Fork, Mark |
-
-Items can also be unlocked through vows at a cost of **5 vow points per unlock**, bypassing the equipment requirement.
+The vow editor still has a **5 vow points per unlock** spend that would bypass an item requirement if those tables are filled again. Equipped gear still matters for **stats**, and a few items still have unique combat extras (Lightstep Blade backstep, Shadow Robe +40% Blind duration).
 
 ---
 
 ### Rank Unlocks
 
-Shapes, behaviors, and effects are gated behind your player rank:
+Shapes, behaviors, and effects are gated by **mage rank** (Novice → Grand Sorcerer). Test mode unlocks everything. Rank also raises the **max Spell Power** slider (2 / 4 / 6 / 8 / 10 / 20).
 
-| Rank | Name | Shapes Unlocked | Behaviors Unlocked |
-|---|---|---|---|
-| 0 | Novice | Missile, Orb, Ally Orb, Same | Straight, Stationary, Self Cast |
-| 1 | Apprentice | Blade, Spike, Polygon, Solidify, Slash | Lob, Underfoot |
-| 2 | Adept | Beam, Cone, Wall | Homing, Boomerang, Ground Surge |
-| 3 | Mage | Ring, Nova, Meteor | Around Self, Ground, Zigzag |
-| 4 | Archmage | Chain, Vortex, Summon | Orbit, Rain, Barrage, Teleport |
-| 5 | Grandmaster | — | Domain |
+| Rank | Name | Shapes unlocked | Behaviors unlocked | Effects unlocked |
+|---|---|---|---|---|
+| 0 | Novice | Missile, Orb, Ally Orb, Same | Straight, Stationary, Self Cast | Knockback, Random Delay, Even Delay, Reset Projectiles |
+| 1 | Apprentice | Blade, Spike, Polygon, Slash | Lob, Underfoot | Burn, Freeze, Force Jump, Solidify |
+| 2 | Adept | Beam, Cone, Wall | Homing, Boomerang, Ground Surge, **Control** | Poison, Pull, Timed Release, Damage Store |
+| 3 | Mage | Ring, Nova, Meteor, Vortex | Around Self, Ground, Zigzag, **Spiral** | Stun, Heal Self, Shield, Phase Fork, Damage Release, Damage Heal |
+| 4 | Archmage | Chain, Summon, **Explosion** | Orbit, Rain, Barrage, Teleport | Lifesteal, Blind, Shatter, Mark, Dispel |
+| 5 | Grand Sorcerer | — | **Domain**, **Transformation** | Phase Through, Gravity Well, Ricochet |
+
+Effects with no rank entry (Rotate, Away From Player, Solid Object Break, Sticky) are treated as rank 0. You still need their Magic Control threshold to cast the spell.
 
 ## AI Image Prompts
 
@@ -1308,6 +1401,33 @@ Each prompt below is designed to generate a **sprite sheet** with evenly spaced 
 
 ---
 
+#### 4b) Magma Warden
+**File target:** `images/enemies/magma-warden-sheet.png`  
+**Sheet size:** `1024×768 px` — **8 columns × 6 rows** (48 frames)
+
+**Prompt:**
+> Clean 2D pixel-art style sprite sheet for a video game mini-boss enemy.
+> 6 rows and 8 columns (48 frames total) arranged in a perfectly aligned grid with even spacing. Every cell is the same size. Transparent background. Draw only the warden. Do not draw extra spells, orbs, arrows, trails, clones, walls, or impact VFX.
+>
+> Character: Magma Warden, enormous furnace guardian, about 80×96 pixel logical size, taller and broader than a Magma Golem, dark basalt-black rocky armor plates over a glowing orange-red magma core, heavy gauntlets, a furnace grate chest with visible fire behind the bars, short horned helm fused to the shoulders, bright gold-orange eyes. Side-view facing right.
+>
+> Row 1 (8 frames) – Idle: Begin planted with both gauntlets hanging and the chest grate glowing mid-heat. Early frames swell the magma core so light leaks between the bars and the helm lifts a fraction; middle frames shift the huge weight onto one leg so the opposite hip drops and one gauntlet hangs lower; later frames exhale, the grate dims, and the stance settles. Final frame is a breathing, weight-shifted idle, not a copy of frame 1.
+>
+> Row 2 (8 frames) – Walk: Begin with the rear foot loaded. Early frames haul one massive armored foot off the ground, swing the opposite gauntlet forward, and tip the horned helm with the stride. Middle frames drive that foot down and dip the whole body from the landing, furnace light flaring on impact, then the other foot begins to lift. Later frames complete the opposite arm swing. Final frame is mid-stride or fully planted. This must look like an actual heavy walk, not a standing pose with one foot nudged forward.
+>
+> Row 3 (8 frames) – Magma Fist / Hammer: Begin in the idle stance, then raise one gauntlet high. Early frames slam that fist down so the shoulder and torso follow; middle frames recover and hoist both fists together; later frames drop both gauntlets in a hammer blow, knees bending, chest grate blowing sparks. Final frame is the bottom of the double slam, fists low, body compressed. One-fist then both-fists must progress — not a single slam pose.
+>
+> Row 4 (8 frames) – Molten Uppercut / Rush: Begin crouched and coiled. Early frames drive one gauntlet upward through the body so the warden stretches tall; middle frames the magma core flares and the helm snaps back; later frames the body pitches forward into a charging lean, rear foot leaving the ground. Final frame is fully committed to the rush or the peak of the uppercut, not a still punch.
+>
+> Row 5 (8 frames) – Magma Core: Begin upright, then split the chest grate so the inner fire shows. Early frames the plates peel and the core brightens to white-gold; middle frames the warden slumps as if overcharged and vulnerable, arms hanging; later frames the grate slams shut and a radial burst of heat is implied only on the body — no extra VFX objects. Final frame is resealed and braced. Open, vulnerable slump, reseal — not one opened still.
+>
+> Row 6 (8 frames) – Defeat: Begin standing, then let the furnace die from the helm downward. Early frames sag the shoulders and dim the grate; middle frames buckle the legs and fold the gauntlets inward; later frames collapse the basalt plates into a cooling heap with a last ember in the chest. Final frame is a dark, slumped pile, play-once death. Progressive collapse only.
+>
+> Style: clean digital pixel-art sprite sheet, dark fantasy game style, consistent character proportions across every frame, side-view facing right, clear readable silhouette, evenly spaced animation frames, no cropping, no overlapping frames.
+> END OF PROMPT;
+
+---
+
 #### 5) Fire Sprite
 **File target:** `images/enemies/fire-sprite-sheet.png`  
 **Sheet size:** `1024×768 px` — **8 columns × 6 rows** (48 frames)
@@ -1335,6 +1455,118 @@ Each prompt below is designed to generate a **sprite sheet** with evenly spaced 
 
 ---
 
+### FIRE DUNGEON — ADVANCED ROSTER
+
+These four teach heat, mana denial, remains, and vulnerability timing. Same **8×6** action-only rules as the other fire regulars. File targets live under `images/newEnemies/`.
+
+#### 5b) Cinder Beetle
+**File target:** `images/newEnemies/cinderBeetle.png`  
+**Sheet size:** `1024×768 px` — **8 columns × 6 rows** (48 frames)
+
+**Prompt:**
+> Clean 2D pixel-art style sprite sheet for a video game enemy.
+> 6 rows and 8 columns (48 frames total) arranged in a perfectly aligned grid with even spacing. Every cell is the same size. Transparent background. Draw only the beetle. Do not draw extra spells, orbs, heat rings, eruptions, or impact VFX.
+>
+> Character: Cinder Beetle, heavy volcanic scarab, about 40×28 pixel logical size, dark charcoal-brown armored shell with glowing orange seam-cracks, six thick legs, a blunt horned head, ember-orange eyes. Defensive dark fantasy enemy. Side-view facing right.
+>
+> Row 1 (8 frames) – Idle: Begin crouched with the shell slightly open and the horned head peeking. Early frames the orange seams pulse brighter and the shell settles; middle frames a weight shift onto the rear legs; later frames the seams dim. Final frame is mid-pulse, not a copy of frame 1.
+>
+> Row 2 (8 frames) – Walk: Begin with the rear legs loaded. Early frames a slow armored step, shell rocking; middle frames the mid-legs pass; later frames the next plant. Final frame is mid-stride. Real walk cycle, not a still beetle with one leg nudged.
+>
+> Row 3 (8 frames) – Curl / Shell: Begin open, then fold the legs and tuck the head as the shell closes over the body. Early frames complete the ball; later frames the seams glow hotter as if storing heat. Final frame is a tight glowing ball. Progressive curl — not eight identical shells.
+>
+> Row 4 (8 frames) – Roll / Open back: Begin as a ball, then unroll into a rolling charge, legs cycling. Later frames the shell opens along the back to show several glowing plates. Final frame is the exposed-back stance. Roll then open — body only, no fire burst drawn.
+>
+> Row 5 (8 frames) – Recoil: Begin standing, then the shell knocks backward. Early frames the legs splay; later frames a shaky brace. Final frame is a rearward hit-stun. Motion through the row.
+>
+> Row 6 (8 frames) – Defeat: Begin upright, then the seams die. Early frames the legs buckle; middle frames the shell cracks; later frames it collapses into a cooling heap. Final frame is a dark broken carapace, play-once death.
+>
+> Style: clean digital pixel-art sprite sheet, dark fantasy game style, consistent character proportions across every frame, side-view facing right, clear readable silhouette, evenly spaced animation frames, no cropping, no overlapping frames.
+> END OF PROMPT;
+
+---
+
+#### 5c) Furnace Leech
+**File target:** `images/newEnemies/furnaceLeech.png`  
+**Sheet size:** `1024×768 px` — **8 columns × 6 rows** (48 frames)
+
+**Prompt:**
+> Clean 2D pixel-art style sprite sheet for a video game enemy.
+> 6 rows and 8 columns (48 frames total) arranged in a perfectly aligned grid with even spacing. Every cell is the same size. Transparent background. Draw only the leech. Do not draw extra spells, mana orbs, lava pools, or split copies.
+>
+> Character: Furnace Leech, small worm-like lava parasite, about 16×12 pixel logical size, dark crimson segmented body, a sucker-mouth ringed with tiny heat-teeth, a glowing orange gut, no legs — it undulates and can lift the front half. Hard-to-spot dark fantasy enemy. Side-view facing right.
+>
+> Row 1 (8 frames) – Idle: Begin in a shallow S with the sucker barely off the ground. Early frames the gut pulses and the mouth flexes; middle frames the front half lifts a pixel; later frames it settles. Living coil, not eight stills.
+>
+> Row 2 (8 frames) – Slither / Hover: Begin stretching forward. Early frames a traveling wave; middle frames the body lifts as if swimming through heat; later frames the tail follows. Final frame is mid-travel with a different wave phase than frame 1.
+>
+> Row 3 (8 frames) – Latch: Begin reared, then lunge the sucker-mouth forward and clamp. Early frames the mouth opens wide; later frames it locks onto empty air as if attached to something off-frame. Final frame is the clamped latch pose. No extra host drawn.
+>
+> Row 4 (8 frames) – Swell / Split pose: Begin feeding, gut bright. Early frames the body fattens; later frames it pinches in the middle as if about to divide — still one creature. Final frame is the swollen pinch. Do not draw a second leech.
+>
+> Row 5 (8 frames) – Recoil: Begin latched, then snap backward, mouth peeling off. Later frames a bunched flinch. Travel through the knock-off.
+>
+> Row 6 (8 frames) – Defeat: Begin swollen, then the gut dims. Early frames the segments sag; later frames it crumples into a tiny cinder. Play-once death.
+>
+> Style: clean digital pixel-art sprite sheet, dark fantasy game style, consistent character proportions across every frame, side-view facing right, clear readable silhouette, evenly spaced animation frames, no cropping, no overlapping frames.
+> END OF PROMPT;
+
+---
+
+#### 5d) Ash Revenant
+**File target:** `images/newEnemies/ashRevenant.png`  
+**Sheet size:** `1024×768 px` — **8 columns × 6 rows** (48 frames)
+
+**Prompt:**
+> Clean 2D pixel-art style sprite sheet for a video game enemy.
+> 6 rows and 8 columns (48 frames total) arranged in a perfectly aligned grid with even spacing. Every cell is the same size. Transparent background. Draw only this one revenant. Do not draw extra ash piles, clones, embers as separate objects, or weapon trails.
+>
+> Character: Ash Revenant, humanoid compacted volcanic ash, about 28×46 pixel logical size, gray-brown crumbling body with brighter cinder veins, a featureless ashen face with two dim orange eye-holes, a heavy ash-club that is part of its right arm (the weapon is the body, not a separate VFX). Persistent dark fantasy enemy. Side-view facing right.
+>
+> Row 1 (8 frames) – Idle: Begin standing with the ash-club hanging, crumbs drifting at the hem. Early frames the cinder veins pulse and a shoulder drops grit; middle frames a weight shift; later frames the grit settles. Living idle.
+>
+> Row 2 (8 frames) – Walk: Begin with the rear foot crumbling as it lifts. Early frames a grinding step; middle frames plant and a puff of ash only at the boot; later frames the opposite step. Real walk cycle.
+>
+> Row 3 (8 frames) – Strike / Break: Begin raising the ash-club. Early frames the swing commits; later frames the club-arm visibly breaks apart into crumbling ash still attached to the silhouette (no separate pile). Final frame is the follow-through with a shortened, crumbling arm.
+>
+> Row 4 (8 frames) – Step / Reform: Begin throwing the upper body forward as a loose ash cloud that is still the same character. Later frames the body reconstitutes a step ahead, eyes lighting. Final frame is the reformed stance. One body only — no second ghost.
+>
+> Row 5 (8 frames) – Recoil / Collapse: Begin standing, then the torso caves. Early frames the legs crumble; later frames it slumps into a low heap that still reads as the same creature. Final frame is the collapsed heap.
+>
+> Row 6 (8 frames) – Defeat: Begin from the heap, then shrink further. Early frames the eye-holes wink out; later frames only a tiny ember-shaped remnant remains. Play-once death, last frame a dying spark on the body, not a separate object field.
+>
+> Style: clean digital pixel-art sprite sheet, dark fantasy game style, consistent character proportions across every frame, side-view facing right, clear readable silhouette, evenly spaced animation frames, no cropping, no overlapping frames.
+> END OF PROMPT;
+
+---
+
+#### 5e) Magma Harvester
+**File target:** `images/newEnemies/magmaHarvester.png`  
+**Sheet size:** `1024×768 px` — **8 columns × 6 rows** (48 frames)
+
+**Prompt:**
+> Clean 2D pixel-art style sprite sheet for a video game enemy.
+> 6 rows and 8 columns (48 frames total) arranged in a perfectly aligned grid with even spacing. Every cell is the same size. Transparent background. Draw only the harvester. Do not draw extra beams, heat auras as separate rings, or collected fireballs.
+>
+> Character: Magma Harvester, bulky miner-golem, about 46×52 pixel logical size, dark basalt body, a huge glowing volcanic core set in the chest like a lantern, a massive two-handed slag-scythe that stays on the body, ember-orange eyes. Slow escalating dark fantasy enemy. Side-view facing right.
+>
+> Row 1 (8 frames) – Idle: Begin planted, scythe butt on the ground, core dim. Early frames the core brightens a notch and the chest lifts; middle frames a weight shift; later frames the core dims. Living idle with a changing core.
+>
+> Row 2 (8 frames) – Walk: Begin with the rear foot loaded, scythe used as a walking staff. Early frames a heavy step; middle frames plant and dip; later frames the opposite step. Real heavy walk.
+>
+> Row 3 (8 frames) – Sweep: Begin winding the scythe behind the hip. Early frames the blade rises; later frames a huge slow arc across the front, torso rotating, core flaring. Final frame is the end of the sweep. No slash trail.
+>
+> Row 4 (8 frames) – Discharge / Overheat: Begin leaning the core forward. Early frames the chest opens wider and the core is brightest; later frames the whole body seizes, arms hanging, core unstable and oversized. Final frame is the vulnerable overheat slump. Body language only — no beam drawn.
+>
+> Row 5 (8 frames) – Recoil: Begin standing, then the core knocks the torso back. Later frames a brace. Travel through the hit.
+>
+> Row 6 (8 frames) – Defeat: Begin overheated, then the core shrinks and darkens. Early frames the scythe drops; later frames the body crumples around a dying coal. Play-once death.
+>
+> Style: clean digital pixel-art sprite sheet, dark fantasy game style, consistent character proportions across every frame, side-view facing right, clear readable silhouette, evenly spaced animation frames, no cropping, no overlapping frames.
+> END OF PROMPT;
+
+---
+
 ### FIRE DUNGEON BOSS
 
 #### 6) Ignaroth, The Inferno Dragon
@@ -1355,6 +1587,50 @@ Each prompt below is designed to generate a **sprite sheet** with evenly spaced 
 > Row 3 (4 frames) – Attack animation: Begin with the neck coiled back and the jaws nearly shut. Early frames rear the horned head, spread both wings fully, and raise the spiked tail; later frames thrust the neck forward and unleash a massive cone of fire breath from the open jaw, teeth bared, eyes blazing, wings still wide. Final frame is the breath fully projected, head extended, body committed to the attack. Head-back then breath-forward must progress across the four frames — not one frozen roar.
 >
 > Row 4 (4 frames) – Defeat animation: Begin upright with wings still spread, then crumple. Early frames fold the wings inward and the neck droops; later frames crash the body toward the ground, scales cracking with escaping lava light along the belly and joints. Final frame is a grounded, collapsing heap fading toward embers, play-once death. Progressive crash — not four copies of a dead dragon.
+>
+> Style: clean digital pixel-art sprite sheet, epic dark fantasy boss style, consistent character proportions across every frame, side-view facing right, clear readable silhouette, evenly spaced animation frames, no cropping, no overlapping frames.
+> END OF PROMPT;
+
+#### 6b) Ignaroth — Ground Assault Poses
+**File target:** `images/enemies/fire-dragon-assault-sheet.png`  
+**Sheet size:** `2048×2048 px` (large boss)
+
+**Prompt:**
+> Clean 2D pixel-art style sprite sheet for a video game boss enemy.
+> 4 rows and 6 columns (16 frames total) arranged in a perfectly aligned grid with even spacing.
+> Transparent background. Draw only this one dragon. Do not draw extra spells, orbs, trails, clones, walls, or impact VFX — fire that is part of the body (throat glow, jaw flame) is allowed.
+>
+> Character: Ignaroth, The Inferno Dragon — massive fire-breathing dragon boss, about 320×240 pixel logical size. Deep crimson-red scaled body with an orange-red belly covered in horizontal scale lines, enormous bat-like dark-red wings with visible membrane vein details, long muscular neck leading to a fierce horned head with two pairs of curved dark-brown horns, glowing orange-yellow slit-pupil eyes, wide jaw with rows of pale-yellow teeth, thick spiked tail ending in a pointed tail blade, four powerful clawed legs, bony spines down the neck. Same character as the main Ignaroth sheet. Epic dark fantasy dungeon boss.
+>
+> Row 1 (6 frames) – Inferno Breath charge: Begin planted on all four claws, wings half-folded, neck coiled back, jaws nearly shut. Early frames the throat and chest swell with a bright orange-white furnace glow, the head pulls farther back, and the wings brace. Later frames the jaws crack open and the glow reaches the teeth. Final frame is the last instant before breath, neck fully coiled, throat blinding, feet dug in. Progressive charge — not four copies of a roar.
+>
+> Row 2 (6 frames) – Infernal Dive crash: Begin high in the cell with wings tucked into a dive, head aimed down-right. Early frames the body stretches into a spear, tail streaming; later frames the claws reach the ground line and the wings snap open to kill speed. Final frame is the impact crouch, chest low, wings blown wide, stone-crush pose. Must read as a dive into a slam, not a hover.
+>
+> Row 3 (6 frames) – Dragon's Tail sweep: Begin grounded with the spiked tail pulled far behind and slightly up, body coiled. Early frames the hips rotate and the tail blade starts a wide horizontal arc; later frames the tail crosses the front of the body. Final frame is the full follow-through, tail extended past the head, torso twisted. Tail must travel across the four frames.
+>
+> Row 4 (6 frames) – Magma Roar: Begin rearing, front claws lifting, head tilting up. Early frames the chest expands and the jaw opens; later frames the neck stretches skyward and the throat glow floods the horned head. Final frame is a skyward roar, wings spreading, no separate lava sprites beyond body glow. Progressive rear-and-roar, not four stills.
+>
+> Style: clean digital pixel-art sprite sheet, epic dark fantasy boss style, consistent character proportions across every frame, side-view facing right, clear readable silhouette, evenly spaced animation frames, no cropping, no overlapping frames.
+> END OF PROMPT;
+
+#### 6c) Ignaroth — Aerial Assault Poses
+**File target:** `images/enemies/fire-dragon-aerial-sheet.png`  
+**Sheet size:** `2048×2048 px` (large boss)
+
+**Prompt:**
+> Clean 2D pixel-art style sprite sheet for a video game boss enemy.
+> 4 rows and 4 columns (16 frames total) arranged in a perfectly aligned grid with even spacing.
+> Transparent background. Draw only this one dragon. Do not draw extra spells, orbs, trails, clones, walls, or impact VFX — fire that is part of the body is allowed.
+>
+> Character: Ignaroth, The Inferno Dragon — massive fire-breathing dragon boss, about 320×240 pixel logical size. Deep crimson-red scaled body with an orange-red belly, enormous bat-like dark-red wings with membrane veins, long muscular neck, fierce horned head, glowing slit-pupil eyes, spiked tail blade, four clawed legs tucked or trailing in flight. Same character as the main Ignaroth sheet. Epic dark fantasy dungeon boss.
+>
+> Row 1 (4 frames) – Scorching Flight: Begin in a banking glide, one wing high, tail trailing. Early frames a strong downstroke drives the body along the cell; later frames the opposite wing beat and the tail lashes. Final frame is mid-bank the other way so the row loops as a perimeter flight. Must be a real wing-beat circuit, not a posed hover.
+>
+> Row 2 (4 frames) – Flame Pursuit pass: Begin tucked, eyes blazing, body a straight spear aimed right. Early frames the wings snap into a power stroke and the neck juts; later frames the body blurs forward with legs tucked. Final frame is the exit of the pass, wings swept back, head still locked forward. Aggressive fly-by, not a gentle glide.
+>
+> Row 3 (4 frames) – Infernal Meteor call: Begin climbing, wings wide, head lifting. Early frames the dragon rises in the cell and the throat-chest glow climbs; later frames the wings cup as if holding a weight overhead. Final frame is the highest pose, jaws open upward, body a living furnace. No separate meteor ball — only the dragon's skyward call.
+>
+> Row 4 (4 frames) – Wing Tempest: Begin with both wings gathered close. Early frames the wings explode outward to full span; later frames a violent downbeat folds the membranes and the body recoils. Final frame is the end of the beat, wings thrown forward, chest compressed. Must read as a shockwave wing-clap, not four open-wing stills.
 >
 > Style: clean digital pixel-art sprite sheet, epic dark fantasy boss style, consistent character proportions across every frame, side-view facing right, clear readable silhouette, evenly spaced animation frames, no cropping, no overlapping frames.
 > END OF PROMPT;
@@ -1498,26 +1774,235 @@ Each prompt below is designed to generate a **sprite sheet** with evenly spaced 
 
 ---
 
+#### 11b) Frostbound Knight — Sheet A (body, walk, guard, slash)
+**File target:** `images/newEnemies/frostboundKnightA.png`  
+**Sheet size:** `1024×768 px` — **8 columns × 6 rows** (48 frames)
+
+**Prompt:**
+> Clean 2D pixel-art style sprite sheet for a video game mini-boss enemy.
+> 6 rows and 8 columns (48 frames total) arranged in a perfectly aligned grid with even spacing. Every cell is the same size. Transparent background. Draw only the knight. Do not draw extra spells, orbs, ice shards, beams, clones, walls, or impact VFX. Express the body action only — a raised sword, not a projectile leaving the cell.
+>
+> Character: Frostbound Knight, tall armored ice warrior, about 96×128 pixel logical size. Dark navy-blue plate with pale frost rime on the edges, a closed greathelm with a thin cyan visor slit, a tattered pale cloak frozen stiff at the hem, a long two-handed ice-steel greatsword kept on the body (never a flying slash). Gauntlets and greaves crusted with hoarfrost. Side-view facing right.
+>
+> Row 1 (8 frames) – Idle: Begin planted, both hands on the lowered greatsword, cloak still. Early frames the visor brightens a notch and the weight eases onto the front foot; middle frames the cloak settles and the helm tips a pixel; later frames the weight returns. Final frame is a living idle, not a copy of frame 1.
+>
+> Row 2 (8 frames) – Walk: Begin with the rear foot loaded. Early frames lift one armored boot, the cloak trailing; middle frames plant that boot with a dip of the whole torso, then the other boot rises; later frames complete the opposite step. Final frame is mid-stride. This must be a real walk, not a standing pose with one foot nudged.
+>
+> Row 3 (8 frames) – Guard / Ready: Begin idle, then raise the greatsword across the body into a high guard. Early frames the blade reaches the shoulder; middle frames the knight squares up, knees bent; later frames the guard holds with a tiny settle. Final frame is the ready stance, sword still on the body.
+>
+> Row 4 (8 frames) – Greatslash: Begin in the guard, then coil the torso and hoist the sword overhead. Early frames the blade peaks behind the helm; later frames the whole body unwinds into a wide two-handed sweep, cloak flaring, no slash trail or crescent drawn. Final frame is the end of the swing, sword low, body twisted.
+>
+> Row 5 (8 frames) – Recover / Open: Begin at the end of a swing, then the knight slumps as the frost-lock on the joints eases. Early frames the sword tip drops; middle frames the helm dips and the cloak hangs; later frames a shaky reset toward idle. Final frame is an open, punishable slump — not eight copies of a kneel.
+>
+> Row 6 (8 frames) – Defeat: Begin standing, then frost leaves the armor from the helm down. Early frames the visor goes dark and the sword arm sags; middle frames one knee buckles; later frames the knight collapses onto the plate, cloak pooling. Final frame is a still fallen heap, play-once death. Progressive collapse only.
+>
+> Style: clean digital pixel-art sprite sheet, dark fantasy game style, consistent character proportions across every frame, side-view facing right, clear readable silhouette, evenly spaced animation frames, no cropping, no overlapping frames.
+> END OF PROMPT;
+
+---
+
+#### 11c) Frostbound Knight — Sheet B (thrust, vanish-pose, plant, raise, kneel)
+**File target:** `images/newEnemies/frostboundKnightB.png`  
+**Sheet size:** `1024×768 px` — **8 columns × 6 rows** (48 frames)
+
+**Prompt:**
+> Clean 2D pixel-art style sprite sheet for a video game mini-boss enemy.
+> 6 rows and 8 columns (48 frames total) arranged in a perfectly aligned grid with even spacing. Every cell is the same size. Transparent background. Draw only the knight. Do not draw extra spells, orbs, ice shards, beams, clones, walls, or impact VFX. The sheet is body language only — a pointed thrust, not a flying lance; a crouch as if vanishing, not a teleport afterimage.
+>
+> Character: the same Frostbound Knight as sheet A. Dark navy-blue plate, pale frost rime, closed greathelm with a cyan visor slit, frozen cloak, two-handed ice-steel greatsword on the body. Side-view facing right. Keep proportions identical to sheet A.
+>
+> Row 1 (8 frames) – Thrust / March: Begin in a compact stance, then drive the greatsword straight forward from the hip. Early frames the arms extend and the front foot steps; middle frames the body is fully committed, cloak streaming back; later frames the step plants and the thrust holds. Final frame is the extended lunge. No projectile.
+>
+> Row 2 (8 frames) – Counter / Parry: Begin square, then snap the sword across the body into a hard parry. Early frames the blade crosses the helm; middle frames the knight recoils a half-step as if catching a blow; later frames the sword resets to a short ready. Final frame is the recovered parry stance.
+>
+> Row 3 (8 frames) – Vanish crouch: Begin standing, then fold into a tight crouch as if sinking into snow. Early frames the cloak wraps the plate; middle frames the body is lowest, almost a silhouette; later frames the knight starts to rise or stay coiled. Final frame is the deepest crouch. Do not draw a second ghost body.
+>
+> Row 4 (8 frames) – Raise / Call: Begin idle, then hoist the greatsword vertical in both hands. Early frames the blade climbs past the helm; middle frames the knight is fully upright, visor flaring; later frames a slight lean as if holding a heavy pose. Final frame is the sword-high call. No orbiting shards or rings.
+>
+> Row 5 (8 frames) – Plant / Kneel: Begin upright, then drive the sword tip toward the ground and kneel behind it. Early frames the blade descends; middle frames one knee hits and both hands stay on the hilt; later frames the cloak settles over the kneel. Final frame is the planted kneel. The sword stays in the cell as a held weapon, not a spawned pillar.
+>
+> Row 6 (8 frames) – Defeat: Same progressive collapse as sheet A row 6 — visor dark, sword arm sags, knee buckles, fallen heap. Play-once death. Keep it consistent with sheet A so either sheet can end the fight.
+>
+> Style: clean digital pixel-art sprite sheet, dark fantasy game style, consistent character proportions across every frame, side-view facing right, clear readable silhouette, evenly spaced animation frames, no cropping, no overlapping frames.
+> END OF PROMPT;
+
+---
+
+### ICE DUNGEON — ADVANCED ROSTER
+
+These four teach parry timing, momentum, attack angles, and untrustworthy information. Same **8×6** action-only rules. File targets live under `images/newEnemies/`.
+
+#### 11d) Frost Mantis
+**File target:** `images/newEnemies/frostMantis.png`  
+**Sheet size:** `1024×768 px` — **8 columns × 6 rows** (48 frames)
+
+**Prompt:**
+> Clean 2D pixel-art style sprite sheet for a video game enemy.
+> 6 rows and 8 columns (48 frames total) arranged in a perfectly aligned grid with even spacing. Every cell is the same size. Transparent background. Draw only the mantis. Do not draw extra spells, ice crystals, frozen projectiles, or impact VFX.
+>
+> Character: Frost Mantis, tall ice-insect predator, about 36×48 pixel logical size, pale cyan-white exoskeleton with translucent frost along the scythe-arms, a triangular head with two black compound eyes, long rear legs for sidesteps, a thin abdomen. Counterattack dark fantasy enemy. Side-view facing right.
+>
+> Row 1 (8 frames) – Idle: Begin reared on the rear legs, scythe-arms folded. Early frames the head ticks and frost along the blades brightens; middle frames a weight shift; later frames the arms settle. Living watchful idle.
+>
+> Row 2 (8 frames) – Ice Step: Begin planted, then snap sideways in a short burst — still in-cell, a sidestep not a teleport. Early frames the rear legs coil; middle frames the body is mid-slide with one foot leaving a faint frost print on the same sprite (print is on the foot, not a trail of objects); later frames the next plant. Real sidestep cycle.
+>
+> Row 3 (8 frames) – Frozen Parry: Begin idle, then raise both scythe-arms into a high crossed guard. Early frames the blades meet; later frames the pose holds as if catching something, frost brightening on the arms. Final frame is the full parry guard. No captured projectile drawn.
+>
+> Row 4 (8 frames) – Frostblade: Begin coiled, then three fast slashes as a single row: first two cuts at the same height, the third a longer lunge slightly ahead. Early frames slash one; middle frames slash two; later frames the predictive third. Final frame is the end of slash three. No slash trails.
+>
+> Row 5 (8 frames) – Recoil / Counter stance: Begin in the parry, then either a hit-flinch or a still, baiting stop. Early frames the body freezes completely still; later frames a tiny settle. Final frame is the motionless winter-counter pose.
+>
+> Row 6 (8 frames) – Defeat: Begin upright, then the frost leaves the blades. Early frames the scythe-arms droop; later frames the legs buckle and it collapses into brittle ice. Play-once death.
+>
+> Style: clean digital pixel-art sprite sheet, dark fantasy game style, consistent character proportions across every frame, side-view facing right, clear readable silhouette, evenly spaced animation frames, no cropping, no overlapping frames.
+> END OF PROMPT;
+
+---
+
+#### 11e) Glacier Eel
+**File target:** `images/newEnemies/glacierEel.png`  
+**Sheet size:** `1024×768 px` — **8 columns × 6 rows** (48 frames)
+
+**Prompt:**
+> Clean 2D pixel-art style sprite sheet for a video game enemy.
+> 6 rows and 8 columns (48 frames total) arranged in a perfectly aligned grid with even spacing. Every cell is the same size. Transparent background. Draw only the eel. Do not draw extra ice sheets, water streams as separate objects, or shattered-floor VFX.
+>
+> Character: Glacier Eel, long surface-skating ice serpent, about 56×16 pixel logical size, pale blue-white segmented body, a blunt wedge head with two pale eyes, a finned tail, no legs — it slides along the ground. Movement-denial dark fantasy enemy. Side-view facing right.
+>
+> Row 1 (8 frames) – Idle: Begin in a shallow S on the ground. Early frames a traveling wave; later frames the head lifts a pixel. Living coil.
+>
+> Row 2 (8 frames) – Slither: Begin stretching forward. Early frames a traveling wave along the body; middle frames the mid-body passes; later frames the tail follows. Real slither cycle, not a still S nudged one pixel.
+>
+> Row 3 (8 frames) – Snap Turn: Begin slithering right, then the whole body stiffens into a rigid straight line pointing a new direction (still facing right in the cell, but the body angles as if about to reverse). Early frames freeze mid-curve; later frames the rigid line. Final frame is the frozen snap pose.
+>
+> Row 4 (8 frames) – Loop / Charge: Begin circling (body curved as if going around a point), then straighten into a low charge with the head down. Later frames the tail lifts as if breaking ice behind it — ice is implied by body language, not drawn as a floor. Final frame is the charge.
+>
+> Row 5 (8 frames) – Recoil: Begin charging, then a hit knocks a kink through the body. Later frames a bunched flinch. Travel through the hit.
+>
+> Row 6 (8 frames) – Defeat: Begin long, then the segments dull. Early frames the wave dies; later frames it crumples into a short frozen heap. Play-once death.
+>
+> Style: clean digital pixel-art sprite sheet, dark fantasy game style, consistent character proportions across every frame, side-view facing right, clear readable silhouette, evenly spaced animation frames, no cropping, no overlapping frames.
+> END OF PROMPT;
+
+---
+
+#### 11f) Crystal Scarab
+**File target:** `images/newEnemies/crystalScarab.png`  
+**Sheet size:** `1024×768 px` — **8 columns × 6 rows** (48 frames)
+
+**Prompt:**
+> Clean 2D pixel-art style sprite sheet for a video game enemy.
+> 6 rows and 8 columns (48 frames total) arranged in a perfectly aligned grid with even spacing. Every cell is the same size. Transparent background. Draw only the scarab. Do not draw extra crystal shards as projectiles, armor plates flying off as objects, or explosion VFX.
+>
+> Character: Crystal Scarab, ice-crystal beetle, about 38×26 pixel logical size, dark indigo body under angular translucent cyan plates that read as directional armor (plates sit on the body), six crystal-tipped legs, a wedge head. Angle-defense dark fantasy enemy. Side-view facing right.
+>
+> Row 1 (8 frames) – Idle: Begin crouched, plates catching light on one side. Early frames a plate glints and the body settles; later frames the glint moves to another plate. Living idle.
+>
+> Row 2 (8 frames) – Walk: Begin with the rear legs loaded. Early frames a crystal-legged step; later frames the opposite plant. Real walk cycle.
+>
+> Row 3 (8 frames) – Carapace: Begin unarmored-looking, then grow angular plates over different faces of the body (front, top, rear) as part of the same beetle. Later frames one side is clearly more covered than the other. Final frame is the fully plated stance. Plates stay on the body — no floating shards.
+>
+> Row 4 (8 frames) – Charge / Crack: Begin coiled, then a straight-line charge, legs cycling. Later frames the front plates crack (cracks drawn on the plates) as if it hit a wall. Final frame is the cracked-charge pose.
+>
+> Row 5 (8 frames) – Recoil: Begin plated, then a hit knocks it back and another plate cracks. Later frames a brace. Travel through the hit.
+>
+> Row 6 (8 frames) – Defeat: Begin plated, then the remaining plates go dull and the body collapses. Early frames the legs buckle; later frames a dark heap with a few cracked crystals still on the corpse. Play-once death. Do not draw plates exploding outward as separate objects.
+>
+> Style: clean digital pixel-art sprite sheet, dark fantasy game style, consistent character proportions across every frame, side-view facing right, clear readable silhouette, evenly spaced animation frames, no cropping, no overlapping frames.
+> END OF PROMPT;
+
+---
+
+#### 11g) Snowbound Mimic
+**File target:** `images/newEnemies/snowboundMimic.png`  
+**Sheet size:** `1024×768 px` — **8 columns × 6 rows** (48 frames)
+
+**Prompt:**
+> Clean 2D pixel-art style sprite sheet for a video game enemy.
+> 6 rows and 8 columns (48 frames total) arranged in a perfectly aligned grid with even spacing. Every cell is the same size. Transparent background. Draw only this one mimic. Do not draw extra crystals, fake copies, snow clouds as separate objects, or warning rings.
+>
+> Character: Snowbound Mimic, ice-creature that disguises as a crystal then reveals a hunched predator, about 28×36 pixel logical size when revealed. Disguised form is a faceted ice crystal with a hidden slit-eye; revealed form is a pale hunched body with crystal-shard shoulders and two clawed arms. Environmental-copy dark fantasy enemy. Side-view facing right.
+>
+> Row 1 (8 frames) – False crystal idle: Begin as a convincing ice crystal, nearly still. Early frames a faint slit-eye opens a pixel; later frames a tiny lean as if the crystal is breathing. Living disguise, not eight identical gems.
+>
+> Row 2 (8 frames) – Reveal / Walk: Begin as the crystal, then the form splits into the hunched predator and takes a step. Early frames the crystal cracks into limbs; later frames a real walk. Final frame is mid-stride in creature form.
+>
+> Row 3 (8 frames) – Feint: Begin in creature form, then rear up as if about to slam, hold the fake windup, then drop and sidestep. Early frames the big tell; later frames the cancel and reposition. Final frame is the sidestep. No avalanche VFX.
+>
+> Row 4 (8 frames) – Echo pose: Begin standing, then a slight double-outline on the same body (a thicker icy silhouette) as if making a copy of itself — still one creature in the cell. Later frames it snaps back to a single outline. Do not draw a second full body in another part of the cell.
+>
+> Row 5 (8 frames) – Recoil: Begin revealed, then a hit knocks it toward crystal-form again. Later frames a flinch. Travel through the hit.
+>
+> Row 6 (8 frames) – Defeat: Begin revealed, then it tries to freeze back into a crystal and fails. Early frames the limbs lock; later frames it shatters into a small broken-crystal heap. Play-once death.
+>
+> Style: clean digital pixel-art sprite sheet, dark fantasy game style, consistent character proportions across every frame, side-view facing right, clear readable silhouette, evenly spaced animation frames, no cropping, no overlapping frames.
+> END OF PROMPT;
+
+---
+
 ### ICE DUNGEON BOSS
 
-#### 12) Kryonax, The Frozen Colossus
-**File target:** `images/enemies/frost-colossus-sheet.png`  
-**Sheet size:** `2048×2048 px` (large boss)
+Kryonax is a **walking glacier / ancient ice titan**, not a floating crystal, not a giant Frostbound Knight, and not a blue humanoid in armor. He is grounded, enormous, and geological. Save the three sheets as `images/newEnemies/frostColossusA.png`, `frostColossusB.png`, and `frostColossusC.png`. Draw **only the body**. Do not draw shockwaves, projectiles, meteor chunks, ice walls, or impact VFX as separate objects — glow inside the ice is allowed.
+
+#### 12) Kryonax — Presence
+**File target:** `images/newEnemies/frostColossusA.png`  
+**Sheet size:** `2048×2048 px` (large boss) — **4 rows × 6 columns** (24 frames)
 
 **Prompt:**
 > Clean 2D pixel-art style sprite sheet for a video game boss enemy.
-> 4 rows and 4 columns (16 frames total) arranged in a perfectly aligned grid with even spacing.
-> Transparent background.
+> 4 rows and 6 columns (24 frames total) arranged in a perfectly aligned grid with even spacing. Every cell is the same size. Transparent background. Draw only this one titan. Do not draw extra spells, orbs, trails, clones, walls, shockwaves, or impact VFX. Snow and frost falling off his body is allowed.
 >
-> Character: Kryonax, The Frozen Colossus — massive crystalline ice titan boss, about 360×280 pixel logical size. Dark navy-blue angular crystalline body, torso is a faceted hexagonal ice shape with glowing icy-blue vein lines running vertically, bright diamond-shaped ice core crystal embedded in the chest glowing intense cyan-blue, massive angular shoulder crystals (double-layered ice shards jutting upward on each shoulder), long powerful arms ending in three ice-claw fingers, angular crystalline head with a pointed crown shape and a glowing blue face plate with two bright cyan slit eyes and a V-shaped visor, lower body dissolves into swirling ice mist rather than distinct legs, floating above the ground. Epic dark fantasy dungeon boss.
+> Character: Kryonax, The Frozen Colossus — an enormous walking glacier, about 400×340 pixel logical size. Not a humanoid knight and not a generic blue giant. Gigantic irregular body of ancient packed ice and dark stone, massive shoulders like ice cliffs, thick pillar legs of layered glacier ice, huge ice-covered arms ending in massive blunt hands (not claws, not a sword). Frozen formations grow from his back like a ridge of broken glacier. Sections of ice are semi-transparent and show dark ancient material underneath. Deep blue-white cold light glows through cracks. Ancient frozen markings are carved into the ice. Snow constantly sheds from his body. Head is a heavy glacial crag with a deep brow, two narrow cyan lights for eyes, no crown, no visor, no armor plates. He looks like a mountain that learned to walk after centuries frozen. Epic dark fantasy dungeon boss. Side-view facing right.
 >
-> Row 1 (4 frames) – Idle animation: Begin hovering with the ice mist gathered close under the torso and the diamond chest core at medium glow. Early frames the whole crystalline body rises a little, the shoulder shards catch a brighter refraction, and the mist swirls wider; later frames the body sinks, the core pulses dimmer, and the clawed arms drift. Final frame is mid-hover at a different height than frame 1, mist still moving. This must be a rise-and-fall idle with a pulsing core, not four identical stills.
+> Row 1 (6 frames) – Idle: Begin planted, weight in both pillar legs, frost drifting off the back ridge. Early frames the huge torso settles and the chest cracks pulse brighter; middle frames shift weight onto the front leg so one shoulder and one hanging hand drop; later frames the weight eases back and the inner glow dims a notch. Final frame is mid-settle, a different pose than frame 1. Living glacier idle — not six identical stills.
 >
-> Row 2 (4 frames) – Float/Move animation: Begin in the hover, then lean the crowned head and hexagonal torso forward. Early frames the ice mist streams behind and both arms lift slightly; later frames the body glides clearly through the cell, shoulder crystals trailing the lean, claws opening. Final frame is mid-glide, still traveling, mist stretched aft. This must look like actual forward float, not a hovering pose slid sideways.
+> Row 2 (6 frames) – Walk: Begin with the rear pillar leg loaded. Early frames lift that enormous foot until the sole is clearly off the ground, the opposite arm swinging, the glacial head tipping with the stride. Middle frames plant the foot with a body dip and a small snow burst only at the boot, then the other foot lifts (pass). Later frames complete the opposite arm swing. Final frame is mid-stride with weight on the stepping leg. Actual heavy walk — not a standing pose slid sideways.
 >
-> Row 3 (4 frames) – Attack animation: Begin with both long arms down. Early frames raise both ice-clawed arms overhead, the chest core blazing bright and the visor flaring; later frames slam both arms down, the torso dropping with the blow, a massive ice shockwave and icicle eruption reading as part of this boss attack. Final frame is the bottom of the slam with the shockwave at its widest. Arms-up then slam-down must progress across the four frames — not one freeze.
+> Row 3 (6 frames) – Recover / armor break: Begin standing after a huge effort, one arm still low. Early frames the outer ice plates crack and slough, showing darker stone and a brighter core glow; middle frames he braces, frost pouring off the broken shoulder; later frames he pulls back toward a ready stance, silhouette slightly changed by missing ice. Final frame is a damaged-but-standing recover. Progressive crack — no extra objects.
 >
-> Row 4 (4 frames) – Defeat animation: Begin intact, then the crystals crack from the crown downward. Early frames the chest core flashes and fractures; later frames the body fragments into ice shards scattering outward and the ice mist dissipates. Final frame is a broken scatter / empty core remnant, play-once death. Progressive shatter — not four copies of a ruined still.
+> Row 4 (6 frames) – Defeat: Begin still upright, ice armor already broken. Early frames the inner core flashes and the legs buckle; middle frames the glacier body folds forward and plates fall inward; later frames he collapses into a low ruin of ice and dark stone. Final frame is a grounded ice-and-stone heap with a dying core glow, play-once death. Progressive collapse — not six copies of a ruined still.
+>
+> Style: clean digital pixel-art sprite sheet, epic dark fantasy boss style, consistent character proportions across every frame, side-view facing right, clear readable silhouette, evenly spaced animation frames, no cropping, no overlapping frames.
+> END OF PROMPT;
+
+#### 12b) Kryonax — Crush
+**File target:** `images/newEnemies/frostColossusB.png`  
+**Sheet size:** `2048×2048 px` (large boss) — **4 rows × 6 columns** (24 frames)
+
+**Prompt:**
+> Clean 2D pixel-art style sprite sheet for a video game boss enemy.
+> 4 rows and 6 columns (24 frames total) arranged in a perfectly aligned grid with even spacing. Every cell is the same size. Transparent background. Draw only this one titan. Do not draw extra spells, orbs, trails, clones, walls, shockwaves, ice pillars, or impact VFX. Body glow and frost shedding are allowed.
+>
+> Character: Kryonax, The Frozen Colossus — same walking glacier as the Presence sheet. Enormous irregular ice-and-stone body, cliff shoulders, pillar legs, massive blunt hands, back-ridge of frozen formations, glowing cracks, glacial crag head with cyan slit eyes. Not a knight, not a wizard, not a floating crystal. Side-view facing right.
+>
+> Row 1 (6 frames) – Colossus Fist: Begin planted, then raise one enormous fist extremely high above the crag head, body leaning back. Early frames the fist keeps climbing and the other arm braces; later frames the whole torso drops as that fist slams down in front of him, knees bending, snow shaking off the back ridge. Final frame is the planted slam, fist on the ground line, body compressed. Raise-then-slam must travel across all six frames.
+>
+> Row 2 (6 frames) – Glacial Shockwave: Begin square, then plant both pillar feet wider and sink his weight. Early frames both fists come in toward the hips and the chest cracks blaze; later frames the torso expands as if forcing power outward through the body (no separate shockwave sprite). Final frame is the fully planted release, legs locked, frost blasting off the ice plates. Progressive plant-and-release, not six copies of a flex.
+>
+> Row 3 (6 frames) – Frozen Sweep: Begin with one huge arm pulled far backward, torso coiled. Early frames the hips rotate and the arm starts a wide horizontal arc; later frames the arm crosses the front of the body. Final frame is full follow-through, arm extended past the head, body twisted. The arm must travel across the row — not six stills of a posed swing.
+>
+> Row 4 (6 frames) – Glacier's Grasp: Begin upright, then both massive hands move down toward the ground. Early frames he commits, knees bending, head dropping; later frames both hands are buried in the ground line and the shoulders heave as if pulling ice up (do not draw the erupting ice). Final frame is the fully committed ground-grip, body low and locked. Hands-down then committed — not one pose for the whole row.
+>
+> Style: clean digital pixel-art sprite sheet, epic dark fantasy boss style, consistent character proportions across every frame, side-view facing right, clear readable silhouette, evenly spaced animation frames, no cropping, no overlapping frames.
+> END OF PROMPT;
+
+#### 12c) Kryonax — Cataclysm
+**File target:** `images/newEnemies/frostColossusC.png`  
+**Sheet size:** `2048×2048 px` (large boss) — **4 rows × 6 columns** (24 frames)
+
+**Prompt:**
+> Clean 2D pixel-art style sprite sheet for a video game boss enemy.
+> 4 rows and 6 columns (24 frames total) arranged in a perfectly aligned grid with even spacing. Every cell is the same size. Transparent background. Draw only this one titan. Do not draw extra spells, orbs, meteor balls, ice chunks, trails, clones, walls, or impact VFX. Inner glow and frost shedding are allowed.
+>
+> Character: Kryonax, The Frozen Colossus — same walking glacier as the other Kryonax sheets. Enormous ice-and-stone titan, cliff shoulders, pillar legs, massive hands, back-ridge of frozen formations, glowing cracks, glacial crag head. Grounded. Not a dragon, not a knight. Side-view facing right.
+>
+> Row 1 (6 frames) – Glacial Charge: Begin lowering his body, both pillar legs bracing, head locking forward. Early frames the rear leg loads and the whole glacier leans into a line; later frames he lunges across the cell, front foot driving, arms tucked like a moving cliff. Final frame is mid-charge, still traveling, snow streaming off the back ridge. Real charge — not a standing lean.
+>
+> Row 2 (6 frames) – Avalanche Roar: Begin with the crag head rising and the chest expanding. Early frames the jaw of ice opens and the inner glow floods the cracks; later frames the head is thrown back and frost blasts from the chest and mouth (body-only, no separate roar wave). Final frame is the peak roar, back ridge lifted, arms thrown slightly wide. Progressive rear-and-roar.
+>
+> Row 3 (6 frames) – Frozen Meteor: Begin reaching to his own shoulder or the ground as if tearing a mass of ice free (draw the empty tearing pose only — do not draw a separate ice boulder). Early frames the arm rips upward and the torso twists; later frames that arm hurls forward, shoulder rotating, empty hand open. Final frame is the follow-through after the throw, body still twisted. Tear then throw — body-only.
+>
+> Row 4 (6 frames) – Glacial Tremor / Heart: Begin raising one enormous foot. Early frames stomp it down, hips and head dropping; middle frames the second stomp, more ice plates cracking and the Frozen Core in his chest becoming brightly visible; later frames he stops and the whole body glows from within as the core flares (no explosion sprites). Final frame is the peak inner-glow, armor broken, core exposed. Stomp then awakening glow must progress across the row.
 >
 > Style: clean digital pixel-art sprite sheet, epic dark fantasy boss style, consistent character proportions across every frame, side-view facing right, clear readable silhouette, evenly spaced animation frames, no cropping, no overlapping frames.
 > END OF PROMPT;
@@ -1681,6 +2166,117 @@ Each prompt below is designed to generate a **sprite sheet** with evenly spaced 
 > Row 3 (4 frames) – Attack animation: Begin with both massive fists down. Early frames raise both fists overhead, the small angular head tipping back, golden-orange veins blazing; later frames smash both fists into the ground, knees bending, stone pillars and stalagmites erupting from the floor as part of this boss attack, shockwave cracks radiating. Final frame is the bottom of the smash with the eruptions at their height. Arms-up then smash-down must progress across the four frames — not one freeze.
 >
 > Row 4 (4 frames) – Defeat animation: Begin intact, then the amber veins go dark from the head down. Early frames cracks spread across every slab; later frames the stone slabs separate and the pillar legs buckle. Final frame is a massive rubble pile with a cloud of dust, play-once death. Progressive collapse — not four copies of a ruined still.
+>
+> Style: clean digital pixel-art sprite sheet, epic dark fantasy boss style, consistent character proportions across every frame, side-view facing right, clear readable silhouette, evenly spaced animation frames, no cropping, no overlapping frames.
+> END OF PROMPT;
+
+---
+
+### LIVING WILDS BOSS — Verdant Colossus
+
+The Verdant Colossus is the living heart of the Worldroot: an enormous ancient tree grown into a rough humanoid guardian, fused into the Heartwood Chamber. He does not walk. Save five separate body-part sheets. Draw **only that body part**. Transparent background. Torso, arms, and crown are **4 rows × 6 columns** (24 frames). The root network is **4 rows × 7 columns** (28 frames). Combat VFX (shockwaves, seed volleys, sap floods) are added in-game — do not draw them as separate objects.
+
+#### 18b) Verdant Colossus — Torso / Heart
+**File target:** `images/newEnemies/verdantCore.png`  
+**Sheet size:** `2048×2048 px` (large boss) — **4 rows × 6 columns** (24 frames)
+
+**Prompt:**
+> Clean 2D pixel-art style sprite sheet for a video game boss enemy.
+> 4 rows and 6 columns (24 frames total) arranged in a perfectly aligned grid with even spacing. Every cell is the same size. Transparent background. Draw only this one body part. Do not draw extra spells, orbs, trails, clones, walls, shockwaves, or impact VFX. Vine sway and heart glow that stay on the body are allowed.
+>
+> Character part: Verdant Colossus torso and head — the living heart of the Worldroot. Gigantic ancient tree trunk shaped like a humanoid chest, dark brown and moss-green bark plates, an exposed glowing emerald heart crystal in the center of the chest, a hollow wooden face near the top with two bright green eye sockets, flowers growing from bark cracks, vines wrapping the trunk. Enormous. Not a walking stone golem. Not a full body — torso, heart, and hollow face only. Side-view facing right. Epic dark fantasy dungeon boss.
+>
+> Row 1 (6 frames) – Idle: Begin planted, heart at medium glow, vines draped. Early frames the trunk breathes and the heart pulses larger; middle frames vines drift and flowers open a notch; later frames the glow dims slightly. Final frame is mid-pulse, a different vine drape than frame 1. Living tree idle — not six identical stills.
+>
+> Row 2 (6 frames) – Heartbeat / warn: Begin with the bark around the heart cracking brighter. Early frames the chest expands and green-gold light floods the cracks; later frames the heart throbs hard enough that the whole torso leans. Final frame is peak pulse, heart blazing. Progressive flare — no separate shockwave sprites.
+>
+> Row 3 (6 frames) – Hurt: Begin intact, then bark chips from the chest. Early frames the heart flares white-green and moss tears; later frames a plate of bark hangs loose. Final frame is damaged but still standing, dimmer heart. Progressive damage — not six copies of a crack.
+>
+> Row 4 (6 frames) – Exposed heart / rebirth: Begin with outer bark splitting away from the chest. Early frames the heart becomes much larger and more visible; later frames roots erupt from the ribs (body-only) and the hollow eyes blaze. Final frame is the fully exposed core, bark peeled, heart open. Progressive reveal.
+>
+> Style: clean digital pixel-art sprite sheet, epic dark fantasy boss style, consistent character proportions across every frame, side-view facing right, clear readable silhouette, evenly spaced animation frames, no cropping, no overlapping frames.
+> END OF PROMPT;
+
+#### 18c) Verdant Colossus — Left Arm
+**File target:** `images/newEnemies/verdantLeftArm.png`  
+**Sheet size:** `2048×2048 px` (large boss) — **4 rows × 6 columns** (24 frames)
+
+**Prompt:**
+> Clean 2D pixel-art style sprite sheet for a video game boss enemy.
+> 4 rows and 6 columns (24 frames total) arranged in a perfectly aligned grid with even spacing. Every cell is the same size. Transparent background. Draw only this one body part. Do not draw extra spells, orbs, trails, clones, walls, shockwaves, or impact VFX.
+>
+> Character part: Verdant Colossus left arm — a gigantic heavy branch arm of twisted ancient wood, a fist of tangled roots and moss, leaves and small flowers on the bark, glowing green sap cracks. Shoulder pivot near the top-left of each cell so it can be composited onto a torso. Enormous and weighty. Side-view facing right.
+>
+> Row 1 (6 frames) – Idle sway: Begin hanging, fist near the ground line. Early frames the arm drifts forward and leaves flutter; later frames it drifts back. Final frame is mid-sway, fist in a different place than frame 1. Real pendulum motion.
+>
+> Row 2 (6 frames) – Worldroot Fist: Begin raising the enormous fist high, green cracks spreading. Early frames the fist keeps climbing; later frames it slams downward, leaves bursting off the bark (on the arm only). Final frame is the planted slam, fist low, arm compressed. Raise-then-slam must travel across all six frames.
+>
+> Row 3 (6 frames) – Reaching hand: Begin opening the root-fist into a giant grasping hand. Early frames the arm stretches far forward toward the right; later frames the fingers spread then start to close. Final frame is the hand lunging, almost closed. Stretch then close — not six stills of a posed grab.
+>
+> Row 4 (6 frames) – Withered / disabled: Begin intact, then sap glow dies. Early frames the arm sags; later frames wood cracks and hangs limp. Final frame is a drooping withered limb. Progressive wilt.
+>
+> Style: clean digital pixel-art sprite sheet, epic dark fantasy boss style, consistent character proportions across every frame, side-view facing right, clear readable silhouette, evenly spaced animation frames, no cropping, no overlapping frames.
+> END OF PROMPT;
+
+#### 18d) Verdant Colossus — Right Arm
+**File target:** `images/newEnemies/verdantRightArm.png`  
+**Sheet size:** `2048×2048 px` (large boss) — **4 rows × 6 columns** (24 frames)
+
+**Prompt:**
+> Clean 2D pixel-art style sprite sheet for a video game boss enemy.
+> 4 rows and 6 columns (24 frames total) arranged in a perfectly aligned grid with even spacing. Every cell is the same size. Transparent background. Draw only this one body part. Do not draw extra spells, orbs, trails, clones, walls, shockwaves, or impact VFX.
+>
+> Character part: Verdant Colossus right arm — different from the heavy left fist. A longer, thinner, blade-like living wooden branch, sharp thorns along one edge, fewer leaves, pale-green glowing veins. Shoulder pivot near the top-right of each cell. Side-view facing right.
+>
+> Row 1 (6 frames) – Idle: Begin hanging as a curved thorny branch. Early frames it sways and thorns catch the light; later frames it coils slightly. Final frame is mid-sway, a different curve than frame 1.
+>
+> Row 2 (6 frames) – Extend blade: Begin coiling, then the branch stretches extremely long and thin across the cell, becoming a wooden guillotine. Early frames lengthen; later frames the edge gleams. Final frame is fully extended, razor-thin. Progressive stretch.
+>
+> Row 3 (6 frames) – Branch sweep: Begin with the long blade pulled back. Early frames the hips of the limb rotate and the blade starts a wide horizontal arc; later frames it crosses the cell. Final frame is full follow-through. The blade must travel across the row — not six stills of a posed slash.
+>
+> Row 4 (6 frames) – Withered / retract: Begin extended, then the blade droops, cracks, and pulls back into a dry coiled limb. Final frame is withered and short. Progressive wilt.
+>
+> Style: clean digital pixel-art sprite sheet, epic dark fantasy boss style, consistent character proportions across every frame, side-view facing right, clear readable silhouette, evenly spaced animation frames, no cropping, no overlapping frames.
+> END OF PROMPT;
+
+#### 18e) Verdant Colossus — Root Network
+**File target:** `images/newEnemies/verdantRoot.png`  
+**Sheet size:** `2048×2048 px` (large boss) — **4 rows × 7 columns** (28 frames)
+
+**Prompt:**
+> Clean 2D pixel-art style sprite sheet for a video game boss enemy.
+> 4 rows and 7 columns (28 frames total) arranged in a perfectly aligned grid with even spacing. Every cell is the same size. Transparent background. Draw only this one body part. Do not draw extra spells, orbs, trails, clones, walls, shockwaves, or impact VFX.
+>
+> Character part: Verdant Colossus root network — massive tangled ancient roots spreading horizontally, fused into the ground, glowing green sap veins, moss, small flowers, thick woody coils. The base of a world-tree, not walking legs. Roots fill the lower portion of each cell. Side-view facing right.
+>
+> Row 1 (6 frames) – Idle: Begin still, sap at medium glow. Early frames roots slowly shift and the veins pulse; later frames a coil tightens then eases. Final frame is mid-shift. Living roots — not six identical stills.
+>
+> Row 2 (6 frames) – Erupt: Begin with veins blazing and ground cracks in the roots themselves. Early frames thick spears of root lift; later frames they burst upward (body-only, no separate dirt clouds required). Final frame is fully erupted spears. Progressive rise.
+>
+> Row 3 (6 frames) – Grasp: Begin opening root loops. Early frames coils lift and spread like snares; later frames they cinch closed. Final frame is a tightened grabbing knot. Open then close.
+>
+> Row 4 (6 frames) – Sap flood / withered: Begin with sap welling along the veins. Early frames glowing amber-green sap pours along the roots; later frames the glow can die into dry cracked wood for the last two frames. Final frame is either pooled sap or withered still roots. Progressive change.
+>
+> Style: clean digital pixel-art sprite sheet, epic dark fantasy boss style, consistent character proportions across every frame, side-view facing right, clear readable silhouette, evenly spaced animation frames, no cropping, no overlapping frames.
+> END OF PROMPT;
+
+#### 18f) Verdant Colossus — Crown
+**File target:** `images/newEnemies/verdantCrown.png`  
+**Sheet size:** `2048×2048 px` (large boss) — **4 rows × 6 columns** (24 frames)
+
+**Prompt:**
+> Clean 2D pixel-art style sprite sheet for a video game boss enemy.
+> 4 rows and 6 columns (24 frames total) arranged in a perfectly aligned grid with even spacing. Every cell is the same size. Transparent background. Draw only this one body part. Do not draw extra spells, orbs, flying seeds, trails, clones, walls, shockwaves, or impact VFX. Flowers and vines that stay on the canopy are allowed.
+>
+> Character part: Verdant Colossus crown — a massive canopy of ancient branches, dense leaves, huge tropical jungle flowers (magenta, gold, and emerald), hanging vines, glowing seed pods. Wider than it is tall. Canopy centered in each cell. Side-view facing right.
+>
+> Row 1 (6 frames) – Idle: Begin with flowers half open. Early frames they bloom and vines drift; later frames they ease closed a notch. Final frame is mid-bloom, different from frame 1. Living canopy idle.
+>
+> Row 2 (6 frames) – Barrage bloom: Begin with all flowers opening at once, pollen glow. Early frames pods swell; later frames flowers face outward as if about to launch (do not draw the seeds in the air). Final frame is fully open, bright. Progressive bloom.
+>
+> Row 3 (6 frames) – Crown of Thorns: Begin with branches knitting into a thorny ring around the canopy. Early frames thorns lengthen; later frames the ring looks ready to spin (body-only, do not draw a separate spinning VFX object). Final frame is a dense thorn crown. Progressive grow.
+>
+> Row 4 (6 frames) – Great Bloom / wilt: Begin with a gigantic central flower opening above the canopy. Early frames it dominates the cell; later frames it can either peak in radiance or wilt shut for a disabled look in the last frames. Final frame is peak bloom or closed wilt. Progressive change.
 >
 > Style: clean digital pixel-art sprite sheet, epic dark fantasy boss style, consistent character proportions across every frame, side-view facing right, clear readable silhouette, evenly spaced animation frames, no cropping, no overlapping frames.
 > END OF PROMPT;
@@ -3570,6 +4166,118 @@ Regulars use the same **8×6** action-only sheet as Fire/Ice/Earth/Iron. Draw on
 > Style: clean digital pixel-art sprite sheet, dark fantasy game style, consistent character proportions across every frame, side-view facing right, clear readable silhouette, evenly spaced animation frames, no cropping, no overlapping frames.
 > END OF PROMPT;
 
+---
+
+### LIVING WILDES — ADVANCED ROSTER
+
+These four teach attack direction, pursuit, who is controlling the plants, and spotting a hidden predator. Same **8×6** action-only rules. File targets live under `images/newEnemies/`.
+
+#### Barkback Beetle
+**File target:** `images/newEnemies/barkbackBeetle.png`  
+**Sheet size:** `1024×768 px` — **8 columns × 6 rows** (48 frames)
+
+**Prompt:**
+> Clean 2D pixel-art style sprite sheet for a video game enemy.
+> 6 rows and 8 columns (48 frames total) arranged in a perfectly aligned grid with even spacing. Every cell is the same size. Transparent background. Draw only the beetle. Do not draw extra roots, splinters as projectiles, or rebound trails.
+>
+> Character: Barkback Beetle, heavy jungle scarab, about 40×28 pixel logical size, dark brown-green body under a living bark shell with moss in the cracks, six thick legs, a blunt horned head, amber eyes. Environmental-defense dark fantasy enemy. Side-view facing right.
+>
+> Row 1 (8 frames) – Idle: Begin crouched, bark shell slightly open, horn peeking. Early frames moss settles and the shell breathes; later frames a weight shift. Living idle.
+>
+> Row 2 (8 frames) – Walk: Begin with the rear legs loaded. Early frames a slow armored step, shell rocking; later frames the opposite plant. Real walk cycle.
+>
+> Row 3 (8 frames) – Bark Armor / Charge: Begin growing thicker bark plates over the shell (plates stay on the body). Later frames it leans into a forward charge, legs pumping. Final frame is the armored charge. No roots drawn leaving the cell.
+>
+> Row 4 (8 frames) – Roll: Begin curling into a bark ball, then rolling. Later frames a rebound squash as if it hit a wall, then it unrolls slightly. Final frame is the rebound pose. Predictable bounce — body only.
+>
+> Row 5 (8 frames) – Recoil / Splinter pose: Begin armored, then a hit cracks the bark on one side of the shell (cracks drawn on the body). Later frames the cracked side flares as if about to throw splinters — still on the beetle. Final frame is the cracked-side flinch. Do not draw flying splinters.
+>
+> Row 6 (8 frames) – Defeat: Begin armored, then the bark dies and the legs buckle. Later frames it collapses into a mossy heap. Play-once death.
+>
+> Style: clean digital pixel-art sprite sheet, dark fantasy game style, consistent character proportions across every frame, side-view facing right, clear readable silhouette, evenly spaced animation frames, no cropping, no overlapping frames.
+> END OF PROMPT;
+
+---
+
+#### Pollen Moth
+**File target:** `images/newEnemies/pollenMoth.png`  
+**Sheet size:** `1024×768 px` — **8 columns × 6 rows** (48 frames)
+
+**Prompt:**
+> Clean 2D pixel-art style sprite sheet for a video game enemy.
+> 6 rows and 8 columns (48 frames total) arranged in a perfectly aligned grid with even spacing. Every cell is the same size. Transparent background. Draw only this one moth. Do not draw extra flowers, pollen clouds as separate objects, or smaller moths.
+>
+> Character: Pollen Moth, large jungle moth, about 32×28 pixel logical size, dusty gold-green wings with darker eye-spots, a furred body, thin legs, two feathery antennae. Support/debuff dark fantasy enemy. Side-view facing right.
+>
+> Row 1 (8 frames) – Idle: Begin hovering, wings at mid-beat, antennae drifting. Early frames a wing pulse and a dusting of pollen on the wing edges (pollen is part of the wing, not a cloud object); later frames it bobs. Living hover.
+>
+> Row 2 (8 frames) – Flutter: Begin with wings swept, then a rising altitude change — body climbs in-cell — then a dip. Real flutter travel, not a still moth slid.
+>
+> Row 3 (8 frames) – Cloud / Bloom pose: Begin wings wide, body dusted brighter as if releasing pollen. Later frames it tucks as if hiding inside a flower shape that is still the moth (wings fold into a blossom silhouette). Final frame is the blossom-fold. One creature only.
+>
+> Row 4 (8 frames) – Migration: Begin hovering, then lean hard and stretch into a fleeing dart, wings pinning. Later frames the body is fully committed to escape. Final frame is the flee stretch. No extra moths.
+>
+> Row 5 (8 frames) – Recoil: Begin hovering, then a hit crumples a wing. Later frames a tumbling hover. Travel through the hit.
+>
+> Row 6 (8 frames) – Defeat: Begin mid-flutter, then the wings fail and the gold dust dies. Later frames it falls into a crumpled moth heap. Play-once death.
+>
+> Style: clean digital pixel-art sprite sheet, dark fantasy game style, consistent character proportions across every frame, side-view facing right, clear readable silhouette, evenly spaced animation frames, no cropping, no overlapping frames.
+> END OF PROMPT;
+
+---
+
+#### Root Parasite
+**File target:** `images/newEnemies/rootParasite.png`  
+**Sheet size:** `1024×768 px` — **8 columns × 6 rows** (48 frames)
+
+**Prompt:**
+> Clean 2D pixel-art style sprite sheet for a video game enemy.
+> 6 rows and 8 columns (48 frames total) arranged in a perfectly aligned grid with even spacing. Every cell is the same size. Transparent background. Draw only the parasite. Do not draw extra host plants, vines, or pulses as separate objects.
+>
+> Character: Root Parasite, small writhing plant-grub, about 18×14 pixel logical size, sickly green-brown segmented body, tiny clawed limbs, a needle-mouth, glowing yellow-green eyes. Parasitic dark fantasy enemy — it should look like it belongs on a plant, not like a vine itself. Side-view facing right.
+>
+> Row 1 (8 frames) – Idle: Begin coiled, mouth tucked. Early frames the segments pulse and the needle-mouth peeks; later frames a twitch. Living coil.
+>
+> Row 2 (8 frames) – Crawl / Leap: Begin stretching forward. Early frames a crawl; later frames it leaps as if jumping to a new host. Real travel cycle.
+>
+> Row 3 (8 frames) – Latch / Grow: Begin reared, then clamp the needle-mouth as if biting into something off-frame. Later frames the body fattens and tiny rootlets grow along its own belly (rootlets are part of the parasite). Final frame is the latched swell. No host plant drawn.
+>
+> Row 4 (8 frames) – Pulse / Forced bloom pose: Begin latched, then the whole body seizes and the eyes flare as if sending a pulse. Later frames it rears huge relative to itself (still the same grub, just puffed) as if forcing a bloom. Final frame is the puffed pulse. Body only.
+>
+> Row 5 (8 frames) – Recoil: Begin latched, then peel off backward, mouth tearing free. Later frames a bunched flinch. Travel through the knock-off.
+>
+> Row 6 (8 frames) – Defeat: Begin puffed, then the glow dies. Later frames it shrivels into a dry twig-grub. Play-once death.
+>
+> Style: clean digital pixel-art sprite sheet, dark fantasy game style, consistent character proportions across every frame, side-view facing right, clear readable silhouette, evenly spaced animation frames, no cropping, no overlapping frames.
+> END OF PROMPT;
+
+---
+
+#### Jungle Chameleon
+**File target:** `images/newEnemies/jungleChameleon.png`  
+**Sheet size:** `1024×768 px` — **8 columns × 6 rows** (48 frames)
+
+**Prompt:**
+> Clean 2D pixel-art style sprite sheet for a video game enemy.
+> 6 rows and 8 columns (48 frames total) arranged in a perfectly aligned grid with even spacing. Every cell is the same size. Transparent background. Draw only the chameleon. Do not draw extra footprints as a trail of objects, leaf particles, or tongue VFX beyond the tongue that is part of the body.
+>
+> Character: Jungle Chameleon, predatory jungle lizard, about 36×22 pixel logical size, a crested head, independently tracking eyes (one eye should clearly move), four grasping feet, a curled tail, a long tongue that is part of the body when extended, skin that can shift between leaf-green, bark-brown, and a brief wrong-color mismatch. Camouflage predator. Side-view facing right.
+>
+> Row 1 (8 frames) – Camouflage idle: Begin in leaf-green, almost still. Early frames one eye rotates independently; later frames the skin shifts a shade toward bark, then a brief color mismatch before settling. Living hide — not eight identical lizards.
+>
+> Row 2 (8 frames) – Stalk: Begin in bark-brown, then a slow careful step, feet lifting. Later frames the opposite plant. Real slow walk, not a slide.
+>
+> Row 3 (8 frames) – Tongue Strike: Begin coiled, then the jaw opens and the tongue extends far forward as part of the same sprite (tongue is the body, not a projectile). Later frames the body yanks itself forward along the tongue as if pulling toward the player. Final frame is the close-range lunge after the pull. One creature.
+>
+> Row 4 (8 frames) – Predator burst: Begin hidden-green, then a rapid three-beat: tongue out, a claw swipe (front foot rakes), then a retreat hop back into a tighter hide pose. Final frame is the post-burst camouflage crouch. Body only, no afterimages.
+>
+> Row 5 (8 frames) – Recoil / Color shift: Begin in one color, then a hit knocks it back and the skin flashes a different color. Later frames it settles into the new camouflage. Travel through the hit.
+>
+> Row 6 (8 frames) – Defeat: Begin mid-shift, then the colors fail to a dull gray-green. Later frames the legs buckle and it collapses, tongue hanging. Play-once death.
+>
+> Style: clean digital pixel-art sprite sheet, dark fantasy game style, consistent character proportions across every frame, side-view facing right, clear readable silhouette, evenly spaced animation frames, no cropping, no overlapping frames.
+> END OF PROMPT;
+
 #### Elder Treant
 **File target:** `images/enemies/elderTreant.png` (1024×1024, mini-boss)
 
@@ -3592,24 +4300,30 @@ Regulars use the same **8×6** action-only sheet as Fire/Ice/Earth/Iron. Draw on
 > END OF PROMPT;
 
 #### Storm Raptor
-**File target:** `images/enemies/stormRaptor.png` (1024×1024, mini-boss)
+**File target:** `images/enemies/storm-raptor-sheet.png`  
+**Sheet size:** `1024×768 px` — **8 columns × 6 rows** (48 frames). A square 1024×1024 **4×4** sheet is still accepted at runtime until this sheet is replaced.
+
+**Identity:** Fast burst attacker. Apex aerial predator. Short melee bursts, then gone. Lightning lives on the body and limbs only — never as floor storms, bolts leaving the cell, or arena weather.
 
 **Prompt:**
-> Clean 2D pixel-art style sprite sheet for a video game enemy.
-> 4 rows and 4 columns (16 frames total) arranged in a perfectly aligned grid with even spacing.
-> Transparent background. Draw only this one raptor. Do not draw lightning bolts leaving the cell, storm-cloud copies, or trail ribbons.
+> Clean 2D pixel-art style sprite sheet for a video game mini-boss.
+> 6 rows and 8 columns (48 frames total) arranged in a perfectly aligned grid with even spacing. Every cell is the same size. Transparent background. Draw only this one raptor. Do not draw lightning bolts leaving the cell, storm-cloud copies, trail ribbons, floor sparks, or extra silhouettes.
 >
-> Character: Storm Raptor, huge predatory bird, about 90×70 pixel logical size, dark blue-purple plumage with paler storm-grey wing linings, sharp golden beak and talons, a crest of spiked feathers, electric-blue crackle bound to the feather edges (on the body only), fierce golden eyes, long steering tail-fan. Powerful dark fantasy mini-boss. Side-view facing right.
+> Character: Storm Raptor, huge predatory bird, about 90×70 pixel logical size, powerful raptor body, large storm-blue wings with paler grey linings, sharp golden beak, hooked golden talons, spiked crest, electric-blue crackle bound to feather edges and talon tips only, fierce golden eyes, long steering tail-fan. Dark fantasy apex predator. Side-view facing right. Silhouette must stay readable in every frame.
 >
-> Row 1 (4 frames) – Idle: Begin perched with wings half-spread, talons planted, crest down. Then the chest breathes, the crest lifts, wing-tips twitch, and the bound crackle brightens along the primaries. Later frames the tail-fan fans and the weight shifts from one talon to the other. Final frame returns toward the starting perch. This must look like a living idle, not four identical bird stills.
+> Row 1 (8 frames) – Hunt idle / grounded recover: Begin planted after a burst, wings half-folded, crest down, weight on one talon, chest heaving. Then the crest lifts, the head ticks as if tracking prey, wing-tips twitch, and the bound crackle brightens along the primaries. Middle frames shift weight, tail-fan opens, one talon scratches. Later frames the body coils to spring. Final frame matches the start so the hunt-idle loops. This is a living predator at rest, not eight identical stills.
 >
-> Row 2 (4 frames) – Fly: Begin with wings up, body lifting off the perch line, talons tucking. Then the wings beat down, the body surges right, tail steering. Later frames the next upstroke so it clearly travels. Final frame is mid-flap so the row loops. This must look like an actual fly cycle, not a standing bird with wings slightly tilted.
+> Row 2 (8 frames) – Fly / reposition glide: Begin with wings up, body lifting, talons tucking. Then a full downstroke, body surging right, tail steering. Middle frames bank, dip, and climb so it clearly travels and changes height. Later frames the next upstroke. Final frame is mid-flap so the row loops. This must look like hunting flight, not a perched bird with tilted wings.
 >
-> Row 3 (4 frames) – Attack: Begin tucking for a dive, talons forward, beak opening, wings pinned. Then the body stretches into a stoop, legs extending for a rake. Later frames the talons and beak snap at full reach as the wings brake. Final frame is the striking pose, talons out, beak biting. Body-only.
+> Row 3 (8 frames) – Lightning Dive: Begin a readable telegraph — wings high, body vertical, eyes locked, crackle gathering at the wing-roots. Then the tuck: wings pin, beak leading, talons folding. Middle frames are the stoop, body stretched, talons starting to extend. Later frames the impact rake, talons and beak at full reach as wings brake. Final frame is the rebound, body kicking upward and away. Body-only. The player must read “he is about to dive” from the first two frames.
 >
-> Row 4 (4 frames) – Defeat: Begin with the wings crumpling, crackle dying, eyes dimming. Then the talons curl and the body loses lift. Later frames it falls. Final frame is a crumpled bird on the ground line, wings wrong, glow out. Play-once death.
+> Row 4 (8 frames) – Talon Flurry + Thunderbeak: Begin rushing in, one talon cocked. Frame 2 first claw rake (left talon slashing from the body toward the right). Frame 3 second claw (right talon). Frame 4 cross-slash, both talons crossing in front of the chest. Frame 5 lightning-finisher, talons buried and crackle on the limbs only. Frames 6–7 Thunderbeak: head pulls back, then the neck shoots forward with the golden beak fully extended. Final frame is the short recover after the beak, body open for a punish. Every strike must clearly come from a talon or the beak, not from a floating slash.
 >
-> Style: clean digital pixel-art sprite sheet, dark fantasy boss style, consistent character proportions across every frame, side-view facing right, clear readable silhouette, evenly spaced animation frames, no cropping, no overlapping frames.
+> Row 5 (8 frames) – Wing Rush + Storm Pounce: Begin wings flaring for a dash, body horizontal. Then the rush: wings swept, body a spear passing through the target line, trailing only the wing shape. Middle frames end the rush beside/behind the foe, talons still close to the body. Then Storm Pounce: hop upward, body coiled. Later frames redirect downward, talons first. Final frame is the pounce impact, both talons driving down, wings braking. Body-only.
+>
+> Row 6 (8 frames) – Lightning Javelin, Thunderclap, Defeat: Frames 1–3 charge a javelin between the wings (glow on the feathers only), then the throw pose, one wing driving forward. Frames 4–5 Thunderclap: both wings rise, then a single enormous downbeat (no shockwave drawn outside the cell). Frames 6–8 Defeat: wings crumple, crackle dies, eyes dim, body loses lift, final frame a crumpled bird on the ground line, glow out. Play-once death on the last frames.
+>
+> Style: clean digital pixel-art sprite sheet, dark fantasy mini-boss, consistent proportions across every frame, side-view facing right, clear readable silhouette, evenly spaced frames, no cropping, no overlapping frames.
 > END OF PROMPT;
 
 ---

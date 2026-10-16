@@ -8,6 +8,7 @@ const WorldMapVoronoi = (function () {
 	let mapRect = { dx: 0, dy: 0, dw: 0, dh: 0 };
 	let hoverId = null;
 	let lockedFn = () => false;
+	let crossedFn = () => false;
 
 	function _hash(ix, iy) {
 		const s = Math.sin(ix * 127.1 + iy * 311.7) * 43758.5453;
@@ -166,25 +167,35 @@ const WorldMapVoronoi = (function () {
 			const pt = mapPoint(s.mapX, s.mapY);
 			const isHover = hoverId === s.id;
 			const locked = lockedFn(s.id);
+			const crossed = crossedFn(s.id);
 			const r = isHover ? 6 : 4;
 			ctx.save();
 			ctx.beginPath();
 			ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
-			ctx.fillStyle = locked ? 'rgba(200,180,180,0.85)' : isHover ? '#fff4d8' : 'rgba(245,236,210,0.88)';
+			ctx.fillStyle = crossed ? 'rgba(120,120,120,0.7)' : locked ? 'rgba(200,180,180,0.85)' : isHover ? '#fff4d8' : 'rgba(245,236,210,0.88)';
 			ctx.strokeStyle = '#2a1a0c';
 			ctx.lineWidth = 1.4;
 			ctx.fill();
 			ctx.stroke();
-			if (isHover) {
+			if (isHover || crossed) {
 				const label = (s.icon ? s.icon + ' ' : '') + (s.name || s.id);
 				ctx.font = 'bold 13px Georgia, serif';
 				ctx.textAlign = 'center';
 				ctx.textBaseline = 'middle';
 				ctx.lineWidth = 3.5;
 				ctx.strokeStyle = 'rgba(252,246,230,0.95)';
-				ctx.fillStyle = '#2a1808';
+				ctx.fillStyle = crossed ? '#555' : '#2a1808';
 				ctx.strokeText(label, pt.x, pt.y - 14);
 				ctx.fillText(label, pt.x, pt.y - 14);
+				if (crossed) {
+					const tw = ctx.measureText(label).width;
+					ctx.strokeStyle = '#2a1808';
+					ctx.lineWidth = 2;
+					ctx.beginPath();
+					ctx.moveTo(pt.x - tw / 2 - 2, pt.y - 14);
+					ctx.lineTo(pt.x + tw / 2 + 2, pt.y - 14);
+					ctx.stroke();
+				}
 			}
 			ctx.restore();
 		}
@@ -220,6 +231,7 @@ const WorldMapVoronoi = (function () {
 		ctx = canvas.getContext('2d');
 		sites = siteList || [];
 		lockedFn = (options && options.isLocked) || (() => false);
+		crossedFn = (options && options.isCrossed) || (() => false);
 		hoverId = null;
 		regions = null;
 

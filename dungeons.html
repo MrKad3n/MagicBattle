@@ -16,6 +16,8 @@
 			--text: #f5f7ff;
 			--muted: #c2c8e8;
 			--border: rgba(255,255,255,0.2);
+			--slide: 1.8s;
+			--slide-ease: cubic-bezier(.22,.72,.18,1);
 		}
 		* { box-sizing: border-box; margin: 0; padding: 0; font-family: Arial, sans-serif; }
 		body {
@@ -23,11 +25,12 @@
 			background: radial-gradient(70% 50% at 10% 10%, rgba(94,60,180,0.35), transparent 60%),
 				radial-gradient(60% 50% at 85% 20%, rgba(46,112,206,0.28), transparent 65%),
 				linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
-			overflow: hidden;
+			overflow-x: hidden;
+			overflow-y: auto;
 		}
-		.page { min-height:100vh; display:flex; flex-direction:column; align-items:center; padding:30px 20px; }
+		.page { min-height:100vh; display:flex; flex-direction:column; align-items:center; padding:30px 20px 48px; }
 		h1 { text-align:center; font-size:clamp(28px,5vw,48px); margin-bottom:8px; text-shadow:2px 2px 4px #000; }
-		.subtitle { color:var(--muted); text-align:center; margin-bottom:30px; text-shadow:1px 1px 3px rgba(0,0,0,0.5); }
+		.subtitle { color:var(--muted); text-align:center; margin-bottom:30px; text-shadow:1px 1px 3px rgba(0,0,0,0.5); font-weight:700; }
 		#backBtn {
 			position:fixed; top:12px; left:14px; z-index:10;
 			padding:8px 18px; font:14px Arial,sans-serif;
@@ -37,37 +40,143 @@
 		}
 		#backBtn:hover { background:rgba(255,255,255,0.22); }
 
-		.dungeon-grid {
-			width:min(1100px,94vw); display:grid;
-			grid-template-columns:repeat(4,1fr); gap:24px;
+		.dungeon-row {
+			width:min(1100px,94vw); display:flex; gap:22px; align-items:stretch; justify-content:center;
+			transition: width var(--slide) var(--slide-ease);
 		}
+		.dungeon-row.is-focused { width:min(1180px,96vw); }
 		.dungeon-card {
+			flex:1 1 0; min-width:0; min-height:58vh; max-height:640px;
 			background:var(--panel); border:3px solid var(--border); border-radius:14px;
-			min-height:58vh; max-height:640px; padding:24px; text-align:center;
+			padding:24px; text-align:center;
 			position:relative; overflow:hidden; display:flex; flex-direction:column;
 			justify-content:center; align-items:center;
 			box-shadow:0 8px 18px rgba(0,0,0,0.3);
-			transition:transform .25s,box-shadow .25s,border-color .25s;
 		}
-		.dungeon-card:hover {
+		.dungeon-card:not(.closed):not(.expanded):not(.is-flying) { cursor:pointer; }
+		.dungeon-card:not(.closed):not(.expanded):not(.is-flying):hover {
 			transform:translateY(-6px);
 			box-shadow:0 12px 24px rgba(0,0,0,0.45),0 0 18px rgba(255,255,255,0.15);
+			transition: transform .25s ease, box-shadow .25s ease;
 		}
-		.dungeon-card h2 { font-size:clamp(22px,2vw,30px); text-transform:uppercase; letter-spacing:1px; margin-bottom:12px; text-shadow:2px 2px 4px #000; }
-		.dungeon-card p { color:#e8e8ff; margin-bottom:20px; line-height:1.4; font-size:15px; text-shadow:1px 1px 2px #000; }
-		.dungeon-card .enemies-label { font-size:12px; color:var(--muted); margin-bottom:6px; }
-		.dungeon-card .enemy-list { font-size:13px; color:#ccc; margin-bottom:18px; line-height:1.6; }
-		.dungeon-card button {
-			padding:12px 28px; min-width:160px; font-size:16px; font-weight:bold;
+		.dungeon-card.is-flying {
+			margin:0; z-index:6; pointer-events:none;
+			transition: none;
+		}
+		.dungeon-card.is-flying.fly-away,
+		.dungeon-card.is-flying.is-returning {
+			transition: left var(--slide) var(--slide-ease), opacity var(--slide) ease;
+		}
+		.dungeon-card h2 { font-size:clamp(20px,2vw,28px); text-transform:uppercase; letter-spacing:1px; margin-bottom:10px; text-shadow:2px 2px 4px #000; font-weight:800; }
+		.dungeon-card .teaser { color:#e8e8ff; line-height:1.4; font-size:16px; font-weight:700; text-shadow:1px 1px 2px #000; }
+		.select-hint { margin-top:18px; font-size:13px; letter-spacing:1.2px; text-transform:uppercase; color:#fff; font-weight:800; opacity:0.75; }
+		.dungeon-row.is-focused .dungeon-card.expanded {
+			flex:1 1 auto; max-width:none; max-height:88vh; overflow-y:auto;
+			justify-content:flex-start; text-align:left; cursor:default; padding:22px 24px 26px;
+		}
+		.dungeon-card.expanded:hover { transform:none; }
+		.card-details { display:none; width:100%; }
+		.dungeon-card.expanded .card-details { display:block; }
+		.dungeon-card.expanded .teaser,
+		.dungeon-card.expanded .select-hint { display:none; }
+		.dungeon-card.expanded .card-face { width:100%; text-align:left; display:flex; align-items:center; gap:14px; margin-bottom:10px; }
+		.dungeon-card.expanded .card-face h2 { margin:0; }
+		.dungeon-card.expanded .icon-big { font-size:40px; margin:0; }
+
+		.inspect-grid { display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:20px; align-items:start; }
+		.starter-panel {
+			background:rgba(0,0,0,0.38); border:2px solid rgba(255,255,255,0.16);
+			border-radius:12px; padding:12px; position:sticky; top:8px;
+		}
+		.starter-kicker { font-size:11px; font-weight:800; letter-spacing:1.4px; text-transform:uppercase; color:#f1c40f; }
+		.starter-name { font-size:18px; font-weight:800; margin:4px 0 10px; }
+		.starter-canvas { display:block; width:100%; height:190px; background:#101010; border-radius:8px; border:1px solid rgba(255,255,255,0.12); }
+		.starter-key { display:flex; gap:12px; margin-top:10px; font-size:12px; font-weight:800; color:#ddd; }
+		.starter-key span { display:flex; align-items:center; gap:6px; }
+		.key-swatch { width:10px; height:10px; border-radius:2px; display:inline-block; }
+		.key-you { background:#f0f0f0; }
+		.key-exit { background:#d8d8d8; box-shadow:0 0 0 2px #555; }
+		.key-plat { background:#7a7a7a; }
+
+		.back-to-list {
+			background:rgba(255,255,255,0.1); color:#fff; border:1px solid rgba(255,255,255,0.28);
+			border-radius:6px; padding:7px 12px; font-size:13px; font-weight:800; cursor:pointer; margin-bottom:14px;
+		}
+		.back-to-list:hover { background:rgba(255,255,255,0.18); }
+
+		.mastery-box {
+			background:rgba(0,0,0,0.32); border:2px solid rgba(241,196,15,0.28);
+			border-radius:12px; padding:14px; margin-bottom:16px;
+		}
+		.mastery-top { display:flex; justify-content:space-between; align-items:baseline; gap:12px; margin-bottom:8px; }
+		.mastery-label { font-size:13px; letter-spacing:1.2px; text-transform:uppercase; color:#f1c40f; font-weight:800; }
+		.mastery-rank { font-size:16px; color:#fff; font-weight:800; }
+		.mastery-bar { height:14px; background:#111; border:1px solid #555; border-radius:7px; overflow:hidden; }
+		.mastery-fill { height:100%; width:0; background:linear-gradient(90deg,#6c5ce7,#a29bfe); }
+		.mastery-icons { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+		.mastery-chip {
+			flex:1 1 70px; min-width:70px; text-align:center; background:rgba(255,255,255,0.06);
+			border:1px solid rgba(255,255,255,0.14); border-radius:8px; padding:7px 4px; font-weight:800;
+		}
+		.mastery-chip .mi { display:block; font-size:18px; line-height:1; }
+		.mastery-chip .ml { display:block; font-size:10px; letter-spacing:0.4px; text-transform:uppercase; margin-top:3px; color:#eee; }
+
+		.section-title { font-size:13px; letter-spacing:1.3px; text-transform:uppercase; color:#fff; font-weight:800; margin:18px 0 10px; opacity:0.9; }
+		.show-chips { display:flex; flex-wrap:wrap; gap:8px; }
+		.show-chip {
+			display:flex; align-items:center; gap:8px;
+			background:rgba(0,0,0,0.28); border:2px solid rgba(255,255,255,0.14);
+			border-radius:10px; padding:8px 10px; font-weight:800;
+		}
+		.show-chip .ci { font-size:20px; line-height:1; }
+		.show-chip .ct { font-size:13px; letter-spacing:0.3px; text-transform:uppercase; }
+
+		.diff-wrap { display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
+		.diff-btn {
+			padding:9px 16px; font-size:13px; font-weight:800; border-radius:8px;
+			border:2px solid rgba(255,255,255,0.2); background:rgba(255,255,255,0.06);
+			color:#ccc; cursor:pointer; transition:all .2s; text-transform:uppercase; letter-spacing:0.5px;
+		}
+		.diff-btn:hover { background:rgba(255,255,255,0.12); }
+		.diff-btn.easy { color:#44dd88; }
+		.diff-btn.easy.selected { border-color:#44dd88; background:rgba(68,221,136,0.18); box-shadow:0 0 8px rgba(68,221,136,0.3); }
+		.diff-btn.normal { color:#66aaff; }
+		.diff-btn.normal.selected { border-color:#66aaff; background:rgba(102,170,255,0.18); box-shadow:0 0 8px rgba(102,170,255,0.3); }
+		.diff-btn.hard { color:#ff5555; }
+		.diff-btn.hard.selected { border-color:#ff5555; background:rgba(255,85,85,0.18); box-shadow:0 0 8px rgba(255,85,85,0.3); }
+		.diff-btn.nightmare { color:#e070ff; }
+		.diff-btn.nightmare.selected { border-color:#e070ff; background:rgba(224,112,255,0.18); box-shadow:0 0 8px rgba(224,112,255,0.35); }
+
+		.stat-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:6px; }
+		.stat-box {
+			border-radius:12px; padding:12px 6px 10px; text-align:center; border:3px solid currentColor;
+			min-width:0;
+		}
+		.stat-box .se { display:block; font-size:24px; line-height:1; }
+		.stat-box .sv { display:block; font-size:30px; font-weight:900; letter-spacing:-0.5px; line-height:1.1; margin:5px 0 3px; text-shadow:0 2px 0 rgba(0,0,0,0.35); }
+		.stat-box .sn { display:block; font-size:11px; font-weight:800; letter-spacing:0.9px; text-transform:uppercase; }
+		.stat-box.safe { color:#1d6b3f; background:#3ee08a; }
+		.stat-box.base { color:#1c2a44; background:#9eb4d8; }
+		.stat-box.warn { color:#5a3d00; background:#f0c14b; }
+		.stat-box.hot { color:#4a1200; background:#ff6b3d; }
+		.stat-box.deadly { color:#fff; background:#d8184a; box-shadow:0 0 16px rgba(216,24,74,0.45); }
+
+		.loot-table { background:rgba(0,0,0,0.28); border:2px solid rgba(255,255,255,0.12); border-radius:12px; padding:12px 14px; }
+		.loot-row { display:grid; grid-template-columns:150px 1fr 58px; gap:8px; align-items:center; margin-bottom:9px; }
+		.loot-row:last-child { margin-bottom:0; }
+		.loot-name { font-weight:800; font-size:13px; }
+		.loot-track { height:12px; background:#161616; border-radius:6px; overflow:hidden; border:1px solid rgba(255,255,255,0.08); }
+		.loot-fill { height:100%; border-radius:6px; }
+		.loot-pct { font-weight:900; font-size:15px; text-align:right; }
+
+		.enter-btn, .coop-btn {
+			padding:12px 28px; min-width:160px; font-size:16px; font-weight:800;
 			border:none; border-radius:8px; color:#fff; cursor:pointer;
 			box-shadow:0 3px 8px rgba(0,0,0,0.3); transition:background .2s,transform .2s;
 		}
-		.dungeon-card button:hover { transform:translateY(-2px); }
-		.btn-row { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
-		.coop-btn {
-			background:linear-gradient(135deg,#1b5e20,#43a047) !important;
-			min-width:130px !important;
-		}
+		.enter-btn:hover, .coop-btn:hover { transform:translateY(-2px); }
+		.btn-row { display:flex; gap:10px; flex-wrap:wrap; margin-top:18px; }
+		.coop-btn { background:linear-gradient(135deg,#1b5e20,#43a047) !important; min-width:130px !important; }
 		.coop-btn:hover { background:linear-gradient(135deg,#43a047,#66bb6a) !important; }
 
 		.coop-overlay {
@@ -96,8 +205,6 @@
 		.coop-cancel { background:rgba(255,255,255,0.1); color:#ccc; }
 		.coop-status { min-height:20px; font-size:13px; color:#a8ffcc; margin:10px 0; }
 		.coop-code { font-size:28px; letter-spacing:8px; color:#fff; font-weight:bold; margin:8px 0; }
-
-		/* Lobby slots */
 		.coop-slots { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin:14px 0; }
 		.coop-slot {
 			display:flex; align-items:center; gap:10px; padding:10px 12px;
@@ -114,52 +221,44 @@
 		.coop-slot .role { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px; }
 		.coop-slot.empty .who { color:rgba(255,255,255,0.35); font-weight:normal; font-style:italic; }
 
-		/* Difficulty selector */
-		.diff-wrap { display:flex; gap:8px; margin-bottom:16px; }
-		.diff-btn {
-			padding:6px 14px; font-size:12px; font-weight:bold; border-radius:6px;
-			border:2px solid rgba(255,255,255,0.2); background:rgba(255,255,255,0.06);
-			color:#ccc; cursor:pointer; transition:all .2s; text-transform:uppercase; letter-spacing:0.5px;
-		}
-		.diff-btn:hover { background:rgba(255,255,255,0.12); }
-		.diff-btn.selected { border-color:currentColor; background:rgba(255,255,255,0.15); }
-		.diff-btn.easy { color:#44dd88; }
-		.diff-btn.easy.selected { border-color:#44dd88; background:rgba(68,221,136,0.18); box-shadow:0 0 8px rgba(68,221,136,0.3); }
-		.diff-btn.normal { color:#66aaff; }
-		.diff-btn.normal.selected { border-color:#66aaff; background:rgba(102,170,255,0.18); box-shadow:0 0 8px rgba(102,170,255,0.3); }
-		.diff-btn.hard { color:#ff5555; }
-		.diff-btn.hard.selected { border-color:#ff5555; background:rgba(255,85,85,0.18); box-shadow:0 0 8px rgba(255,85,85,0.3); }
-		.diff-desc { font-size:11px; color:var(--muted); margin-bottom:14px; min-height:28px; text-align:center; }
-
-		/* Fire */
 		#fire-card { border-color:#ff6b35; background:linear-gradient(180deg,rgba(180,60,20,0.35),rgba(60,10,0,0.6)); }
 		#fire-card h2 { color:#ff9955; }
-		#fire-card button { background:linear-gradient(135deg,#d44000,#ff6b35); }
-		#fire-card button:hover { background:linear-gradient(135deg,#ff6b35,#ff9955); }
+		#fire-card .enter-btn { background:linear-gradient(135deg,#d44000,#ff6b35); }
+		#fire-card .enter-btn:hover { background:linear-gradient(135deg,#ff6b35,#ff9955); }
 
-		/* Ice */
 		#ice-card { border-color:#5bcefa; background:linear-gradient(180deg,rgba(40,100,180,0.35),rgba(10,30,60,0.6)); }
 		#ice-card h2 { color:#88ddff; }
-		#ice-card button { background:linear-gradient(135deg,#2277bb,#5bcefa); }
-		#ice-card button:hover { background:linear-gradient(135deg,#5bcefa,#88ddff); }
+		#ice-card .enter-btn { background:linear-gradient(135deg,#2277bb,#5bcefa); }
+		#ice-card .enter-btn:hover { background:linear-gradient(135deg,#5bcefa,#88ddff); }
 
-		/* Earth */
 		#earth-card { border-color:#7cb342; background:linear-gradient(180deg,rgba(60,100,30,0.35),rgba(20,30,10,0.6)); }
 		#earth-card h2 { color:#a5d66a; }
-		#earth-card button { background:linear-gradient(135deg,#558b2f,#7cb342); }
-		#earth-card button:hover { background:linear-gradient(135deg,#7cb342,#a5d66a); }
+		#earth-card .enter-btn { background:linear-gradient(135deg,#558b2f,#7cb342); }
+		#earth-card .enter-btn:hover { background:linear-gradient(135deg,#7cb342,#a5d66a); }
 
-		/* Iron */
-		#iron-card { border-color:#8a7a6a; background:linear-gradient(180deg,rgba(100,80,60,0.35),rgba(30,20,15,0.6)); }
-		#iron-card h2 { color:#cc9966; }
-		#iron-card button { background:linear-gradient(135deg,#6a5a4a,#8a7a6a); }
-		#iron-card button:hover { background:linear-gradient(135deg,#8a7a6a,#cc9966); }
+		#iron-card {
+			border-color:#555; background:linear-gradient(180deg,rgba(40,40,42,0.45),rgba(16,16,18,0.7));
+			opacity:0.72; filter:grayscale(0.85); pointer-events:none;
+		}
+		#iron-card:hover { transform:none; box-shadow:0 8px 18px rgba(0,0,0,0.3); }
+		#iron-card h2 { color:#bbb; text-decoration:line-through; text-decoration-thickness:3px; }
+		#iron-card .teaser, #iron-card .select-hint { text-decoration:line-through; opacity:0.7; }
+		#iron-card .closed-tag {
+			position:absolute; top:16px; right:16px; font-size:11px; letter-spacing:1px;
+			color:#ddd; border:1px solid #888; padding:3px 8px; border-radius:4px; text-transform:uppercase; font-weight:800;
+		}
 
 		.icon-big { font-size:48px; margin-bottom:10px; }
 
+		@media (max-width:980px) {
+			.inspect-grid { grid-template-columns:1fr; }
+			.starter-panel { position:relative; top:0; }
+			.stat-grid { grid-template-columns:repeat(2,1fr); }
+		}
 		@media (max-width:900px) {
-			.dungeon-grid { grid-template-columns:1fr; max-width:420px; }
+			.dungeon-row { flex-direction:column; max-width:420px; }
 			.dungeon-card { min-height:auto; padding:20px; }
+			.dungeon-row.is-focused { max-width:94vw; }
 		}
 	</style>
 </head>
@@ -168,71 +267,55 @@
 	<a href="index.html" id="backBtn">← Back to Menu</a>
 	<main class="page">
 		<h1>Choose a Dungeon</h1>
-		<p class="subtitle">Each dungeon holds unique enemies and challenges. Prepare your spells!</p>
+		<p class="subtitle" id="pageSub">Select a dungeon to inspect its mastery, mechanics, difficulties, and loot.</p>
 
-		<section class="dungeon-grid">
-			<article class="dungeon-card" id="fire-card">
-				<div class="icon-big">🔥</div>
-				<h2>The Inferno Depths</h2>
-				<p>Descend into the scorching volcanic corridors. Lava flows and flame-wielding creatures guard every turn.</p>
-				<div class="enemies-label">Enemies</div>
-				<div class="enemy-list">Imp · Flame Serpent · Ember Mage<br>Magma Golem · Fire Sprite</div>
-				<div class="diff-wrap">
-					<button class="diff-btn easy" onclick="setDiff('fire','easy',this)">Easy</button>
-					<button class="diff-btn normal selected" onclick="setDiff('fire','normal',this)">Normal</button>
-					<button class="diff-btn hard" onclick="setDiff('fire','hard',this)">Hard</button>
+		<section class="dungeon-row" id="dungeonRow">
+			<article class="dungeon-card" id="fire-card" data-type="fire">
+				<div class="card-face">
+					<div class="icon-big">🔥</div>
+					<div>
+						<h2>The Inferno Depths</h2>
+						<p class="teaser">Volcanic corridors, lava, and flame-wielding creatures.</p>
+						<div class="select-hint">Click to inspect</div>
+					</div>
 				</div>
-				<div class="diff-desc" id="fire-diff-desc">Standard enemy strength and attack speed.</div>
-				<button onclick="enterDungeon('fire')">Enter Dungeon</button>
-				<div class="btn-row" style="margin-top:10px"><button class="coop-btn" onclick="openCoop('fire')">🤝 Co-op</button></div>
+				<div class="card-details" data-details="fire"></div>
 			</article>
 
-			<article class="dungeon-card" id="ice-card">
-				<div class="icon-big">❄️</div>
-				<h2>The Frozen Caverns</h2>
-				<p>Navigate the icy depths where frost bites and ancient cold creatures lurk in every shadow.</p>
-				<div class="enemies-label">Enemies</div>
-				<div class="enemy-list">Frost Wraith · Ice Archer · Snow Beast<br>Cryo Mage · Glacier Sentinel</div>
-				<div class="diff-wrap">
-					<button class="diff-btn easy" onclick="setDiff('ice','easy',this)">Easy</button>
-					<button class="diff-btn normal selected" onclick="setDiff('ice','normal',this)">Normal</button>
-					<button class="diff-btn hard" onclick="setDiff('ice','hard',this)">Hard</button>
+			<article class="dungeon-card" id="ice-card" data-type="ice">
+				<div class="card-face">
+					<div class="icon-big">❄️</div>
+					<div>
+						<h2>The Glacial Reach</h2>
+						<p class="teaser">Frozen caverns, blizzards, and ancient cold that never sleeps.</p>
+						<div class="select-hint">Click to inspect</div>
+					</div>
 				</div>
-				<div class="diff-desc" id="ice-diff-desc">Standard enemy strength and attack speed.</div>
-				<button onclick="enterDungeon('ice')">Enter Dungeon</button>
-				<div class="btn-row" style="margin-top:10px"><button class="coop-btn" onclick="openCoop('ice')">🤝 Co-op</button></div>
+				<div class="card-details" data-details="ice"></div>
 			</article>
 
-			<article class="dungeon-card" id="iron-card">
-				<div class="icon-big">⚙️</div>
-				<h2>The Iron Forge</h2>
-				<p>Descend into the ancient forge where molten metal and iron constructs guard the depths.</p>
-				<div class="enemies-label">Enemies</div>
-				<div class="enemy-list">Iron Sentinel · Forge Drone · Slag Brute</div>
-				<div class="diff-wrap">
-					<button class="diff-btn easy" onclick="setDiff('iron','easy',this)">Easy</button>
-					<button class="diff-btn normal selected" onclick="setDiff('iron','normal',this)">Normal</button>
-					<button class="diff-btn hard" onclick="setDiff('iron','hard',this)">Hard</button>
+			<article class="dungeon-card closed" id="iron-card" data-type="iron" aria-disabled="true">
+				<div class="closed-tag">Closed</div>
+				<div class="card-face">
+					<div class="icon-big">⚙️</div>
+					<div>
+						<h2>The Iron Forge</h2>
+						<p class="teaser">An ancient forge buried deep underground.</p>
+						<div class="select-hint">Unavailable</div>
+					</div>
 				</div>
-				<div class="diff-desc" id="iron-diff-desc">Standard enemy strength and attack speed.</div>
-				<button onclick="enterDungeon('iron')">Enter Dungeon</button>
-				<div class="btn-row" style="margin-top:10px"><button class="coop-btn" onclick="openCoop('iron')">🤝 Co-op</button></div>
 			</article>
 
-			<article class="dungeon-card" id="earth-card">
-				<div class="icon-big">🌿</div>
-				<h2>The Stone Warrens</h2>
-				<p>Dig through sprawling underground tunnels filled with living stone, vines, and crystal magic.</p>
-				<div class="enemies-label">Enemies</div>
-				<div class="enemy-list">Rock Golem · Vine Crawler · Cave Spider<br>Crystal Mage · Mud Elemental</div>
-				<div class="diff-wrap">
-					<button class="diff-btn easy" onclick="setDiff('earth','easy',this)">Easy</button>
-					<button class="diff-btn normal selected" onclick="setDiff('earth','normal',this)">Normal</button>
-					<button class="diff-btn hard" onclick="setDiff('earth','hard',this)">Hard</button>
+			<article class="dungeon-card" id="earth-card" data-type="earth">
+				<div class="card-face">
+					<div class="icon-big">🌿</div>
+					<div>
+						<h2>The Living Wilds</h2>
+						<p class="teaser">A vertical underground ecosystem of roots, ruins, and predators.</p>
+						<div class="select-hint">Click to inspect</div>
+					</div>
 				</div>
-				<div class="diff-desc" id="earth-diff-desc">Standard enemy strength and attack speed.</div>
-				<button onclick="enterDungeon('earth')">Enter Dungeon</button>
-				<div class="btn-row" style="margin-top:10px"><button class="coop-btn" onclick="openCoop('earth')">🤝 Co-op</button></div>
+				<div class="card-details" data-details="earth"></div>
 			</article>
 		</section>
 	</main>
@@ -258,23 +341,410 @@
 	</div>
 
 	<script>
+	const SLIDE_MS = 1800;
 	const selectedDiff = { fire:'normal', ice:'normal', earth:'normal', iron:'normal' };
-	const DIFF_DESCS = {
-		easy:   'Enemies have less health and attack less often.',
-		normal: 'Standard enemy strength and attack speed.',
-		hard:   'Enemies have 2× health & size, deal more damage, and attack faster.',
+	const DIFF_ORDER = [
+		{ id:'easy', label:'Easy' },
+		{ id:'normal', label:'Medium' },
+		{ id:'hard', label:'Hard' },
+		{ id:'nightmare', label:'Nightmare' },
+	];
+	const DIFF_STATS = {
+		easy:      { hp:0.6, dmg:0.7, range:1, speed:0.67 },
+		normal:    { hp:1,   dmg:1,   range:1, speed:1 },
+		hard:      { hp:2,   dmg:2,   range:1.15, speed:1.2 },
+		nightmare: { hp:5,   dmg:4,   range:1.5, speed:1.35 },
 	};
+	const LOOT_TABLES = {
+		easy: [
+			{ name:'Common', pct:85, color:'#aaa' },
+			{ name:'Uncommon', pct:14, color:'#2ecc71' },
+			{ name:'Rare', pct:1, color:'#3498db' },
+			{ name:'Corrupted', pct:0, color:'#c0392b' },
+		],
+		normal: [
+			{ name:'Common', pct:60, color:'#aaa' },
+			{ name:'Uncommon', pct:30, color:'#2ecc71' },
+			{ name:'Rare', pct:9, color:'#3498db' },
+			{ name:'Epic', pct:1, color:'#9b59b6' },
+			{ name:'Corrupted', pct:1, color:'#c0392b' },
+		],
+		hard: [
+			{ name:'Common', pct:18, color:'#aaa' },
+			{ name:'Uncommon', pct:36, color:'#2ecc71' },
+			{ name:'Rare', pct:30, color:'#3498db' },
+			{ name:'Epic', pct:12, color:'#9b59b6' },
+			{ name:'Legendary', pct:3, color:'#f39c12' },
+			{ name:'Corrupted', pct:4, color:'#c0392b' },
+			{ name:'Nightmare Corrupted', pct:0.2, color:'#e070ff' },
+		],
+		nightmare: [
+			{ name:'Uncommon', pct:16, color:'#2ecc71' },
+			{ name:'Rare', pct:48, color:'#3498db' },
+			{ name:'Epic', pct:22, color:'#9b59b6' },
+			{ name:'Legendary', pct:8, color:'#f39c12' },
+			{ name:'Cursed', pct:3, color:'#c0392b' },
+			{ name:'Variants', pct:40, color:'#7ecbff' },
+			{ name:'Corrupted', pct:10, color:'#c0392b' },
+			{ name:'Nightmare Corrupted', pct:1.2, color:'#e070ff' },
+		],
+	};
+	const DUNGEON_SHOW = {
+		fire: {
+			chips: [
+				{ i:'🌡️', t:'Heat builds' },
+				{ i:'🚪', t:'Rooms seal' },
+				{ i:'🌋', t:'Lava & vents' },
+				{ i:'🛡️', t:'Magma Warden' },
+				{ i:'🐉', t:'Fire boss' },
+			],
+		},
+		ice: {
+			chips: [
+				{ i:'❄️', t:'Frost builds' },
+				{ i:'🔥', t:'Warm up' },
+				{ i:'💨', t:'Blizzards' },
+				{ i:'🧊', t:'Thin ice' },
+				{ i:'🛡️', t:'Frostbound Knight' },
+				{ i:'🐉', t:'Kryonax' },
+			],
+		},
+		earth: {
+			chips: [
+				{ i:'👁️', t:'Awareness' },
+				{ i:'🧗', t:'Vertical climb' },
+				{ i:'🌿', t:'Living jungle' },
+				{ i:'🔑', t:'Hidden paths' },
+				{ i:'🧩', t:'Living puzzles' },
+				{ i:'🐉', t:'Verdant Colossus' },
+			],
+		},
+	};
+	const STARTER_ROOMS = {
+		fire: {
+			name:'Descent Gate',
+			w:720, h:480,
+			cells:[{x:0,y:0,w:720,h:480}],
+			solids:[],
+			platforms:[],
+			exits:[{side:'right', y:240, h:240}],
+			you:{x:90, y:400},
+		},
+		ice: {
+			name:'The Cave Mouth',
+			w:1080, h:760,
+			cells:[{x:0,y:200,w:1080,h:560},{x:120,y:60,w:620,h:200}],
+			solids:[{x:0,y:620,w:300,h:140},{x:760,y:660,w:320,h:100}],
+			platforms:[{x:300,y:600,w:200,h:18},{x:560,y:540,w:180,h:18}],
+			exits:[{side:'right', y:430, h:200}],
+			you:{x:220, y:680},
+		},
+		earth: {
+			name:'The Overgrown Gate',
+			w:1760, h:920,
+			cells:[{x:0,y:260,w:1760,h:660},{x:180,y:80,w:820,h:220}],
+			solids:[{x:0,y:760,w:280,h:160},{x:1420,y:800,w:340,h:120}],
+			platforms:[{x:280,y:720,w:240,h:18},{x:600,y:650,w:220,h:18},{x:930,y:720,w:260,h:18}],
+			exits:[{side:'right', y:620, h:220}],
+			you:{x:240, y:700},
+		},
+	};
+	const MASTERY_MAX = 1000;
+	let focusedType = null;
+	let slideLock = false;
+
+	function getMastery(type){
+		try {
+			const raw = JSON.parse(localStorage.getItem('magicBattle_dungeonMastery') || '{}');
+			const n = Number(raw[type]);
+			return Math.max(0, Math.min(MASTERY_MAX, Number.isFinite(n) ? n : 0));
+		} catch(e){ return 0; }
+	}
+	function masteryRank(xp){
+		if(xp >= 800) return 'Master';
+		if(xp >= 500) return 'Veteran';
+		if(xp >= 250) return 'Adept';
+		if(xp >= 80) return 'Initiate';
+		return 'Unranked';
+	}
+	function fmtMult(n){
+		if(Math.abs(n - 1) < 0.02) return '1.0×';
+		if(n >= 2 && Math.abs(n - Math.round(n)) < 0.02) return Math.round(n) + '×';
+		return (Math.round(n * 10) / 10).toFixed(1) + '×';
+	}
+	function dangerClass(n){
+		if(n < 0.85) return 'safe';
+		if(n < 1.05) return 'base';
+		if(n <= 1.5) return 'warn';
+		if(n <= 2.5) return 'hot';
+		return 'deadly';
+	}
+	function renderMastery(type){
+		const xp = getMastery(type);
+		const pct = Math.round(xp / MASTERY_MAX * 100);
+		return '<div class="mastery-box">' +
+			'<div class="mastery-top"><span class="mastery-label">Dungeon Mastery</span>' +
+			'<span class="mastery-rank">'+masteryRank(xp)+' · '+xp+' / '+MASTERY_MAX+'</span></div>' +
+			'<div class="mastery-bar"><div class="mastery-fill" style="width:'+pct+'%"></div></div>' +
+			'<div class="mastery-icons">' +
+			'<div class="mastery-chip"><span class="mi">🗺️</span><span class="ml">Rooms</span></div>' +
+			'<div class="mastery-chip"><span class="mi">💀</span><span class="ml">Kills</span></div>' +
+			'<div class="mastery-chip"><span class="mi">🏆</span><span class="ml">Clear</span></div>' +
+			'<div class="mastery-chip"><span class="mi">🔑</span><span class="ml">Secrets</span></div>' +
+			'</div></div>';
+	}
+	function renderChips(type){
+		const chips = (DUNGEON_SHOW[type] && DUNGEON_SHOW[type].chips) || [];
+		return '<div class="show-chips">' + chips.map(c =>
+			'<div class="show-chip"><span class="ci">'+c.i+'</span><span class="ct">'+c.t+'</span></div>'
+		).join('') + '</div>';
+	}
+	function renderStats(type){
+		const s = DIFF_STATS[selectedDiff[type]] || DIFF_STATS.normal;
+		const items = [
+			{ e:'❤️', n:'Health', v:s.hp },
+			{ e:'⚔️', n:'Damage', v:s.dmg },
+			{ e:'🎯', n:'Range', v:s.range },
+			{ e:'⚡', n:'Speed', v:s.speed },
+		];
+		return '<div class="stat-grid" id="'+type+'-stats">' + items.map(it =>
+			'<div class="stat-box '+dangerClass(it.v)+'"><span class="se">'+it.e+'</span><span class="sv">'+fmtMult(it.v)+'</span><span class="sn">'+it.n+'</span></div>'
+		).join('') + '</div>';
+	}
+	function renderLoot(type){
+		const rows = LOOT_TABLES[selectedDiff[type]] || LOOT_TABLES.normal;
+		return '<div class="loot-table" id="'+type+'-loot">' + rows.map(r =>
+			'<div class="loot-row"><span class="loot-name" style="color:'+r.color+'">'+r.name+'</span>' +
+			'<div class="loot-track"><div class="loot-fill" style="width:'+r.pct+'%;background:'+r.color+'"></div></div>' +
+			'<span class="loot-pct" style="color:'+r.color+'">'+(Number.isInteger(r.pct)?r.pct:r.pct)+'%</span></div>'
+		).join('') + '</div>';
+	}
+	function renderDiffButtons(type){
+		return '<div class="diff-wrap" data-dungeon="'+type+'">' + DIFF_ORDER.map(d =>
+			'<button type="button" class="diff-btn '+d.id+(selectedDiff[type]===d.id?' selected':'')+'" onclick="setDiff(\''+type+'\',\''+d.id+'\',this)">'+d.label+'</button>'
+		).join('') + '</div>';
+	}
+	function renderDetails(type){
+		const room = STARTER_ROOMS[type];
+		const enterColor = type;
+		return '<button type="button" class="back-to-list" onclick="collapseDungeon()">← All Dungeons</button>' +
+			'<div class="inspect-grid">' +
+			'<div class="inspect-main">' +
+			renderMastery(type) +
+			'<div class="section-title">What you face</div>' +
+			renderChips(type) +
+			'<div class="section-title">Difficulty</div>' +
+			renderDiffButtons(type) +
+			renderStats(type) +
+			'<div class="section-title">Loot</div>' +
+			renderLoot(type) +
+			'<div class="btn-row">' +
+			'<button class="enter-btn" type="button" onclick="enterDungeon(\''+type+'\')">Enter Dungeon</button>' +
+			'<button class="coop-btn" type="button" onclick="openCoop(\''+type+'\')">🤝 Co-op</button>' +
+			'</div></div>' +
+			'<aside class="starter-panel">' +
+			'<div class="starter-kicker">Starter room</div>' +
+			'<div class="starter-name">'+(room ? room.name : 'Unknown')+'</div>' +
+			'<canvas class="starter-canvas" id="'+type+'-startMap" width="276" height="190"></canvas>' +
+			'<div class="starter-key">' +
+			'<span><i class="key-swatch key-you"></i>You</span>' +
+			'<span><i class="key-swatch key-exit"></i>Exit</span>' +
+			'<span><i class="key-swatch key-plat"></i>Ledge</span>' +
+			'</div></aside></div>';
+	}
+	function drawStarterRoom(type){
+		const spec = STARTER_ROOMS[type];
+		const cv = document.getElementById(type+'-startMap');
+		if(!spec || !cv) return;
+		const ctx = cv.getContext('2d');
+		const W = cv.width, H = cv.height;
+		ctx.fillStyle = '#101010';
+		ctx.fillRect(0, 0, W, H);
+		let minX = 0, minY = 0, maxX = spec.w, maxY = spec.h;
+		(spec.cells || []).forEach(c => {
+			minX = Math.min(minX, c.x); minY = Math.min(minY, c.y);
+			maxX = Math.max(maxX, c.x + c.w); maxY = Math.max(maxY, c.y + c.h);
+		});
+		const pad = 16;
+		const rw = Math.max(1, maxX - minX), rh = Math.max(1, maxY - minY);
+		const scale = Math.min((W - pad * 2) / rw, (H - pad * 2) / rh);
+		const ox = (W - rw * scale) / 2 - minX * scale;
+		const oy = (H - rh * scale) / 2 - minY * scale;
+		function box(x, y, w, h){ return { x:ox + x * scale, y:oy + y * scale, w:w * scale, h:h * scale }; }
+		(spec.cells || [{x:0,y:0,w:spec.w,h:spec.h}]).forEach(c => {
+			const d = box(c.x, c.y, c.w, c.h);
+			ctx.fillStyle = '#5c5c5c';
+			ctx.fillRect(d.x, d.y, d.w, d.h);
+			ctx.strokeStyle = 'rgba(220,220,220,0.3)';
+			ctx.strokeRect(d.x, d.y, d.w, d.h);
+		});
+		(spec.solids || []).forEach(s => {
+			const d = box(s.x, s.y, s.w, s.h);
+			ctx.fillStyle = '#2a2a2a';
+			ctx.fillRect(d.x, d.y, d.w, d.h);
+		});
+		(spec.platforms || []).forEach(p => {
+			const d = box(p.x, p.y, p.w, p.h || 16);
+			ctx.fillStyle = '#8a8a8a';
+			ctx.fillRect(d.x, d.y, Math.max(2, d.w), Math.max(2, d.h));
+		});
+		(spec.exits || []).forEach(ex => {
+			ctx.fillStyle = '#e8e8e8';
+			if(ex.side === 'right'){
+				const d = box(spec.w - 8, ex.y, 28, ex.h);
+				ctx.fillRect(d.x, d.y, d.w, d.h);
+			} else if(ex.side === 'left'){
+				const d = box(-20, ex.y, 28, ex.h);
+				ctx.fillRect(d.x, d.y, d.w, d.h);
+			} else if(ex.side === 'top'){
+				const d = box(ex.x, -20, ex.w, 28);
+				ctx.fillRect(d.x, d.y, d.w, d.h);
+			} else {
+				const d = box(ex.x, spec.h - 8, ex.w, 28);
+				ctx.fillRect(d.x, d.y, d.w, d.h);
+			}
+		});
+		if(spec.you){
+			const d = box(spec.you.x, spec.you.y, 28, 40);
+			ctx.fillStyle = '#f4f4f4';
+			ctx.fillRect(d.x, d.y, Math.max(4, d.w), Math.max(6, d.h));
+		}
+	}
 	function setDiff(dungeon, diff, btn){
 		selectedDiff[dungeon] = diff;
 		const wrap = btn.parentElement;
 		wrap.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('selected'));
 		btn.classList.add('selected');
-		document.getElementById(dungeon+'-diff-desc').textContent = DIFF_DESCS[diff];
+		const host = document.querySelector('[data-details="'+dungeon+'"]');
+		if(!host) return;
+		const stats = host.querySelector('.stat-grid');
+		const loot = host.querySelector('.loot-table');
+		if(stats) stats.outerHTML = renderStats(dungeon);
+		if(loot) loot.outerHTML = renderLoot(dungeon);
+	}
+	function pinCard(card, rect){
+		card.classList.add('is-flying');
+		card.classList.remove('fly-away', 'is-returning');
+		card.style.position = 'fixed';
+		card.style.left = rect.left + 'px';
+		card.style.top = rect.top + 'px';
+		card.style.width = rect.width + 'px';
+		card.style.height = rect.height + 'px';
+		card.style.transform = 'none';
+		card.style.visibility = '';
+	}
+	function clearPin(card){
+		card.classList.remove('is-flying', 'fly-away', 'is-returning');
+		card.style.position = '';
+		card.style.left = '';
+		card.style.top = '';
+		card.style.width = '';
+		card.style.height = '';
+		card.style.transform = '';
+		card.style.opacity = '';
+		card.style.visibility = '';
+		delete card.dataset.flyDir;
+	}
+	function selectDungeon(type){
+		if(type === 'iron' || focusedType === type || slideLock) return;
+		const row = document.getElementById('dungeonRow');
+		const cards = [...row.querySelectorAll('.dungeon-card')];
+		const chosen = cards.findIndex(c => c.dataset.type === type);
+		const rects = cards.map(c => c.getBoundingClientRect());
+		cards.forEach((card, i) => {
+			if(i === chosen) return;
+			const dir = i < chosen ? -1 : 1;
+			card.dataset.flyDir = String(dir);
+			card.style.opacity = '1';
+			pinCard(card, rects[i]);
+		});
+		row.classList.add('is-focused');
+		const card = document.getElementById(type+'-card');
+		card.classList.add('expanded');
+		const details = card.querySelector('.card-details');
+		details.innerHTML = renderDetails(type);
+		focusedType = type;
+		document.getElementById('pageSub').textContent = 'Inspect the dungeon, pick a difficulty, then enter.';
+		requestAnimationFrame(function(){
+			drawStarterRoom(type);
+			requestAnimationFrame(function(){
+				cards.forEach((c, i) => {
+					if(i === chosen) return;
+					const dir = Number(c.dataset.flyDir) || (i < chosen ? -1 : 1);
+					c.classList.add('fly-away');
+					c.style.left = (rects[i].left + dir * window.innerWidth * 1.15) + 'px';
+					c.style.opacity = '0';
+				});
+			});
+		});
+		card.scrollTop = 0;
+	}
+	function collapseDungeon(){
+		if(!focusedType || slideLock) return;
+		slideLock = true;
+		const row = document.getElementById('dungeonRow');
+		const cards = [...row.querySelectorAll('.dungeon-card')];
+		const chosen = cards.findIndex(c => c.dataset.type === focusedType);
+		const flyers = cards.filter((_, i) => i !== chosen);
+		const dirs = flyers.map(card => Number(card.dataset.flyDir) || 1);
+		flyers.forEach(card => {
+			card.classList.remove('fly-away', 'is-returning', 'is-flying');
+			card.style.visibility = 'hidden';
+			card.style.position = '';
+			card.style.left = '';
+			card.style.top = '';
+			card.style.width = '';
+			card.style.height = '';
+			card.style.transform = '';
+			card.style.opacity = '0';
+		});
+		row.classList.remove('is-focused');
+		const selected = cards[chosen];
+		if(selected) selected.classList.remove('expanded');
+		const dests = flyers.map(card => card.getBoundingClientRect());
+		flyers.forEach((card, i) => {
+			const dest = dests[i];
+			const dir = dirs[i] || 1;
+			card.style.opacity = '0';
+			pinCard(card, {
+				left: dest.left + dir * window.innerWidth * 1.15,
+				top: dest.top,
+				width: dest.width,
+				height: dest.height
+			});
+		});
+		void row.offsetWidth;
+		requestAnimationFrame(function(){
+			flyers.forEach(card => { void card.offsetWidth; });
+			requestAnimationFrame(function(){
+				flyers.forEach((card, i) => {
+					card.classList.add('is-returning');
+					card.style.left = dests[i].left + 'px';
+					card.style.opacity = '1';
+				});
+			});
+		});
+		setTimeout(function(){
+			cards.forEach(clearPin);
+			focusedType = null;
+			slideLock = false;
+			document.getElementById('pageSub').textContent = 'Select a dungeon to inspect its mastery, mechanics, difficulties, and loot.';
+		}, SLIDE_MS + 40);
 	}
 	function enterDungeon(type){
-		const diff = selectedDiff[type];
-		location.href = 'dungeon.html?type=' + type + '&diff=' + diff;
+		if(type === 'iron') return;
+		location.href = 'dungeon.html?type=' + type + '&diff=' + selectedDiff[type];
 	}
+
+	document.getElementById('dungeonRow').addEventListener('click', function(e){
+		const card = e.target.closest('.dungeon-card');
+		if(!card || card.classList.contains('closed') || card.classList.contains('expanded') || card.classList.contains('is-flying')) return;
+		if(e.target.closest('button')) return;
+		selectDungeon(card.dataset.type);
+	});
+	document.addEventListener('keydown', function(e){
+		if(e.key === 'Escape' && focusedType) collapseDungeon();
+	});
 
 	/* ===== Co-op lobby (up to 4 players) ===== */
 	const COOP_SLOT_COLORS = ['#4488ff', '#44dd66', '#ff4455', '#ffcc33'];
@@ -314,6 +784,7 @@
 		};
 	}
 	function openCoop(type){
+		if(type === 'iron') return;
 		coopDungeon = type;
 		document.getElementById('coopTitle').textContent = 'Co-op: ' + type.charAt(0).toUpperCase() + type.slice(1) + ' Dungeon';
 		document.getElementById('coopStatus').textContent = '';

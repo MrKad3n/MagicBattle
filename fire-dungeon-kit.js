@@ -522,6 +522,12 @@ function tickImpKit(en, kit){
 function tickSerpentKit(en, kit){
 	const aim = fireKitAim(en);
 	if(kit.kind === 'burrowingFang'){
+		if(kit.t > 220){
+			en._fireHidden = false;
+			en._fireNoHit = false;
+			fireKitEnd(en);
+			return;
+		}
 		const dest = kit.path[kit.pi];
 		if(!dest){
 			en._fireHidden = false; en._fireNoHit = false;
@@ -571,6 +577,12 @@ function tickSerpentKit(en, kit){
 			en.x = kit.cx - en.w / 2; en.y = kit.cy - en.h / 2;
 		} else if(kit.t >= 110) fireKitEnd(en);
 	} else if(kit.kind === 'eruptionChase'){
+		if(kit.t > 360){
+			en._fireHidden = false;
+			en._fireNoHit = false;
+			fireKitEnd(en);
+			return;
+		}
 		en.x += ((aim.x - 8) - en.x) * 0.09;
 		en.y = kit.floor - 8;
 		if(kit.t >= kit.nextPop && kit.pops < kit.maxPops){
@@ -1159,6 +1171,7 @@ function dungeonRegularKitGrid(en, img, typeSet){
 	if(!img || !img.naturalWidth || !img.naturalHeight) return { cols: 8, rows: 6 };
 	const r = img.naturalWidth / img.naturalHeight;
 	if(r > 1.22 && r < 1.42) return { cols: 8, rows: 6 };
+	if(r > 1.55 && r < 1.95) return { cols: 10, rows: 6 };
 	if(r > 0.68 && r < 0.86) return { cols: 6, rows: 8 };
 	return { cols: 8, rows: 6 };
 }

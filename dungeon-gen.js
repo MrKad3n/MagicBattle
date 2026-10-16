@@ -36,9 +36,13 @@
 			enemies: [
 				{type:'imp', minLv:0, maxLv:3, weight:3},
 				{type:'fireSprite', minLv:0, maxLv:3, weight:3},
+				{type:'cinderBeetle', minLv:0, maxLv:5, weight:2},
+				{type:'furnaceLeech', minLv:1, maxLv:5, weight:2},
 				{type:'flameSerpent', minLv:1, maxLv:5, weight:2},
 				{type:'emberMage', minLv:2, maxLv:6, weight:2},
+				{type:'ashRevenant', minLv:2, maxLv:6, weight:2},
 				{type:'magmaGolem', minLv:3, maxLv:6, weight:1},
+				{type:'magmaHarvester', minLv:3, maxLv:6, weight:1},
 			],
 			boss: 'fireDragon',
 			warden: 'magmaWarden',
@@ -62,9 +66,13 @@
 			enemies: [
 				{type:'frostWraith', minLv:0, maxLv:3, weight:3},
 				{type:'iceArcher', minLv:0, maxLv:4, weight:2},
+				{type:'frostMantis', minLv:0, maxLv:4, weight:2},
 				{type:'snowBeast', minLv:1, maxLv:5, weight:2},
+				{type:'glacierEel', minLv:1, maxLv:5, weight:2},
 				{type:'cryoMage', minLv:2, maxLv:6, weight:2},
+				{type:'crystalScarab', minLv:2, maxLv:6, weight:2},
 				{type:'glacierSentinel', minLv:3, maxLv:6, weight:1},
+				{type:'snowboundMimic', minLv:3, maxLv:6, weight:2},
 			],
 			boss: 'frostColossus',
 			warden: 'frostWarden',
@@ -134,6 +142,9 @@
 	function generateDungeonWorld(type){
 		if(type === 'fire' && typeof global.generateFireInfernalDepths === 'function'){
 			return global.generateFireInfernalDepths();
+		}
+		if(type === 'ice' && typeof global.generateIceFrozenLabyrinth === 'function'){
+			return global.generateIceFrozenLabyrinth();
 		}
 		const theme = THEMES[type] || THEMES.fire;
 		const R = rngFromSeed((Date.now() ^ (Math.random() * 0xFFFFFF | 0)) & 0x7FFFFFFF);

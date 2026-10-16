@@ -245,11 +245,11 @@ function phaseManaShares(spell, opts){
 const NECRO_POINT_CAP = 15;
 const NECRO_DOMAIN_POINT_CAP = 50;
 const SUMMON_POINT_VALUES = {
-	imp:1, flameSerpent:1, emberMage:1, fireSprite:1, magmaGolem:2, fireDragon:5,
-	frostWraith:1, iceArcher:1, snowBeast:1, cryoMage:1, glacierSentinel:1, frostColossus:5,
-	rockGolem:1, vineCrawler:1, caveSpider:1, crystalMage:1, mudElemental:1, earthColossus:5,
+	imp:1, flameSerpent:1, emberMage:1, fireSprite:1, magmaGolem:2, cinderBeetle:2, furnaceLeech:1, ashRevenant:2, magmaHarvester:2, fireDragon:5,
+	frostWraith:1, iceArcher:1, snowBeast:1, cryoMage:1, glacierSentinel:1, frostMantis:1, glacierEel:1, crystalScarab:1, snowboundMimic:1, frostColossus:5,
+	rockGolem:1, vineCrawler:1, caveSpider:1, crystalMage:1, mudElemental:1, earthColossus:5, verdantColossus:5,
 	ironSentinel:2, forgeDrone:1, slagBrute:2, ironColossus:8,
-	thornWolf:1, sporeFungus:1, mossWraith:1, willowWisp:1, glowBeetle:1, stalactiteBat:1,
+	thornWolf:1, sporeFungus:1, mossWraith:1, willowWisp:1, glowBeetle:1, stalactiteBat:1, barkbackBeetle:1, pollenMoth:1, rootParasite:1, jungleChameleon:1,
 	skyVine:1, windSylph:1, elderTreant:5, stormRaptor:5, deepRootHorror:8,
 	darkVineCrawler:2, darkThornWolf:2, darkMossWraith:2,
 	boneWraith:1, babyDragon:5,
@@ -299,11 +299,11 @@ function necroSizeManaCost(size, sizeMax){
 
 /* Combat HP / boss flags. Used when ENEMY_TYPES is not loaded (inventory). */
 const SUMMON_HP = {
-	imp:350, flameSerpent:480, emberMage:300, magmaGolem:1100, fireSprite:200, fireDragon:15000,
-	frostWraith:200, iceArcher:170, snowBeast:600, cryoMage:160, glacierSentinel:700, frostColossus:15000,
-	rockGolem:700, vineCrawler:200, caveSpider:80, crystalMage:170, mudElemental:400, earthColossus:15000,
+	imp:350, flameSerpent:480, emberMage:300, magmaGolem:1100, fireSprite:200, cinderBeetle:720, furnaceLeech:180, ashRevenant:540, magmaHarvester:980, fireDragon:15000,
+	frostWraith:200, iceArcher:170, snowBeast:600, cryoMage:160, glacierSentinel:700, frostMantis:280, glacierEel:460, crystalScarab:400, snowboundMimic:340, frostColossus:15000,
+	rockGolem:700, vineCrawler:200, caveSpider:80, crystalMage:170, mudElemental:400, earthColossus:15000, verdantColossus:20000,
 	ironSentinel:800, forgeDrone:350, slagBrute:1200, ironColossus:25000,
-	thornWolf:224, sporeFungus:280, mossWraith:176, willowWisp:112, glowBeetle:144, stalactiteBat:96,
+	thornWolf:224, sporeFungus:280, mossWraith:176, willowWisp:112, glowBeetle:144, stalactiteBat:96, barkbackBeetle:520, pollenMoth:240, rootParasite:300, jungleChameleon:380,
 	skyVine:208, windSylph:144, elderTreant:4000, stormRaptor:4000, deepRootHorror:25000,
 	darkVineCrawler:800, darkThornWolf:900, darkMossWraith:700,
 	boneWraith:280, babyDragon:5000,
@@ -313,7 +313,7 @@ const SUMMON_HP = {
 	seraphel:85000, voidArbiter:50000, infernalKitten:80000, zenith:120000
 };
 const SUMMON_BOSS = {
-	fireDragon:1, frostColossus:1, earthColossus:1, ironColossus:1,
+	fireDragon:1, frostColossus:1, earthColossus:1, verdantColossus:1, ironColossus:1,
 	elderTreant:1, stormRaptor:1, deepRootHorror:1, babyDragon:1, fireColossus:1,
 	seraphel:1, voidArbiter:1, infernalKitten:1, zenith:1
 };

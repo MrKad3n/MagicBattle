@@ -192,6 +192,123 @@
 			background-image: url('images/backgrounds/openworld-card.jpg');
 		}
 
+		#map-card {
+			border-color: #4aa3ff;
+			background-image: url('images/worldmaps/coordinate-map.jpg');
+		}
+
+		#coordMapOverlay {
+			position: fixed;
+			inset: 0;
+			z-index: 160;
+			background: rgba(0,0,0,0.88);
+			display: none;
+			align-items: center;
+			justify-content: center;
+			flex-direction: column;
+			padding: 16px;
+		}
+		#coordMapOverlay.open { display: flex; }
+		#coordMapTitle {
+			font-size: 26px;
+			color: #fff;
+			margin-bottom: 10px;
+			text-shadow: 2px 2px 6px #000;
+			letter-spacing: 1px;
+		}
+		#coordMapWrap {
+			position: relative;
+			width: min(1100px, 94vw);
+			aspect-ratio: 1024 / 571;
+			max-height: 78vh;
+			border: 3px solid rgba(255,255,255,0.25);
+			border-radius: 12px;
+			overflow: visible;
+			background: #0b1220 url('images/worldmaps/coordinate-map.jpg') center/100% 100% no-repeat;
+			box-shadow: 0 8px 30px rgba(0,0,0,0.55);
+		}
+		#coordMapLines {
+			position: absolute;
+			inset: 0;
+			width: 100%;
+			height: 100%;
+			z-index: 2;
+			overflow: visible;
+		}
+		#coordMapLines .coord-seg {
+			stroke: rgba(74, 163, 255, 0.72);
+			stroke-width: 2;
+			vector-effect: non-scaling-stroke;
+			pointer-events: none;
+		}
+		#coordMapLines .coord-seg-hit {
+			stroke: rgba(255, 255, 255, 0.01);
+			stroke-width: 16;
+			vector-effect: non-scaling-stroke;
+			pointer-events: stroke;
+			cursor: pointer;
+		}
+		#coordMapLines g.coord-line.is-hover .coord-seg {
+			stroke: #ffe27a;
+			stroke-width: 3.5;
+		}
+		#coordMapLines g.coord-line.has-dest .coord-seg {
+			stroke: rgba(255, 176, 70, 0.95);
+			stroke-width: 3;
+		}
+		#coordMapLabels {
+			position: absolute;
+			inset: 0;
+			pointer-events: none;
+			overflow: visible;
+			z-index: 3;
+		}
+		.coord-label {
+			position: absolute;
+			transform: translate(6px, -5px);
+			font: 700 9px/1 Arial, sans-serif;
+			color: #fff;
+			text-shadow: 0 0 3px #000, 0 1px 2px #000, 1px 0 2px #000;
+			white-space: nowrap;
+			letter-spacing: 0.3px;
+		}
+		#coordMapPopup {
+			position: absolute;
+			z-index: 5;
+			display: none;
+			min-width: 140px;
+			max-width: 220px;
+			padding: 8px 10px;
+			border-radius: 8px;
+			background: rgba(12, 16, 28, 0.94);
+			border: 1px solid rgba(255, 226, 122, 0.55);
+			box-shadow: 0 8px 22px rgba(0,0,0,0.45);
+			color: #fff;
+			pointer-events: none;
+		}
+		#coordMapPopup.open { display: block; }
+		#coordMapPopup .popup-line {
+			font-size: 13px;
+			font-weight: 700;
+			color: #ffe27a;
+			margin-bottom: 3px;
+		}
+		#coordMapPopup .popup-empty {
+			font-size: 11px;
+			color: #c2c8e8;
+		}
+		#coordMapClose {
+			margin-top: 12px;
+			padding: 8px 18px;
+			border: none;
+			border-radius: 6px;
+			background: #4aa3ff;
+			color: #fff;
+			font-weight: bold;
+			cursor: pointer;
+		}
+		#coordMapClose:hover { background: #3b8fe6; }
+
 		@media (max-width: 1080px) {
 			.mode-grid {
 				grid-template-columns: repeat(2, minmax(220px, 1fr));
@@ -515,6 +632,10 @@
 			box-shadow: 0 0 8px rgba(0,0,0,0.4);
 			animation: none;
 		}
+		.map-location.crossed .map-name {
+			text-decoration: line-through;
+			text-decoration-thickness: 2px;
+		}
 		.map-locked-tag {
 			font-size: 8px;
 			color: #999;
@@ -621,6 +742,8 @@
 		.diff-btn.normal.selected { border-color: #f1c40f; background: rgba(241,196,15,0.2); }
 		.diff-btn.hard { border-color: rgba(231,76,60,0.5); }
 		.diff-btn.hard.selected { border-color: #e74c3c; background: rgba(231,76,60,0.2); }
+		.diff-btn.nightmare { border-color: rgba(224,112,255,0.5); }
+		.diff-btn.nightmare.selected { border-color: #e070ff; background: rgba(224,112,255,0.2); }
 
 		#locTravelBtn {
 			padding: 11px 28px;
@@ -721,6 +844,10 @@
 					<b>🔑 Join with Code</b>
 					<span>Enter a friend's code to fight them directly.</span>
 				</button>
+				<button class="pvp-opt" id="pvpPractice" type="button">
+					<b>🎯 Practice Arena</b>
+					<span>Try the three arenas offline, with a rune mage to spar against. (Online, the host picks the arena.)</span>
+				</button>
 			</div>
 
 			<div id="pvpJoinForm" style="display:none">
@@ -757,28 +884,28 @@
 					<span class="slider"></span>
 				</label>
 			</div>
-			<div class="setting-row">
+			<div class="setting-row" style="display:none">
 				<div>
 					<div class="setting-label">⏩ Advance Quest</div>
 					<div class="setting-desc">Skip ahead one quest in each active questline.</div>
 				</div>
 				<button id="advanceQuestBtn" style="padding:6px 16px;border:none;border-radius:6px;background:#28a745;color:#fff;font-weight:bold;cursor:pointer;white-space:nowrap;">Advance</button>
 			</div>
-			<div class="setting-row">
+			<div class="setting-row" style="display:none">
 				<div>
 					<div class="setting-label">⏪ Rewind Quest</div>
 					<div class="setting-desc">Step back one quest in each active questline. Useful for replaying content.</div>
 				</div>
 				<button id="rewindQuestBtn" style="padding:6px 16px;border:none;border-radius:6px;background:#6c5ce7;color:#fff;font-weight:bold;cursor:pointer;white-space:nowrap;">Rewind</button>
 			</div>
-			<div class="setting-row">
+			<div class="setting-row" style="display:none">
 				<div>
 					<div class="setting-label">⏪ Rewind Side Quests</div>
 					<div class="setting-desc">Step back one stage in side quests (Storm Islands).</div>
 				</div>
 				<button id="rewindSideQuestsBtn" style="padding:6px 16px;border:none;border-radius:6px;background:#e17055;color:#fff;font-weight:bold;cursor:pointer;white-space:nowrap;">Rewind All</button>
 			</div>
-			<div class="setting-row">
+			<div class="setting-row" style="display:none">
 				<div>
 					<div class="setting-label">🔄 Reset Quests &amp; Story</div>
 					<div class="setting-desc">Clear all tutorial and city quest progress. This cannot be undone.</div>
@@ -823,7 +950,7 @@
 				<line x1="30%" y1="39%" x2="50%" y2="52%"/>
 				<!-- CinderWatch ↔ Iron Forge -->
 				<line x1="52%" y1="52%" x2="69%" y2="49%"/>
-				<!-- Iron Forge ↔ IronRidge -->
+				<!-- Iron Forge ↔ The Living Wilds -->
 				<line x1="69%" y1="49%" x2="80%" y2="65%"/>
 				<!-- CinderWatch ↔ Aurorafall -->
 				<line x1="50%" y1="48%" x2="49%" y2="18%"/>
@@ -887,11 +1014,11 @@
 				<div class="map-sub">Desert</div>
 			</div>
 
-			<!-- Iron Forge (Iron Dungeon) — right of center -->
-			<div class="map-location" style="left:80%;top:65%;--loc-glow:rgba(150,150,170,0.4)" data-loc="ironforge">
-				<div class="map-icon" style="background:rgba(50,50,60,0.85);border-color:#7a7a8a">⚒️</div>
-				<div class="map-name">Iron Forge</div>
-				<div class="map-sub">Iron Dungeon</div>
+			<!-- Iron Forge (Iron Dungeon) — closed -->
+			<div class="map-location locked crossed" style="left:80%;top:65%;--loc-glow:rgba(80,80,80,0.25)" data-loc="ironforge">
+				<div class="map-icon" style="background:rgba(40,40,42,0.85);border-color:#666">⚒️</div>
+				<div class="map-name" style="text-decoration:line-through">Iron Forge</div>
+				<div class="map-sub">Closed</div>
 			</div>
 
 			<!-- Ruins of the Arcane Council — above-right of Iron Forge -->
@@ -901,11 +1028,11 @@
 				<div class="map-sub">Ancient Council</div>
 			</div>
 
-			<!-- IronRidge (Earth Dungeon) — below-right of Iron Forge -->
+			<!-- The Living Wilds — below-right of Iron Forge -->
 			<div class="map-location" style="left:69%;top:49%;--loc-glow:rgba(100,200,80,0.4)" data-loc="ironridge">
 				<div class="map-icon" style="background:rgba(40,60,30,0.85);border-color:#27ae60">🌿</div>
-				<div class="map-name">IronRidge</div>
-				<div class="map-sub">Earth Dungeon</div>
+				<div class="map-name">The Living Wilds</div>
+				<div class="map-sub">Jungle Dungeon</div>
 			</div>
 
 			<!-- Dragon Graveyard — above EmberFall, northwest of Aurorafall -->
@@ -980,14 +1107,33 @@
 				<p>Mage Academy tutorial grounds — learn spells, complete quests, and explore the world from the map.</p>
 				<button id="openworldBtn" type="button">Story Mode 1</button>
 			</article>
+
+			<article class="mode-card" id="map-card">
+				<h2>Map</h2>
+				<p>World chart with grid coordinates at every intersection.</p>
+				<button id="coordMapBtn" type="button">Map</button>
+			</article>
 		</section>
 	</main>
+
+	<div id="coordMapOverlay">
+		<div id="coordMapTitle">🗺️ Map</div>
+		<div id="coordMapWrap">
+			<svg id="coordMapLines" viewBox="0 0 18 12" preserveAspectRatio="none"></svg>
+			<div id="coordMapLabels"></div>
+			<div id="coordMapPopup">
+				<div class="popup-line" id="coordMapPopupLine"></div>
+				<div class="popup-empty">No information.</div>
+			</div>
+		</div>
+		<button id="coordMapClose" type="button">← Back to Menu</button>
+	</div>
 
 	<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 	<script src="supabase-config.js?v=3"></script>
 	<script src="cloud-save.js?v=5"></script>
-	<script src="pvp-net.js?v=6"></script>
-	<script src="world-map.js?v=3"></script>
+	<script src="pvp-net.js?v=9"></script>
+	<script src="world-map.js?v=4"></script>
 	<script>
 		const modeRoutes = {
 			sandbox: 'dungeon.html?mode=sandbox',
@@ -1017,6 +1163,123 @@
 			openWorldMap();
 			requestAnimationFrame(() => WorldMapVoronoi.setHover('emberfall'));
 		});
+
+		(function setupCoordinateMap(){
+			const overlay = document.getElementById('coordMapOverlay');
+			const wrap = document.getElementById('coordMapWrap');
+			const labels = document.getElementById('coordMapLabels');
+			const linesSvg = document.getElementById('coordMapLines');
+			const popup = document.getElementById('coordMapPopup');
+			const popupLine = document.getElementById('coordMapPopupLine');
+			const COLS = 19;
+			const ROWS = 13;
+			const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+			const MAP_LINE_DESTINATIONS = {
+				'I6 — J6': { name: 'Western Emberfall Approach', url: 'dungeon.html?mode=city&seg=west' },
+				'J6 — K6': { name: 'EmberFall City', url: 'dungeon.html?mode=city' },
+				'J5 — J6': { name: 'King’s North Road', url: 'dungeon.html?mode=city&seg=north' },
+				'I5 — I6': { name: 'The Upper Millstream', url: 'dungeon.html?mode=city&seg=millstream' },
+				'I4 — I5': { name: 'The Pineward Rise', url: 'dungeon.html?mode=city&seg=pineward' },
+				'I5 — J5': { name: 'The Frostline Causeway', url: 'dungeon.html?mode=city&seg=causeway' },
+				'J4 — J5': { name: 'The Northwatch Pass', url: 'dungeon.html?mode=city&seg=northpass' },
+				'I4 — J4': { name: 'The Highland Traverse', url: 'dungeon.html?mode=city&seg=traverse' }
+			};
+			let built = false;
+			function coordName(col, row){
+				return letters[col] + (row + 1);
+			}
+			function addSeg(c1, r1, c2, r2){
+				const name = coordName(c1, r1) + ' — ' + coordName(c2, r2);
+				const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+				g.classList.add('coord-line');
+				g.dataset.line = name;
+				const vis = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+				vis.classList.add('coord-seg');
+				vis.setAttribute('x1', c1);
+				vis.setAttribute('y1', r1);
+				vis.setAttribute('x2', c2);
+				vis.setAttribute('y2', r2);
+				const hit = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+				hit.classList.add('coord-seg-hit');
+				hit.setAttribute('x1', c1);
+				hit.setAttribute('y1', r1);
+				hit.setAttribute('x2', c2);
+				hit.setAttribute('y2', r2);
+				g.appendChild(vis);
+				g.appendChild(hit);
+				const dest = MAP_LINE_DESTINATIONS[name];
+				if(dest){
+					g.classList.add('has-dest');
+					g.style.cursor = 'pointer';
+				}
+				g.addEventListener('pointerenter', () => {
+					g.classList.add('is-hover');
+					popupLine.textContent = dest ? (name + ' — ' + dest.name) : name;
+					popup.querySelector('.popup-empty').textContent = dest ? 'Click to travel.' : 'No information.';
+					popup.classList.add('open');
+				});
+				g.addEventListener('pointerleave', () => {
+					g.classList.remove('is-hover');
+					popup.classList.remove('open');
+				});
+				g.addEventListener('click', ev => {
+					ev.stopPropagation();
+					if(!dest) return;
+					if(typeof requireAuth === 'function' && !requireAuth()) return;
+					window.location.href = dest.url;
+				});
+				linesSvg.appendChild(g);
+			}
+			function buildMap(){
+				if(built) return;
+				const frag = document.createDocumentFragment();
+				for(let col = 0; col < COLS; col++){
+					for(let row = 0; row < ROWS; row++){
+						const el = document.createElement('div');
+						el.className = 'coord-label';
+						el.textContent = coordName(col, row);
+						el.style.left = (col / (COLS - 1) * 100) + '%';
+						el.style.top = (row / (ROWS - 1) * 100) + '%';
+						frag.appendChild(el);
+					}
+				}
+				labels.appendChild(frag);
+				for(let col = 0; col < COLS; col++){
+					for(let row = 0; row < ROWS; row++){
+						if(col < COLS - 1) addSeg(col, row, col + 1, row);
+						if(row < ROWS - 1) addSeg(col, row, col, row + 1);
+					}
+				}
+				built = true;
+			}
+			function placePopup(clientX, clientY){
+				const rect = wrap.getBoundingClientRect();
+				let x = clientX - rect.left + 14;
+				let y = clientY - rect.top + 14;
+				const maxX = rect.width - popup.offsetWidth - 8;
+				const maxY = rect.height - popup.offsetHeight - 8;
+				if(x > maxX) x = clientX - rect.left - popup.offsetWidth - 12;
+				if(y > maxY) y = clientY - rect.top - popup.offsetHeight - 12;
+				popup.style.left = Math.max(8, x) + 'px';
+				popup.style.top = Math.max(8, y) + 'px';
+			}
+			function openCoordMap(){
+				buildMap();
+				overlay.classList.add('open');
+			}
+			function closeCoordMap(){
+				overlay.classList.remove('open');
+				popup.classList.remove('open');
+			}
+			wrap.addEventListener('pointermove', e => {
+				if(popup.classList.contains('open')) placePopup(e.clientX, e.clientY);
+			});
+			document.getElementById('coordMapBtn').addEventListener('click', openCoordMap);
+			document.getElementById('coordMapClose').addEventListener('click', closeCoordMap);
+			overlay.addEventListener('click', e => {
+				if(e.target === overlay) closeCoordMap();
+			});
+		})();
 
 		/* ============ ACCOUNTS (sign in / sign up) ============ */
 		const authOverlay = document.getElementById('authOverlay');
@@ -1183,6 +1446,7 @@
 			onMatched: (matchId, side) => goToMatch(matchId, side),
 		});
 
+		document.getElementById('pvpPractice').addEventListener('click', () => { window.location.href = 'dungeon.html?mode=colosseum'; });
 		document.getElementById('pvpCasual').addEventListener('click', () => {
 			if (!PvPNet.enabled()) return;
 			showQueue('Searching for an opponent…');
@@ -1443,7 +1707,7 @@
 		});
 
 		document.getElementById('unlockBestiaryBtn').addEventListener('click', () => {
-			const ids = ['imp','flameSerpent','emberMage','magmaGolem','fireSprite','fireDragon','frostWraith','iceArcher','snowBeast','cryoMage','glacierSentinel','frostColossus','rockGolem','vineCrawler','caveSpider','crystalMage','mudElemental','earthColossus','ironSentinel','forgeDrone','slagBrute','ironColossus','thornWolf','sporeFungus','mossWraith','willowWisp','glowBeetle','stalactiteBat','skyVine','windSylph','elderTreant','stormRaptor','deepRootHorror','darkVineCrawler','darkThornWolf','darkMossWraith','boneWraith','babyDragon','flameSalamander','magmaImp','fireColossus','abyssalGuardian','coralSentinel','depthSerpent','sandWraith','tombGuardian','desertSerpent','mummyWarrior','scarabSwarm','sandstormDjinn','seraphel','voidArbiter','infernalKitten','zenith'];
+			const ids = ['imp','flameSerpent','emberMage','magmaGolem','fireSprite','cinderBeetle','furnaceLeech','ashRevenant','magmaHarvester','fireDragon','frostWraith','iceArcher','snowBeast','cryoMage','glacierSentinel','frostMantis','glacierEel','crystalScarab','snowboundMimic','frostColossus','rockGolem','vineCrawler','caveSpider','crystalMage','mudElemental','earthColossus','verdantColossus','ironSentinel','forgeDrone','slagBrute','ironColossus','thornWolf','sporeFungus','mossWraith','willowWisp','glowBeetle','stalactiteBat','skyVine','windSylph','elderTreant','stormRaptor','barkbackBeetle','pollenMoth','rootParasite','jungleChameleon','deepRootHorror','darkVineCrawler','darkThornWolf','darkMossWraith','boneWraith','babyDragon','flameSalamander','magmaImp','fireColossus','abyssalGuardian','coralSentinel','depthSerpent','sandWraith','tombGuardian','desertSerpent','mummyWarrior','scarabSwarm','sandstormDjinn','seraphel','voidArbiter','infernalKitten','zenith'];
 			let data = {};
 			try { data = JSON.parse(localStorage.getItem('magicBattle_bestiary') || '{}') || {}; } catch(e){ data = {}; }
 			let added = 0;
@@ -1468,7 +1732,7 @@
 			emberfall: {
 				name: 'EmberFall',
 				icon: '🏠',
-				desc: 'A quiet village on the frontier — the perfect place to learn the basics of magic. Complete tutorial quests and meet your mentors.',
+				desc: 'A quiet village on the frontier — academy grounds and a walled city where mages train and traders gather.',
 				isDungeon: false,
 				subLocations: [
 					{ name: 'Story Mode 1 — Academy Grounds', icon: '📖', label: 'Learn the basics', url: 'dungeon.html?mode=openworld' },
@@ -1501,14 +1765,16 @@
 			ironforge: {
 				name: 'Iron Forge',
 				icon: '⚒️',
-				desc: 'An ancient forge buried deep underground where molten metal and iron constructs guard the depths. Face the mighty Iron Colossus.',
+				desc: 'An ancient forge buried deep underground. This dungeon is closed.',
 				isDungeon: true,
 				dungeonType: 'iron',
+				available: false,
+				crossedOut: true,
 			},
 			ironridge: {
-				name: 'IronRidge',
+				name: 'The Living Wilds',
 				icon: '🌿',
-				desc: 'Deep warrens carved through ancient stone. Battle earth elementals, vine crawlers, and the mighty Earth Colossus.',
+				desc: 'Enter a vertical underground ecosystem of ancient ruins, reactive roots, predators, hidden paths, living puzzles, and the Verdant Colossus.',
 				isDungeon: true,
 				dungeonType: 'earth',
 			},
@@ -1550,60 +1816,16 @@
 		let selectedLocKey = null;
 		let selectedDifficulty = 'normal';
 
-		/* ---- Quest chain gating ---- */
-		function getQuestProgress(key){
-			try { const s = JSON.parse(localStorage.getItem(key)); return s ? (s.questIndex || 0) : 0; } catch(e){ return 0; }
-		}
-		const tutorialDone  = getQuestProgress('magicBattle_tutorialQuests')    >= 10;
-		const cityDone      = getQuestProgress('magicBattle_cityQuests')        >= 10;
-		const sylvarisDone  = getQuestProgress('magicBattle_sylvarisQuests')    >= 19;
-		const observatoryDone = getQuestProgress('magicBattle_observatoryQuests') >= 3;
-
-		// Gate EmberFall City sub-location behind tutorial completion
-		if(!tutorialDone){
-			MAP_LOCATIONS.emberfall.subLocations = MAP_LOCATIONS.emberfall.subLocations.filter(s => !s.url.includes('mode=city'));
-		}
-		// Gate Sylvaris behind city completion
-		if(!cityDone){
-			MAP_LOCATIONS.sylvaris_wildes.available = false;
-			MAP_LOCATIONS.sylvaris_wildes.desc += '\n\n🔒 Complete EmberFall City quests to unlock.';
-		}
-		// Gate Observatory & CinderWatch behind sylvaris completion
-		if(!sylvarisDone){
-			MAP_LOCATIONS.volcano_observatory.available = false;
-			MAP_LOCATIONS.volcano_observatory.desc += '\n\n🔒 Complete Sylvaris Wildes quests to unlock.';
-			MAP_LOCATIONS.cinderwatch.available = false;
-			MAP_LOCATIONS.cinderwatch.desc += '\n\n🔒 Complete Sylvaris Wildes quests to unlock.';
-		}
-		// Gate Dragon Graveyard behind observatory completion
-		if(!observatoryDone){
-			MAP_LOCATIONS.dragon_graveyard.available = false;
-			MAP_LOCATIONS.dragon_graveyard.desc += '\n\n🔒 Complete Observatory quests to unlock.';
-		}
-		// Gate Storm Islands & Black Sands behind Mage rank
-		const playerStats = computeAndSyncQuestXp();
-		if(!playerStats || playerStats.rank < 3){
-			MAP_LOCATIONS.storm_islands.available = false;
-			MAP_LOCATIONS.storm_islands.desc += '\n\n🔒 Reach Mage rank to unlock.';
-			MAP_LOCATIONS.black_sands.available = false;
-			MAP_LOCATIONS.black_sands.desc += '\n\n🔒 Reach Mage rank to unlock.';
-		}
-		// Gate Arcane Ruins behind Old Society quest stage 5 (Elder Maris time rewind)
-		const osStage = parseInt(localStorage.getItem('magicBattle_oldSocietyStage')||'0');
-		if(osStage < 5){
-			MAP_LOCATIONS.arcane_ruins.available = false;
-			MAP_LOCATIONS.arcane_ruins.desc += '\n\n🔒 Progress further in the Recovering the Old Society questline to unlock.';
-		}
-
-		// Apply locked visual state to gated locations
+		// Apply locked visual state (Iron Forge stays closed via MAP_LOCATIONS.available)
 		document.querySelectorAll('.map-location').forEach(el => {
 			const loc = MAP_LOCATIONS[el.dataset.loc];
-			if(loc && loc.available === false && !el.classList.contains('locked')){
+			if(loc && loc.available === false){
 				el.classList.add('locked');
+				if(loc.crossedOut) el.classList.add('crossed');
 				if(!el.querySelector('.map-locked-tag')){
 					const tag = document.createElement('div');
 					tag.className = 'map-locked-tag';
-					tag.textContent = '🔒 Locked';
+					tag.textContent = loc.crossedOut ? 'Closed' : '🔒 Locked';
 					el.appendChild(tag);
 				}
 			}
@@ -1628,10 +1850,13 @@
 			if (loc.available === false) {
 				selectedLocKey = null;
 				document.getElementById('locTitle').textContent = loc.icon + ' ' + loc.name;
-				document.getElementById('locDesc').textContent = loc.desc + '\n\n🔒 This region is not yet available.';
+				document.getElementById('locTitle').style.textDecoration = loc.crossedOut ? 'line-through' : '';
+				document.getElementById('locDesc').textContent = loc.crossedOut
+					? loc.desc
+					: loc.desc + '\n\n🔒 This region is not yet available.';
 				document.getElementById('locDiffBtns').style.display = 'none';
 				document.getElementById('locSubBtns').style.display = 'none';
-				document.getElementById('locTravelBtn').textContent = 'Locked';
+				document.getElementById('locTravelBtn').textContent = loc.crossedOut ? 'Closed' : 'Locked';
 				document.getElementById('locTravelBtn').disabled = true;
 				locPopup.classList.add('open');
 				return;
@@ -1641,6 +1866,7 @@
 			selectedDifficulty = 'normal';
 
 			document.getElementById('locTitle').textContent = loc.icon + ' ' + loc.name;
+			document.getElementById('locTitle').style.textDecoration = '';
 			document.getElementById('locDesc').textContent = loc.desc;
 
 			const diffWrap = document.getElementById('locDiffBtns');
@@ -1666,8 +1892,13 @@
 				subWrap.style.display = 'none';
 				document.getElementById('locTravelBtn').style.display = '';
 				diffWrap.style.display = 'flex';
-				diffWrap.innerHTML = ['easy','normal','hard'].map(d =>
-					`<button class="diff-btn ${d}${d==='normal'?' selected':''}" data-diff="${d}">${d.charAt(0).toUpperCase()+d.slice(1)}</button>`
+				diffWrap.innerHTML = [
+					{id:'easy',label:'Easy'},
+					{id:'normal',label:'Medium'},
+					{id:'hard',label:'Hard'},
+					{id:'nightmare',label:'Nightmare'},
+				].map(d =>
+					`<button class="diff-btn ${d.id}${d.id==='normal'?' selected':''}" data-diff="${d.id}">${d.label}</button>`
 				).join('');
 				diffWrap.querySelectorAll('.diff-btn').forEach(btn => {
 					btn.addEventListener('click', () => {
@@ -1692,6 +1923,7 @@
 			const loc = MAP_LOCATIONS[selectedLocKey];
 			if (!loc) return;
 			if (loc.isDungeon) {
+				if (loc.crossedOut || loc.dungeonType === 'iron' || loc.available === false) return;
 				window.location.href = 'dungeon.html?type=' + loc.dungeonType + '&diff=' + selectedDifficulty;
 			} else if (loc.url) {
 				window.location.href = loc.url;
@@ -1727,6 +1959,7 @@
 
 		WorldMapVoronoi.init(document.getElementById('mapHighlightCanvas'), buildMapSites(), {
 			isLocked: (id) => MAP_LOCATIONS[id]?.available === false,
+			isCrossed: (id) => MAP_LOCATIONS[id]?.crossedOut === true,
 			onSelect: (key) => showLocationPopup(key),
 		});
 

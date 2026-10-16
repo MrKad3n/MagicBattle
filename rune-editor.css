@@ -1,0 +1,198 @@
+.rune-editor{
+	position:fixed;
+	inset:0;
+	z-index:100000;
+	display:flex;
+	flex-direction:column;
+	background:
+		radial-gradient(900px 480px at 15% -10%, rgba(90,130,255,.22), transparent 60%),
+		radial-gradient(700px 420px at 90% 0%, rgba(180,120,255,.16), transparent 55%),
+		linear-gradient(180deg, #070910 0%, #0c1018 100%);
+	color:#e7eefc;
+	font-family:"Segoe UI", "Avenir Next", sans-serif;
+	user-select:none;
+}
+.rune-editor *{box-sizing:border-box}
+.rune-editor input,.rune-editor select{user-select:text}
+.rune-top{
+	display:flex;
+	align-items:center;
+	gap:14px;
+	padding:10px 14px;
+	border-bottom:1px solid rgba(170,198,255,.16);
+	background:rgba(8,10,18,.72);
+	backdrop-filter:blur(10px);
+}
+.rune-brand{
+	display:flex;
+	flex-direction:column;
+	min-width:120px;
+}
+.rune-brand b{font-size:13px;letter-spacing:.18em;color:#f0d7a2;font-weight:700}
+.rune-brand span{font-size:11px;color:#8ea0bd}
+.rune-name{
+	background:rgba(255,255,255,.04);
+	border:1px solid rgba(190,210,255,.2);
+	color:#f4f7ff;
+	border-radius:10px;
+	padding:8px 12px;
+	font-size:15px;
+	min-width:180px;
+	max-width:280px;
+	outline:none;
+}
+.rune-name:focus{border-color:#9dc0ff;box-shadow:0 0 0 3px rgba(120,160,255,.18)}
+.rune-meters{display:flex;gap:8px;flex:1;flex-wrap:wrap}
+.rune-pill{
+	background:rgba(255,255,255,.04);
+	border:1px solid rgba(170,198,255,.16);
+	border-radius:999px;
+	padding:6px 10px;
+	font-size:12px;
+	color:#d5e2f8;
+}
+.rune-pill strong{color:#fff;font-weight:650}
+.rune-pill.warn{border-color:rgba(255,140,140,.55);color:#ffc1c1}
+.rune-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.rune-editor button{
+	background:rgba(255,255,255,.05);
+	color:#e8eefc;
+	border:1px solid rgba(180,200,255,.2);
+	border-radius:9px;
+	padding:7px 10px;
+	font-size:12px;
+	cursor:pointer;
+}
+.rune-editor button:hover{background:rgba(255,255,255,.1);border-color:rgba(200,220,255,.4)}
+.rune-editor button.primary{
+	background:linear-gradient(180deg,#f2d48a,#d7b15a);
+	color:#2a210c;
+	border-color:#f0d7a4;
+	font-weight:700;
+}
+.rune-editor button.danger{color:#ffb4b4;border-color:rgba(255,140,140,.35)}
+.rune-main{flex:1;min-height:0;display:flex}
+.rune-board{flex:1;min-width:0;position:relative}
+.rune-board canvas{width:100%;height:100%;display:block;cursor:grab;touch-action:none}
+.rune-board canvas.grabbing{cursor:grabbing}
+.rune-side{
+	width:320px;
+	border-left:1px solid rgba(170,198,255,.14);
+	background:rgba(7,9,16,.78);
+	overflow:auto;
+	padding:14px;
+}
+.rune-side h3{margin:0 0 4px;font-size:16px}
+.rune-side .blurb{color:#9aabc6;font-size:12px;line-height:1.45;margin:0 0 12px}
+.rune-side label{display:block;font-size:11px;letter-spacing:.08em;color:#93a6c6;margin:10px 0 4px}
+.rune-side input[type="range"]{width:100%}
+.rune-side select,.rune-side input[type="number"]{
+	width:100%;
+	background:#121826;
+	color:#eef3ff;
+	border:1px solid rgba(170,198,255,.2);
+	border-radius:8px;
+	padding:7px 8px;
+}
+.rune-val{float:right;color:#f2d48a;letter-spacing:0}
+.rune-modes{display:flex;gap:6px}
+.rune-modes button{flex:1}
+.rune-modes button.on{background:rgba(140,180,255,.2);border-color:#9dc0ff;color:#fff}
+.rune-error{
+	background:rgba(90,18,24,.55);
+	border:1px solid rgba(255,120,120,.45);
+	color:#ffd0d0;
+	border-radius:8px;
+	padding:8px;
+	font-size:12px;
+	margin:8px 0;
+}
+.rune-note{color:#9eb0cc;font-size:12px;line-height:1.4}
+.rune-banner{
+	margin:0 0 10px;
+	padding:8px 10px;
+	border-radius:8px;
+	background:rgba(240,190,90,.1);
+	border:1px solid rgba(240,190,90,.35);
+	color:#f3ddaa;
+	font-size:12px;
+}
+.rune-pal{
+	border-top:1px solid rgba(170,198,255,.14);
+	padding:8px 12px 10px;
+	background:rgba(6,8,14,.88);
+}
+.rune-pal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;color:#8ea0bd;font-size:11px;letter-spacing:.12em}
+.rune-chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px}
+.rune-chip{
+	flex:0 0 auto;
+	display:flex;
+	flex-direction:column;
+	gap:2px;
+	min-width:112px;
+	text-align:left;
+	padding:7px 9px;
+	border-radius:10px;
+	background:rgba(255,255,255,.03);
+}
+.rune-chip b{font-size:12px}
+.rune-chip span{font-size:10px;color:#93a4c2}
+.rune-chip.armed{border-color:#f0d7a4;box-shadow:0 0 0 1px rgba(240,212,140,.4)}
+.rune-toast{
+	position:absolute;
+	left:50%;
+	bottom:128px;
+	transform:translateX(-50%);
+	background:rgba(8,10,16,.9);
+	border:1px solid rgba(180,210,255,.3);
+	color:#f4f8ff;
+	padding:8px 14px;
+	border-radius:999px;
+	font-size:13px;
+	pointer-events:none;
+	opacity:0;
+	transition:opacity .25s ease;
+}
+.rune-toast.show{opacity:1}
+.rune-picker{
+	position:fixed;
+	z-index:100002;
+	width:280px;
+	max-height:360px;
+	overflow:auto;
+	background:rgba(10,12,20,.96);
+	border:1px solid rgba(180,205,255,.3);
+	border-radius:14px;
+	box-shadow:0 18px 50px rgba(0,0,0,.45);
+	padding:8px;
+}
+.rune-picker h4{margin:8px 6px 4px;font-size:10px;letter-spacing:.14em;color:#93a6c6}
+.rune-pick{
+	width:100%;
+	text-align:left;
+	margin:2px 0;
+	display:flex;
+	flex-direction:column;
+	gap:2px;
+}
+.rune-pick b{font-size:13px}
+.rune-pick span{font-size:11px;color:#9aabc4;font-weight:400}
+.rune-help{
+	position:absolute;
+	right:336px;
+	bottom:122px;
+	width:260px;
+	background:rgba(8,10,18,.94);
+	border:1px solid rgba(180,205,255,.25);
+	border-radius:12px;
+	padding:12px;
+	font-size:12px;
+	line-height:1.45;
+	color:#d5e2f6;
+}
+.rune-empty{color:#8ea0bd;font-size:13px;line-height:1.45}
+@media(max-width:980px){
+	.rune-main{flex-direction:column}
+	.rune-side{width:auto;max-height:240px;border-left:0;border-top:1px solid rgba(170,198,255,.14)}
+	.rune-help{right:12px}
+}

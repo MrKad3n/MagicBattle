@@ -4,7 +4,8 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Magic Battle — Inventory</title>
-<link rel="stylesheet" href="spell-builder.css?v=9"/>
+<link rel="stylesheet" href="magic-forge.css?v=9"/>
+<link rel="stylesheet" href="slot-chooser.css?v=3"/>
 <script src="auth-gate.js?v=4"></script>
 <style>
 /* ============================================================
@@ -19,6 +20,7 @@
 	--rarity-common:#aaa;--rarity-uncommon:#2ecc71;--rarity-rare:#3498db;
 	--rarity-epic:#9b59b6;--rarity-legendary:#f39c12;--rarity-mythical:#cc44ff;
 	--rarity-mythic:#ffd700;--rarity-pink:#ff4ec4;
+	--rarity-cursed:#c0392b;--rarity-corrupted:#c0392b;--rarity-nightmare:#e070ff;
 }
 *{box-sizing:border-box;margin:0;padding:0;font-family:Arial,sans-serif}
 html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text)}
@@ -128,6 +130,18 @@ select,select option{background:#1c1a30;color:#e8eaff}
 .inv-cell[data-rarity=mythical]{border-color:var(--rarity-mythical);box-shadow:0 0 8px rgba(204,68,255,0.4)}
 .inv-cell[data-rarity=mythic]{border-color:var(--rarity-mythic);box-shadow:0 0 10px rgba(255,215,0,0.5),0 0 20px rgba(255,215,0,0.2)}
 .inv-cell[data-rarity=pink]{border-color:var(--rarity-pink);box-shadow:0 0 8px rgba(255,78,196,0.5)}
+.inv-cell[data-rarity=cursed]{border-color:var(--rarity-cursed);box-shadow:0 0 10px rgba(192,57,43,0.45)}
+.inv-cell[data-rarity=corrupted]{border-color:var(--rarity-corrupted);box-shadow:0 0 10px rgba(192,57,43,0.45)}
+.inv-cell[data-rarity=nightmare]{border-color:var(--rarity-nightmare);box-shadow:0 0 12px rgba(224,112,255,0.55),0 0 22px rgba(80,0,80,0.4)}
+.inv-cell[data-gem-perfect=1]{border-color:#ffd24a;box-shadow:0 0 12px rgba(255,210,74,.85),0 0 3px #fff inset}
+.inv-cell[data-variant=1]{outline:1px solid rgba(126,203,255,0.7)}
+.inv-cell[data-corrupt="1"]{background:#4a1214}
+.inv-cell[data-corrupt="1"]:hover{background:#5c181c}
+.inv-cell[data-nightmare="1"]{background:#2a1038}
+.inv-cell[data-nightmare="1"]:hover{background:#3a1648}
+.equip-slot[data-corrupt="1"]{background:#4a1214}
+.equip-slot[data-nightmare="1"]{background:#2a1038}
+.inv-cell .cell-badge{position:absolute;top:2px;left:3px;font-size:9px;pointer-events:none;text-shadow:0 0 4px #000}
 
 /* item tooltip */
 .tooltip{
@@ -350,6 +364,104 @@ select,select option{background:#1c1a30;color:#e8eaff}
 .craft-name[data-rarity=legendary]{color:var(--rarity-legendary)}
 .craft-name[data-rarity=mythical]{color:var(--rarity-mythical);text-shadow:0 0 6px rgba(204,68,255,0.5)}
 .craft-name[data-rarity=pink]{color:var(--rarity-pink);text-shadow:0 0 6px rgba(255,78,196,0.5)}
+.craft-name[data-rarity=cursed]{color:var(--rarity-cursed)}
+.craft-name[data-rarity=corrupted]{color:var(--rarity-corrupted)}
+.craft-name[data-rarity=nightmare]{color:var(--rarity-nightmare)}
+
+#inspectOverlay{
+	position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:800;
+	display:none;align-items:center;justify-content:center;
+}
+#inspectOverlay.open{display:flex}
+#inspectCard{
+	width:min(560px,92vw);max-height:86vh;overflow:auto;
+	background:#161428;border:1px solid var(--border);border-radius:12px;padding:18px;
+	box-shadow:0 12px 40px rgba(0,0,0,.6);
+}
+#inspectCard.wide{width:min(980px,96vw)}
+.insp-head{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.insp-icon{font-size:36px}
+.insp-name{font-size:18px;font-weight:800}
+.insp-type{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.insp-block{margin:10px 0;padding:8px 10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px}
+.insp-block.variant{border-color:rgba(126,203,255,.35)}
+.insp-block.corruption{border-color:rgba(192,57,43,.45)}
+.insp-block.combo{border-color:rgba(224,112,255,.4);background:rgba(224,112,255,.06)}
+.insp-label{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--accent2);margin-bottom:4px}
+.insp-stat,.insp-body{font-size:13px;line-height:1.45}
+.insp-body.drawback{color:#ff8b8b;margin-top:4px}
+.insp-gem{padding:6px 8px;border-radius:6px;border:1px dashed rgba(255,255,255,.15);margin-top:6px;cursor:pointer;font-size:13px}
+.insp-gem.filled{border-style:solid;border-color:rgba(154,173,221,.4);background:rgba(154,173,221,.08)}
+.insp-gem.empty{color:var(--muted)}
+.insp-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.insp-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.col-toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.col-toolbar .btn{padding:7px 12px;font-size:12px;font-weight:700;border-radius:7px;border:1px solid var(--border);cursor:pointer;background:rgba(255,255,255,.06);color:#fff}
+.col-toolbar .btn-unlock{border-color:#f3c15a;color:#f3c15a;background:rgba(243,193,90,.12)}
+.col-toolbar .btn-prune{border-color:#c0392b;color:#ff8b8b;background:rgba(192,57,43,.12)}
+.col-dungeon{margin-bottom:16px}
+.col-grid{display:flex;flex-wrap:wrap;gap:10px}
+.col-item{
+	width:118px;min-height:108px;padding:8px 8px 10px;border:2px solid rgba(255,255,255,.10);
+	border-radius:10px;background:rgba(255,255,255,.03);display:flex;flex-direction:column;
+	align-items:center;justify-content:center;text-align:center;gap:4px;box-sizing:border-box;
+}
+.col-item .col-ico{font-size:26px;line-height:1}
+.col-item .col-name{font-size:11px;font-weight:700;line-height:1.25}
+.col-item.found{cursor:pointer}
+.col-item.found:hover{background:rgba(255,255,255,.07)}
+.col-item .undiscovered{opacity:.45;letter-spacing:1px}
+.col-item.tier-gold{
+	border:3px solid #ffd24a;
+	box-shadow:0 0 14px rgba(255,210,74,.85), 0 0 3px #fff inset;
+	animation:colShineGold 1.8s linear infinite;
+}
+.col-item.tier-red{
+	border:3px solid #ff3b3b;
+	box-shadow:0 0 16px rgba(255,59,59,.9), 0 0 3px #fff inset;
+	animation:colShineRed 1.8s linear infinite;
+}
+.col-item.tier-purple{
+	border:3px solid #c44dff;
+	box-shadow:0 0 18px rgba(196,77,255,.95), 0 0 3px #fff inset;
+	animation:colShinePurple 1.8s linear infinite;
+}
+@keyframes colShineGold{0%,100%{box-shadow:0 0 10px rgba(255,210,74,.7),0 0 2px #fff inset}50%{box-shadow:0 0 22px rgba(255,236,150,1),0 0 6px #fff inset}}
+@keyframes colShineRed{0%,100%{box-shadow:0 0 10px rgba(255,59,59,.7),0 0 2px #fff inset}50%{box-shadow:0 0 24px rgba(255,120,120,1),0 0 6px #fff inset}}
+@keyframes colShinePurple{0%,100%{box-shadow:0 0 12px rgba(196,77,255,.75),0 0 2px #fff inset}50%{box-shadow:0 0 26px rgba(230,160,255,1),0 0 6px #fff inset}}
+.col-insp{display:grid;grid-template-columns:minmax(0,1fr) 240px;gap:14px;align-items:start}
+.col-insp-main{display:flex;flex-direction:column;gap:8px;min-width:0}
+.col-insp-loc{border-radius:12px;min-height:260px;padding:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;border:1px solid rgba(255,255,255,.12);position:relative;overflow:hidden}
+.col-insp-loc .col-loc-label{font-size:10px;letter-spacing:1px;text-transform:uppercase;opacity:.75}
+.col-insp-loc .col-loc-name{font-size:15px;font-weight:800;margin:4px 0 10px}
+.col-insp-loc .col-loc-icon{font-size:52px;filter:drop-shadow(0 6px 10px rgba(0,0,0,.45))}
+.col-insp-loc .col-loc-blurb{font-size:12px;opacity:.85;margin-top:10px;line-height:1.4}
+.col-insp-loc.scene-fire{background:radial-gradient(circle at 50% 80%,#ff7a1a 0%,#6a1408 42%,#1a0704 100%)}
+.col-insp-loc.scene-ice{background:radial-gradient(circle at 50% 80%,#b8e8ff 0%,#245a88 45%,#071018 100%)}
+.col-insp-loc.scene-jungle{background:radial-gradient(circle at 50% 80%,#7cff9a 0%,#145a28 45%,#061208 100%)}
+.col-insp-loc.scene-mythic{background:radial-gradient(circle at 50% 80%,#ffe27a 0%,#6a3aa0 45%,#12081c 100%)}
+.col-stat-row{display:flex;gap:8px;width:100%;flex-wrap:nowrap}
+.col-stat-chip{flex:1;min-width:0;padding:8px 8px;border:1px solid;border-radius:8px;background:rgba(0,0,0,.28);display:flex;flex-direction:column;gap:2px;font-size:11px}
+.col-stat-chip b{font-size:16px}
+.col-var-row,.col-mode-row,.col-corr-picks{display:flex;flex-wrap:wrap;gap:6px}
+.col-mode-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.col-var-ico,.col-mode,.col-corr-chip{
+	border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.05);color:#ddd;
+	border-radius:8px;padding:8px 10px;font-size:12px;cursor:pointer;
+}
+.col-var-ico.on{border-color:#7ecbff;color:#7ecbff;box-shadow:0 0 8px rgba(126,203,255,.45)}
+.col-mode.on{border-color:#f0c060;color:#f0c060;box-shadow:0 0 8px rgba(240,192,96,.4)}
+.col-mode.corr.on{border-color:#ff5a4a;color:#ff8b8b;box-shadow:0 0 8px rgba(255,90,74,.45)}
+.col-mode.nm.on{border-color:#c44dff;color:#e070ff;box-shadow:0 0 8px rgba(196,77,255,.5)}
+.col-corr-chip.on{border-color:#ff8b8b;color:#fff}
+.col-var-ico.locked,.col-mode.locked{opacity:.35;cursor:not-allowed}
+.insp-changed{color:#7ecbff;font-weight:800;text-shadow:0 0 8px rgba(126,203,255,.55)}
+.col-corr-num-list{margin:6px 0 0 18px;padding:0;color:#e8d48a}
+.col-corr-num-list li{margin:3px 0}
+@media (max-width:720px){
+	.col-insp{grid-template-columns:1fr}
+	.col-mode-row{grid-template-columns:1fr}
+}
 .craft-desc{font-size:11px;color:var(--muted);font-style:italic}
 .craft-ingredients{display:flex;flex-wrap:wrap;gap:4px;margin-top:2px}
 .craft-ing{
@@ -434,8 +546,9 @@ select,select option{background:#1c1a30;color:#e8eaff}
 		<!-- Tab bar -->
 		<div style="display:flex;gap:4px;margin-bottom:4px;flex-wrap:wrap">
 			<button class="tab-btn active" data-tab="inventory" onclick="switchTab('inventory')">📦 Inventory</button>
+			<button class="tab-btn" data-tab="collection" onclick="switchTab('collection')">📖 Collection</button>
 			<button class="tab-btn" data-tab="crafting" onclick="switchTab('crafting')">🔨 Crafting</button>
-			<button class="tab-btn" data-tab="quests" onclick="switchTab('quests')">🗺️ Quests</button>
+			<button class="tab-btn" data-tab="quests" onclick="switchTab('quests')" style="display:none">🗺️ Quests</button>
 			<button class="tab-btn" data-tab="bestiary" onclick="switchTab('bestiary')">📖 Bestiary</button>
 			<button class="tab-btn" data-tab="dictionary" onclick="switchTab('dictionary')">📚 Spell Dictionary</button>
 		</div>
@@ -466,6 +579,16 @@ select,select option{background:#1c1a30;color:#e8eaff}
 				</select>
 			</div>
 			<div id="craftList" style="display:flex;flex-direction:column;gap:8px"></div>
+		</div>
+
+		<!-- Collection Tab -->
+		<div id="collectionTab" class="panel" style="flex:1;display:none;flex-direction:column;overflow-y:auto">
+			<h3>Gear Collection</h3>
+			<div class="col-toolbar">
+				<button type="button" class="btn btn-unlock" id="colUnlockAll">Unlock all entries</button>
+				<button type="button" class="btn btn-prune" id="colPruneOwned">Keep only items I own</button>
+			</div>
+			<div id="collectionList"></div>
 		</div>
 
 		<!-- Quest Tab -->
@@ -548,37 +671,18 @@ select,select option{background:#1c1a30;color:#e8eaff}
 
 <!-- ==================== TOOLTIP ==================== -->
 <div class="tooltip" id="tooltip"></div>
+<div id="inspectOverlay" onclick="if(event.target===this)closeInspect()">
+	<div id="inspectCard" onclick="event.stopPropagation()">
+		<div id="inspectBody"></div>
+		<div class="insp-actions">
+			<button class="btn btn-primary" id="inspectEquipBtn">Equip</button>
+			<button class="btn btn-ghost" id="inspectCloseBtn">Close</button>
+		</div>
+	</div>
+</div>
 
 <!-- ==================== CONTEXT MENU ==================== -->
 <div class="ctx-menu" id="ctxMenu"></div>
-
-<!-- ==================== SPELL BUILDER MODAL ==================== -->
-<div class="modal-overlay" id="spellModal">
-<div class="modal nb-modal">
-	<div class="modal-head">
-		<div class="spell-meta nb-head-main" id="spellMeta"></div>
-		<button class="close-btn" id="modalClose">✕</button>
-	</div>
-	<div class="modal-body">
-		<div class="spell-desc" id="spellDesc" style="display:none">Configure your spell by adding phases below.</div>
-		<div class="nb-phase-row">
-			<div class="nb-phase-strip" id="nbPhaseStrip"></div>
-			<button class="nb-add-phase" id="addPhaseBtn" title="Add phase">+</button>
-		</div>
-		<div class="nb-editor" id="nbEditor"></div>
-		<div class="phases-wrap" id="phasesWrap" style="display:none"></div>
-	</div>
-	<div class="modal-foot">
-		<button class="btn btn-danger" id="clearSpellBtn">Clear Spell</button>
-		<div style="display:flex;gap:6px">
-			<button class="btn btn-ghost" id="exportSpellBtn" title="Copy spell code to clipboard">📋 Export Code</button>
-			<button class="btn btn-ghost" id="importSpellBtn" title="Paste a spell code to load">📥 Import Code</button>
-		</div>
-		<button class="btn btn-ghost" id="cancelSpellBtn">Cancel</button>
-		<button class="btn btn-primary" id="saveSpellBtn">Save Spell</button>
-	</div>
-</div>
-</div>
 
 <!-- ==================== SCROLL SLOT PICKER ==================== -->
 <div class="modal-overlay" id="scrollModal">
@@ -599,7 +703,15 @@ select,select option{background:#1c1a30;color:#e8eaff}
      ============================================================ -->
 <script src="scrolls.js?v=2"></script>
 <script src="spell-cost.js?v=14"></script>
-<script src="spell-builder.js?v=22"></script>
+<script src="magic-engine.js?v=60"></script>
+<script src="magic-techniques.js?v=42"></script>
+<script src="shape-editor.js?v=3"></script>
+<script src="magic-forge.js?v=21"></script>
+<script src="player-rig.js?v=4"></script>
+<script src="melee-weapons.js?v=2"></script>
+<script src="slot-chooser.js?v=4"></script>
+<script src="gear-data.js?v=5"></script>
+<script src="gear-system.js?v=10"></script>
 <script>
 /* =============================================================
    DATA DEFINITIONS
@@ -777,51 +889,7 @@ const EFFECT_RANK_REQ = {
    ITEM DATABASE
    ============================================================= */
 const ITEM_DB = {
-	/* -- staves -- */
-	oak_staff:       { name:'Oak Staff',       type:'staff', icon:'🪄', rarity:'common',    stats:{magicPower:3},              desc:'A simple wooden staff.' },
-	crystal_staff:   { name:'Crystal Staff',   type:'staff', icon:'🔮', rarity:'uncommon',  stats:{magicPower:5,magicControl:2},desc:'Resonates with arcane energy.' },
-	void_staff:      { name:'Void Staff',      type:'staff', icon:'🌑', rarity:'epic',      stats:{magicPower:12,magicControl:5},desc:'Channels the emptiness between stars.' },
-	elder_staff:     { name:'Elder Staff',      type:'staff', icon:'✨', rarity:'legendary', stats:{magicPower:18,magicControl:8,manaRegen:20},desc:'Carved from the First Tree.' },
-	lightstep_blade: { name:'Lightstep Blade',  type:'staff', icon:'⚔️', rarity:'mythic',   stats:{magicPower:25,magicControl:12,manaRegen:30},desc:'A blade of severed light from Seraphel. Warriors gain Backstep anchors on melee attacks — press B to warp back.' },
-
-	/* -- robes -- */
-	linen_robe:      { name:'Linen Robe',      type:'robe',  icon:'👘', rarity:'common',    stats:{magicDefence:2},             desc:'Basic apprentice robe.' },
-	silk_robe:       { name:'Silk Robe',        type:'robe',  icon:'🥋', rarity:'uncommon',  stats:{magicDefence:4,manaRegen:10},desc:'Woven with minor wards.' },
-	arcane_robe:     { name:'Arcane Vestment',  type:'robe',  icon:'🧥', rarity:'rare',      stats:{magicDefence:7,manaRegen:25,magicControl:3},desc:'Glimmers with protective runes.' },
-	shadow_robe:     { name:'Shadowweave Robe', type:'robe',  icon:'🖤', rarity:'epic',      stats:{magicDefence:12,magicPower:5},desc:'Absorbs incoming magic.' },
-
-	/* -- relics -- */
-	mana_gem:        { name:'Mana Gem',         type:'relic', icon:'💎', rarity:'uncommon',  stats:{manaRegen:15},           desc:'A crystallised pool of mana.' },
-	fire_ring:       { name:'Ring of Embers',   type:'relic', icon:'💍', rarity:'rare',      stats:{magicPower:6},               desc:'Warm to the touch, always.' },
-	frost_amulet:    { name:'Frost Amulet',     type:'relic', icon:'❄️', rarity:'rare',      stats:{magicDefence:5,magicControl:3},desc:'Chills hostile spells.' },
-	chaos_orb:       { name:'Chaos Orb',        type:'relic', icon:'🌀', rarity:'epic',      stats:{magicPower:8,magicControl:6},desc:'Unpredictable but potent.' },
-	phoenix_feather: { name:'Phoenix Feather',  type:'relic', icon:'🪶', rarity:'legendary', stats:{magicPower:10,manaRegen:30,magicDefence:5},desc:'Reborn in flame.' },
-
-	/* -- new staves -- */
-	storm_staff:     { name:'Storm Staff',       type:'staff', icon:'🌩️', rarity:'rare',      stats:{magicPower:8,magicControl:4},  desc:'Crackles with living lightning.' },
-	blood_staff:     { name:'Blood Staff',       type:'staff', icon:'🩸', rarity:'epic',      stats:{magicPower:14,manaRegen:15},desc:'Feeds on the wielder\'s vitality.' },
-	stardust_staff:  { name:'Stardust Staff',    type:'staff', icon:'🌠', rarity:'legendary', stats:{magicPower:22,magicControl:10,manaRegen:25},desc:'Forged from a dying star.' },
-	bone_staff:      { name:'Bone Staff',        type:'staff', icon:'🦴', rarity:'uncommon',  stats:{magicPower:4,magicDefence:2},  desc:'Carved from an ancient beast.' },
-	prism_staff:     { name:'Prism Staff',       type:'staff', icon:'🔷', rarity:'rare',      stats:{magicPower:7,magicControl:5},  desc:'Refracts magic into pure colour.' },
-
-	/* -- new robes -- */
-	ember_robe:      { name:'Ember Robe',        type:'robe',  icon:'🔥', rarity:'rare',      stats:{magicDefence:6,magicPower:4},  desc:'Smolders with perpetual heat.' },
-	void_robe:       { name:'Void Robe',         type:'robe',  icon:'🌑', rarity:'epic',      stats:{magicDefence:10,manaRegen:20,magicControl:4},desc:'Woven from nothingness.' },
-	celestial_robe:  { name:'Celestial Robe',    type:'robe',  icon:'✨', rarity:'legendary', stats:{magicDefence:18,manaRegen:40,magicControl:6,magicPower:8},desc:'Threaded with starlight.' },
-	hunter_cloak:    { name:'Hunter\'s Cloak',   type:'robe',  icon:'🧣', rarity:'uncommon',  stats:{magicDefence:3,magicControl:2},desc:'Light and agile.' },
-	tide_robe:       { name:'Tide Robe',         type:'robe',  icon:'🌊', rarity:'rare',      stats:{magicDefence:5,manaRegen:20},desc:'Flows like living water.' },
-
-	/* -- new relics -- */
-	sun_medallion:   { name:'Sun Medallion',     type:'relic', icon:'☀️', rarity:'epic',      stats:{magicPower:10,magicDefence:4}, desc:'Radiates blinding warmth.' },
-	moon_pendant:    { name:'Moon Pendant',      type:'relic', icon:'🌙', rarity:'epic',      stats:{manaRegen:25,magicControl:5},desc:'Waxes and wanes with power.' },
-	dragon_heart:    { name:'Dragon Heart',      type:'relic', icon:'❤️‍🔥', rarity:'legendary', stats:{magicPower:15,manaRegen:35,magicDefence:8},desc:'Still beating after millennia.' },
-	world_seed:      { name:'World Seed',        type:'relic', icon:'🌱', rarity:'legendary', stats:{manaRegen:50,magicDefence:10,magicControl:8},desc:'Contains a universe waiting to bloom.' },
-	thunder_tooth:   { name:'Thunder Tooth',     type:'relic', icon:'⚡', rarity:'rare',      stats:{magicPower:7,magicControl:3},  desc:'A fang from the storm serpent.' },
-	ghost_lantern:   { name:'Ghost Lantern',     type:'relic', icon:'🏮', rarity:'uncommon',  stats:{manaRegen:12,magicDefence:3},desc:'Illuminated by trapped spirits.' },
-	bloodstone:      { name:'Bloodstone',        type:'relic', icon:'🔴', rarity:'rare',      stats:{magicPower:8,magicDefence:4},  desc:'Pulses with a crimson glow.' },
-	wind_charm:      { name:'Wind Charm',        type:'relic', icon:'🍃', rarity:'uncommon',  stats:{magicControl:4,manaRegen:8},desc:'Whispers secrets of the gale.' },
-	eye_of_eternity: { name:'Eye of Eternity',   type:'relic', icon:'👁️', rarity:'legendary', stats:{magicPower:12,magicControl:12,manaRegen:30,magicDefence:6},desc:'Sees all timelines at once.' },
-	crystal_crown:   { name:'Crystal Crown',     type:'relic', icon:'👑', rarity:'epic',      stats:{magicControl:8,magicPower:6,magicDefence:3},desc:'Worn by the Archmage of old.' },
+	/* Equipment lives in gear-data.js and is merged below. Ingredients stay here. */
 
 	/* -- crafting ingredients -- */
 	arcane_dust:     { name:'Arcane Dust',      type:'ingredient', icon:'✨', rarity:'common',   stats:{}, desc:'Glittering residue of spent spells.' },
@@ -835,13 +903,15 @@ const ITEM_DB = {
 
 	/* -- dungeon boss ingredients -- */
 	molten_core:     { name:'Molten Core',      type:'ingredient', icon:'🌋', rarity:'rare',     stats:{}, desc:'The heart of a slain fire beast, still molten.' },
+	furnace_core:    { name:'Furnace Core',     type:'ingredient', icon:'🔶', rarity:'legendary',stats:{}, desc:'The still-burning heart of the Magma Warden. On the approach to Ignaroth it can be Overheated, Stabilized, or bound as a Volcanic Core.' },
 	inferno_fang:    { name:'Inferno Fang',     type:'ingredient', icon:'🦷', rarity:'epic',     stats:{}, desc:'A tooth from the Inferno Dragon itself.' },
 	lava_essence:    { name:'Lava Essence',     type:'ingredient', icon:'🔶', rarity:'uncommon', stats:{}, desc:'Condensed volcanic energy.' },
 	frost_core:      { name:'Frost Core',       type:'ingredient', icon:'💎', rarity:'rare',     stats:{}, desc:'Radiates an eternal chill.' },
 	glacial_shard:   { name:'Glacial Shard',    type:'ingredient', icon:'🔷', rarity:'epic',     stats:{}, desc:'A fragment of the Frozen Colossus.' },
 	permafrost:      { name:'Permafrost',       type:'ingredient', icon:'❄️', rarity:'uncommon', stats:{}, desc:'Ice that has existed for millennia.' },
 	terra_core:      { name:'Terra Core',       type:'ingredient', icon:'🪨', rarity:'rare',     stats:{}, desc:'The living heart of the earth.' },
-	titan_shard:     { name:'Titan Shard',      type:'ingredient', icon:'⛰️', rarity:'epic',     stats:{}, desc:'A fragment of the Stone Titan.' },
+	titan_shard:     { name:'Titan Shard',      type:'ingredient', icon:'⛰️', rarity:'epic',     stats:{}, desc:'A relic chipped from an ancient stone guardian.' },
+	worldroot_core:  { name:'Worldroot Core',   type:'ingredient', icon:'🌱', rarity:'epic',     stats:{}, desc:'A living knot of root, rain, spores, and ancient jungle magic taken from the Verdant Colossus.' },
 	ancient_amber:   { name:'Ancient Amber',    type:'ingredient', icon:'🟠', rarity:'uncommon', stats:{}, desc:'Hardened tree resin from deep underground.' },
 	void_heart:      { name:'Void Heart',       type:'ingredient', icon:'💜', rarity:'mythical', stats:{}, desc:'The still-pulsing core of the Void Arbiter. Radiates abyssal energy.' },
 
@@ -886,9 +956,8 @@ const ITEM_DB = {
 	pyraxis_ember:   { name:'Pyraxis Ember',    type:'ingredient', icon:'☄️', rarity:'epic',     stats:{}, desc:'An undying flame from the stomach of Pyraxis.' },
 	seraphel_feather:{ name:'Seraphel Feather', type:'ingredient', icon:'🪽', rarity:'legendary',stats:{}, desc:'A divine feather that hums with severed light.' },
 	arbiter_eye:     { name:'Arbiter Eye',      type:'ingredient', icon:'🔮', rarity:'legendary',stats:{}, desc:'The all-seeing eye of the Void Arbiter.' },
-	void_nullification:{ name:'Void Nullification', type:'relic', icon:'🌑', rarity:'mythic', stats:{magicPower:30,magicControl:15,manaRegen:40,magicDefence:12}, desc:'A mythic relic forged from the defeated Void Arbiter\'s essence. Nullifies void energy around the wielder.' },
-	chrono_shard:{ name:'Chrono Shard', type:'relic', icon:'⏳', rarity:'mythic', stats:{magicPower:25,magicControl:20,manaRegen:35,magicDefence:10}, desc:'A fragment of shattered time torn from the Chrono Tyrant. Grants temporal power to your spells.' },
 };
+if(typeof mergeGearItems === 'function') mergeGearItems(ITEM_DB);
 if(typeof mergeScrollItems === 'function') mergeScrollItems(ITEM_DB);
 
 /* =============================================================
@@ -896,37 +965,9 @@ if(typeof mergeScrollItems === 'function') mergeScrollItems(ITEM_DB);
    All spells are unlocked by default, but items provide damage multipliers.
    ============================================================= */
 const ITEM_BOOSTS = {
-	/* --- Staves --- */
-	stardust_staff: { shapes:['meteor'], boost:1.3, desc:'+30% Meteor spell damage' },
-	void_staff:     { shapes:['vortex'], boost:1.25, desc:'+25% Vortex spell damage' },
-	blood_staff:    { effects:['lifesteal'], boost:1.35, desc:'+35% Lifesteal effectiveness' },
-	elder_staff:    { shapes:['chain'], boost:1.25, desc:'+25% Chain spell damage' },
-	crystal_staff:  { shapes:['orb','missile'], boost:1.1, desc:'+10% Orb/Missile damage' },
-	bone_staff:     { effects:['burn','poison'], boost:1.15, desc:'+15% DoT damage' },
-	storm_staff:    { behaviors:['arc','zigzag'], boost:1.2, desc:'+20% Arc/Zigzag damage' },
-	prism_staff:    { shapes:['spray','cone'], boost:1.15, desc:'+15% Spray/Cone damage' },
-	lightstep_blade:{ shapes:['blade','missile'], boost:1.35, desc:'+35% Blade/Missile damage' },
-
-	/* --- Robes --- */
-	shadow_robe:    { effects:['blind'], boost:1.4, desc:'+40% Blind duration' },
-	void_robe:      { effects:['phaseThrough'], boost:1.3, desc:'+30% Phase Through damage' },
-	celestial_robe: { behaviors:['teleport'], shapes:['wall'], boost:1.25, desc:'+25% Teleport/Wall effectiveness' },
-	silk_robe:      { behaviors:['straight','homing'], boost:1.08, desc:'+8% basic spell damage' },
-	hunter_cloak:   { behaviors:['boomerang'], boost:1.15, desc:'+15% Boomerang damage' },
-
-	/* --- Relics --- */
-	chaos_orb:      { effects:['ricochet'], behaviors:['boomerang'], boost:1.2, desc:'+20% Ricochet/Boomerang damage' },
-	sun_medallion:  { shapes:['cone','ring'], boost:1.25, desc:'+25% Cone/Ring damage' },
-	moon_pendant:   { behaviors:['spiral','zigzag'], boost:1.2, desc:'+20% Spiral & Zigzag damage' },
-	crystal_crown:  { shapes:['polygon','spike'], boost:1.25, desc:'+25% Polygon/Spike damage' },
-	phoenix_feather:{ effects:['healSelf','damageHeal','damageStore','damageRelease'], boost:1.35, desc:'+35% healing/damage store effects' },
-	dragon_heart:   { shapes:['blade'], effects:['shatter'], boost:1.3, desc:'+30% Blade/Shatter damage' },
-	world_seed:     { effects:['gravityWell'], behaviors:['groundSurge'], boost:1.25, desc:'+25% Gravity Well/Ground Surge damage' },
-	eye_of_eternity:{ effects:['phaseFork','mark'], boost:1.3, desc:'+30% Phase Fork/Mark damage' },
-	void_nullification:{ shapes:['vortex','nova'], effects:['gravityWell'], boost:1.4, desc:'+40% Vortex/Nova/Gravity Well damage' },
-	chrono_shard:   { shapes:['meteor','chain'], behaviors:['homing','arc'], boost:1.35, desc:'+35% Meteor/Chain/Homing/Arc damage' },
-	ember_charm:    { effects:['burn'], boost:1.15, desc:'+15% Burn damage' },
-	frost_charm:    { effects:['slow','freeze'], boost:1.15, desc:'+15% Slow/Freeze effectiveness' },
+	lightstep_blade:{ shapes:['blade','missile'], boost:1.35, desc:'+35% damage for Kinetic spells and weapon Reinforcement' },
+	void_nullification:{ shapes:['vortex','nova'], effects:['gravityWell'], boost:1.4, desc:'+40% damage for Gravity and Discharge spells' },
+	chrono_shard:   { shapes:['meteor','chain'], behaviors:['homing','arc'], boost:1.35, desc:'+35% damage for Spatial and Target-seeking spells' },
 };
 
 /* Build reverse lookup: which items boost each shape/behavior/effect */
@@ -950,14 +991,17 @@ for(const [itemId, data] of Object.entries(ITEM_BOOSTS)){
 
 /* Check if player has an item equipped (in any slot) */
 function hasItemEquipped(itemId){
+	if(typeof GearSystem !== 'undefined') return GearSystem.hasEquipped(STATE.equipment, itemId);
 	for(const slotKey of ['staff','robe','relic1','relic2']){
-		if(STATE.equipment[slotKey] === itemId) return true;
+		const v = STATE.equipment[slotKey];
+		if(v === itemId || (v && v.itemId === itemId)) return true;
 	}
 	return false;
 }
 
 /* Calculate total boost for a spell based on equipped items */
 function getSpellBoost(spell){
+	if(spell && spell.nodes && typeof GearRuntime !== 'undefined' && GearRuntime.runeItemBoost) return GearRuntime.runeItemBoost(spell, STATE.equipment);
 	let totalBoost = 1.0;
 	const checked = new Set();
 	
@@ -1026,104 +1070,7 @@ function isEffectUnlocked(key){ return isTestMode || (EFFECT_RANK_REQ[key] || 0)
    CRAFTING RECIPES
    ============================================================= */
 const CRAFTING_RECIPES = [
-	/* ---- STAVES ---- */
-	{ result:'crystal_staff', qty:1, ingredients:[
-		{ itemId:'arcane_dust', qty:8 }, { itemId:'ice_crystal', qty:2 },
-	]},
-	{ result:'bone_staff', qty:1, ingredients:[
-		{ itemId:'arcane_dust', qty:5 }, { itemId:'ember_shard', qty:3 },
-	]},
-	{ result:'storm_staff', qty:1, ingredients:[
-		{ itemId:'arcane_dust', qty:10 }, { itemId:'ice_crystal', qty:4 }, { itemId:'ember_shard', qty:4 },
-	]},
-	{ result:'prism_staff', qty:1, ingredients:[
-		{ itemId:'ice_crystal', qty:5 }, { itemId:'arcane_dust', qty:8 }, { itemId:'mana_herb', qty:4 },
-	]},
-	{ result:'void_staff', qty:1, ingredients:[
-		{ itemId:'void_shard', qty:6 }, { itemId:'shadow_essence', qty:4 }, { itemId:'arcane_dust', qty:12 },
-	]},
-	{ result:'blood_staff', qty:1, ingredients:[
-		{ itemId:'molten_core', qty:2 }, { itemId:'shadow_essence', qty:3 }, { itemId:'ember_shard', qty:8 },
-	]},
-	{ result:'elder_staff', qty:1, ingredients:[
-		{ itemId:'dragon_scale', qty:2 }, { itemId:'starlight_dew', qty:2 }, { itemId:'arcane_dust', qty:20 }, { itemId:'mana_herb', qty:10 },
-	]},
-	{ result:'stardust_staff', qty:1, ingredients:[
-		{ itemId:'starlight_dew', qty:4 }, { itemId:'dragon_scale', qty:3 }, { itemId:'void_shard', qty:5 }, { itemId:'arcane_dust', qty:25 },
-	]},
-
-	/* ---- ROBES ---- */
-	{ result:'silk_robe', qty:1, ingredients:[
-		{ itemId:'arcane_dust', qty:6 }, { itemId:'mana_herb', qty:3 },
-	]},
-	{ result:'hunter_cloak', qty:1, ingredients:[
-		{ itemId:'arcane_dust', qty:5 }, { itemId:'ancient_amber', qty:2 },
-	]},
-	{ result:'ember_robe', qty:1, ingredients:[
-		{ itemId:'ember_shard', qty:6 }, { itemId:'lava_essence', qty:2 }, { itemId:'arcane_dust', qty:8 },
-	]},
-	{ result:'tide_robe', qty:1, ingredients:[
-		{ itemId:'ice_crystal', qty:5 }, { itemId:'permafrost', qty:2 }, { itemId:'mana_herb', qty:4 },
-	]},
-	{ result:'arcane_robe', qty:1, ingredients:[
-		{ itemId:'arcane_dust', qty:15 }, { itemId:'mana_herb', qty:6 }, { itemId:'shadow_essence', qty:2 },
-	]},
-	{ result:'shadow_robe', qty:1, ingredients:[
-		{ itemId:'shadow_essence', qty:5 }, { itemId:'void_shard', qty:4 }, { itemId:'arcane_dust', qty:12 },
-	]},
-	{ result:'void_robe', qty:1, ingredients:[
-		{ itemId:'void_shard', qty:6 }, { itemId:'shadow_essence', qty:4 }, { itemId:'frost_core', qty:1 },
-	]},
-	{ result:'celestial_robe', qty:1, ingredients:[
-		{ itemId:'starlight_dew', qty:3 }, { itemId:'dragon_scale', qty:2 }, { itemId:'arcane_dust', qty:20 }, { itemId:'mana_herb', qty:12 },
-	]},
-
-	/* ---- RELICS ---- */
-	{ result:'mana_gem', qty:1, ingredients:[
-		{ itemId:'arcane_dust', qty:6 }, { itemId:'mana_herb', qty:4 },
-	]},
-	{ result:'ghost_lantern', qty:1, ingredients:[
-		{ itemId:'shadow_essence', qty:2 }, { itemId:'arcane_dust', qty:5 }, { itemId:'mana_herb', qty:3 },
-	]},
-	{ result:'wind_charm', qty:1, ingredients:[
-		{ itemId:'mana_herb', qty:5 }, { itemId:'arcane_dust', qty:6 }, { itemId:'ice_crystal', qty:2 },
-	]},
-	{ result:'fire_ring', qty:1, ingredients:[
-		{ itemId:'ember_shard', qty:5 }, { itemId:'molten_core', qty:1 }, { itemId:'arcane_dust', qty:6 },
-	]},
-	{ result:'frost_amulet', qty:1, ingredients:[
-		{ itemId:'ice_crystal', qty:5 }, { itemId:'frost_core', qty:1 }, { itemId:'arcane_dust', qty:6 },
-	]},
-	{ result:'thunder_tooth', qty:1, ingredients:[
-		{ itemId:'ember_shard', qty:4 }, { itemId:'ice_crystal', qty:4 }, { itemId:'arcane_dust', qty:8 },
-	]},
-	{ result:'bloodstone', qty:1, ingredients:[
-		{ itemId:'molten_core', qty:2 }, { itemId:'shadow_essence', qty:3 }, { itemId:'ember_shard', qty:5 },
-	]},
-	{ result:'chaos_orb', qty:1, ingredients:[
-		{ itemId:'void_shard', qty:4 }, { itemId:'ember_shard', qty:4 }, { itemId:'ice_crystal', qty:4 }, { itemId:'shadow_essence', qty:3 },
-	]},
-	{ result:'sun_medallion', qty:1, ingredients:[
-		{ itemId:'molten_core', qty:2 }, { itemId:'inferno_fang', qty:1 }, { itemId:'starlight_dew', qty:1 }, { itemId:'ember_shard', qty:8 },
-	]},
-	{ result:'moon_pendant', qty:1, ingredients:[
-		{ itemId:'frost_core', qty:2 }, { itemId:'glacial_shard', qty:1 }, { itemId:'starlight_dew', qty:1 }, { itemId:'mana_herb', qty:8 },
-	]},
-	{ result:'crystal_crown', qty:1, ingredients:[
-		{ itemId:'terra_core', qty:2 }, { itemId:'ice_crystal', qty:6 }, { itemId:'arcane_dust', qty:15 }, { itemId:'ancient_amber', qty:4 },
-	]},
-	{ result:'phoenix_feather', qty:1, ingredients:[
-		{ itemId:'inferno_fang', qty:2 }, { itemId:'molten_core', qty:3 }, { itemId:'starlight_dew', qty:2 }, { itemId:'dragon_scale', qty:2 },
-	]},
-	{ result:'dragon_heart', qty:1, ingredients:[
-		{ itemId:'inferno_fang', qty:2 }, { itemId:'glacial_shard', qty:2 }, { itemId:'titan_shard', qty:2 }, { itemId:'dragon_scale', qty:3 },
-	]},
-	{ result:'eye_of_eternity', qty:1, ingredients:[
-		{ itemId:'starlight_dew', qty:4 }, { itemId:'void_shard', qty:6 }, { itemId:'dragon_scale', qty:3 }, { itemId:'shadow_essence', qty:5 },
-	]},
-	{ result:'world_seed', qty:1, ingredients:[
-		{ itemId:'terra_core', qty:3 }, { itemId:'titan_shard', qty:2 }, { itemId:'starlight_dew', qty:3 }, { itemId:'ancient_amber', qty:6 }, { itemId:'mana_herb', qty:15 },
-	]},
+	/* Old crafted staves/robes/relics were retired with the dungeon gear rework. */
 ];
 
 /* =============================================================
@@ -1139,21 +1086,17 @@ function defaultPlayerState(){
 		equipment: { staff:null, robe:null, relic1:null, relic2:null },
 		/* inventory: array of { itemId, qty } */
 		inventory: [
-			{ itemId:'oak_staff',    qty:1 },
-			{ itemId:'linen_robe',   qty:1 },
-			{ itemId:'mana_gem',     qty:1 },
-			{ itemId:'fire_ring',    qty:1 },
+			{ itemId:'cinderwood_wand', qty:1 },
+			{ itemId:'scorched_apprentice_robes', qty:1 },
+			{ itemId:'coalheart_charm', qty:1 },
 			{ itemId:'arcane_dust',  qty:12 },
 			{ itemId:'ember_shard',  qty:7 },
 			{ itemId:'ice_crystal',  qty:3 },
 			{ itemId:'mana_herb',    qty:9 },
 			{ itemId:'shadow_essence',qty:2 },
-			{ itemId:'crystal_staff',qty:1 },
-			{ itemId:'silk_robe',    qty:1 },
-			{ itemId:'frost_amulet', qty:1 },
 			{ itemId:'void_shard',   qty:4 },
-			{ itemId:'dragon_scale', qty:1 },
 		],
+		gearCollection: { items:{}, variants:{}, corruptions:{}, nightmare:{}, gems:{} },
 		spells: new Array(10).fill(null),  // each slot: null or spell object
 		vows: [null, null, null],  // 3 vow slots
 		domainVow: null,  // 4th special domain vow slot
@@ -1165,26 +1108,29 @@ function defaultPlayerState(){
 }
 
 function makeDefaultSpell(){
-	return {
-		name:'Magic Missile',
-		phases:[{
-			shape:'missile', behavior:'straight', width:1, height:1, speed:1.5,
-			duration:1, power:1, count:1, spread:0, effects:[],
-			color:'#4488ff', trail:'sparkle',
-			nextTrigger:'onHit',
-			orbitRadius:80, orbitSpeed:3, orbitDuration:1.5,
-			timedReleaseDelay:0.5,
-			phaseForkDelay:1, phaseForkRepeats:1,
-			aroundSelfCount:4, aroundSelfRadius:50,
-			chainStunTime:0,
-			nextTriggerDelay:0.5,
-			rainHeight:150,
-			effectPower:1, effectDuration:1,
-			randomDelayMax:0.5,
-			afterHitEffect:'none',
-			polygonSides:6,
-		}]
-	};
+	// The starting spell is built from the same rune system as every other spell:
+	// [Generate Energy] -> [Redirect -> cursor]
+	return MagicEngine.starterSpell();
+}
+
+/* The old phase-based spell crafter is gone. Any non-rune spell left in a save
+   (slots, loadouts, transformation slots) is removed; an empty spellbook gets the
+   starter spell. */
+function migrateToRuneMagic(s){
+	if(typeof MagicEngine === 'undefined' || !s) return false;
+	let changed = false;
+	if(!s.magicProfile){ s.magicProfile = MagicEngine.defaultMagicProfile(); changed = true; }
+	if(!s.spells) s.spells = new Array(10).fill(null);
+	if(MagicEngine.sanitizeSlots(s.spells, { ensureStarter: true, dropItems: true })) changed = true;
+	if(Array.isArray(s.transformSpells) && MagicEngine.sanitizeSlots(s.transformSpells, { dropItems: true })) changed = true;
+	if(Array.isArray(s.loadouts)) for(const ld of s.loadouts){ if(ld && Array.isArray(ld.spells) && MagicEngine.sanitizeSlots(ld.spells, { dropItems: true })) changed = true; }
+	return changed;
+}
+function magicProfileFor(){
+	const st = computeStats();
+	let maxMana = 1500;
+	try { if(typeof calcVowManaPenalty === 'function') maxMana = Math.max(100, 1500 - calcVowManaPenalty()); } catch(e){}
+	return MagicEngine.deriveProfile({ magicControl: st.magicControl, magicPower: st.magicPower, maxMana, magicProfile: STATE.magicProfile });
 }
 
 /* =============================================================
@@ -1221,6 +1167,10 @@ function loadState(){
 			if(!s.inventory) s.inventory = [];
 			if(typeof ensurePlayerGold === 'function') ensurePlayerGold(s);
 			else if(s.gold == null) s.gold = 350;
+			migrateGearState(s);
+			if(migrateToRuneMagic(s)){
+				try { localStorage.setItem('magicBattle_playerData', JSON.stringify(s)); } catch(e){}
+			}
 			if(typeof enforceSpellRulesOnData === 'function' && enforceSpellRulesOnData(s)){
 				try { localStorage.setItem('magicBattle_playerData', JSON.stringify(s)); } catch(e){}
 			}
@@ -1229,7 +1179,41 @@ function loadState(){
 	} catch(e){}
 	const s = defaultPlayerState();
 	s.spells[0] = makeDefaultSpell();
+	s.magicProfile = MagicEngine.defaultMagicProfile();
+	migrateGearState(s);
 	return s;
+}
+
+function migrateGearState(s){
+	if(!s.equipment) s.equipment = { staff:null, robe:null, relic1:null, relic2:null };
+	if(!s.gearCollection && typeof GearSystem !== 'undefined') s.gearCollection = GearSystem.defaultCollection();
+	else if(!s.gearCollection) s.gearCollection = { items:{}, variants:{}, corruptions:{}, nightmare:{}, gems:{} };
+	const keep = (id) => !!(ITEM_DB[id]);
+	for(const slot of ['staff','robe','relic1','relic2']){
+		const v = s.equipment[slot];
+		if(!v) continue;
+		if(typeof v === 'string'){
+			if(!keep(v)){ s.equipment[slot] = null; continue; }
+			if(typeof GearSystem !== 'undefined' && GearSystem.isGear(v)){
+				s.equipment[slot] = GearSystem.createInstance(v);
+				GearSystem.discover(s, s.equipment[slot]);
+			}
+		} else if(v.itemId && !keep(v.itemId)){
+			s.equipment[slot] = null;
+		} else if(v.itemId && typeof GearSystem !== 'undefined'){
+			GearSystem.discover(s, v);
+		}
+	}
+	s.inventory = (s.inventory || []).filter(e => e && keep(e.itemId)).map(e => {
+		if(typeof GearSystem !== 'undefined' && GearSystem.isGear(e.itemId) && !e.uid){
+			const inst = GearSystem.createInstance(e.itemId, e);
+			GearSystem.discover(s, inst);
+			return inst;
+		}
+		if(typeof GearSystem !== 'undefined' && e.uid) GearSystem.discover(s, e);
+		if(typeof GearSystem !== 'undefined' && GearSystem.isGem(e.itemId)) GearSystem.discoverGem(s, e.itemId, e.quality);
+		return e;
+	});
 }
 
 /* Calculate and update spell boosts based on equipped items */
@@ -1237,7 +1221,7 @@ function updateSpellBoosts(){
 	if(!STATE.spellBoosts) STATE.spellBoosts = [];
 	for(let i=0; i<10; i++){
 		const spell = STATE.spells[i];
-		if(!spell || !spell.phases || !spell.phases.length){
+		if(!spell || ((!spell.phases || !spell.phases.length) && !spell.nodes)){
 			STATE.spellBoosts[i] = 1.0;
 			continue;
 		}
@@ -1405,8 +1389,16 @@ function computeStats(){
 	if(!STATE.equipment) STATE.equipment = { staff:null, robe:null, relic1:null, relic2:null };
 	const s = {...STATE.baseStats};
 	for(const slotKey of ['staff','robe','relic1','relic2']){
-		const id = STATE.equipment[slotKey];
-		if(!id) continue;
+		const raw = STATE.equipment[slotKey];
+		if(!raw) continue;
+		if(typeof GearSystem !== 'undefined'){
+			const inst = GearSystem.resolveEquip(raw);
+			if(!inst) continue;
+			const st = GearSystem.getInstanceStats(inst);
+			for(const k in st) s[k] = (s[k]||0) + st[k];
+			continue;
+		}
+		const id = typeof raw === 'string' ? raw : raw.itemId;
 		const item = ITEM_DB[id];
 		if(!item) continue;
 		for(const k in item.stats) s[k] = (s[k]||0) + item.stats[k];
@@ -1597,6 +1589,18 @@ function inventoryManaOpts(slot, spell){
 /* =============================================================
    RENDER: STATS BAR (top)
    ============================================================= */
+/* what your stats do to rune spells (the same numbers the dungeon uses) */
+function runeStatSummary(s){
+	let prof = null; try { prof = magicProfileFor(); } catch(e){}
+	const dmg = Math.max(0.25, (1 + (s.magicPower || 0) * 0.08) / 1.8);
+	const ward = Math.max(0.5, Math.min(1.1, 1 / (1 + ((s.magicDefence || 0) - 8) * 0.015)));
+	const lines = [
+		'⚔️ Rune damage <b style="color:#e74c3c">×' + dmg.toFixed(2) + '</b>' + (prof ? ' · Max Output <b>' + prof.maxOutput + ' E</b>' : ''),
+		prof ? '🎯 Rune capacity <b style="color:#9b59b6">' + prof.runeCapacity + '</b> · Zones up to <b>' + Math.round(prof.zoneRadiusMax || 0) + ' px</b>' : '',
+		'🛡️ Enemy magic <b style="color:#2ecc71">' + (Math.abs(ward - 1) < 0.005 ? '±0' : ward < 1 ? '−' + Math.round((1 - ward) * 100) : '+' + Math.round((ward - 1) * 100)) + '%</b> · +' + Math.round((s.magicDefence || 0) * 6) + ' max HP'
+	].filter(Boolean);
+	return '<div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--border);font-size:11px;color:var(--muted);line-height:1.6">' + lines.join('<br>') + '</div>';
+}
 function renderStats(){
 	const s = computeStats();
 	const defs = [
@@ -1616,7 +1620,7 @@ function renderStats(){
 		return `${d.icon} ${d.label}: <b style="color:#fff">${base[d.key]}</b>` +
 			(bonus > 0 ? ` <span style="color:var(--green)">+${bonus}</span>` : '') +
 			` = <b style="color:${d.color}">${s[d.key]}</b>`;
-	}).join('<br>');
+	}).join('<br>') + runeStatSummary(s);
 
 	// Rank display
 	const rank = getPlayerRank();
@@ -1705,23 +1709,31 @@ function renderEquipment(){
 	const wrap = document.getElementById('equipSlots');
 	wrap.innerHTML = '';
 	for(const slotKey of ['staff','robe','relic1','relic2']){
-		const id = STATE.equipment[slotKey];
+		const raw = STATE.equipment[slotKey];
+		const inst = raw && typeof GearSystem !== 'undefined' ? GearSystem.resolveEquip(raw) : (raw ? { itemId: typeof raw === 'string' ? raw : raw.itemId } : null);
+		const id = inst && inst.itemId;
 		const item = id ? ITEM_DB[id] : null;
 		const el = document.createElement('div');
 		el.className = 'equip-slot' + (item ? ' filled' : '');
+		if(inst && inst.nightmare) el.setAttribute('data-nightmare', '1');
+		else if(inst && inst.corruptionId && item && item.rarity !== 'cursed') el.setAttribute('data-corrupt', '1');
 		if(item){
-			const statStr = Object.entries(item.stats).map(([k,v])=>{
+			const stats = (typeof GearSystem !== 'undefined' && inst.uid) ? GearSystem.getInstanceStats(inst) : (item.stats || {});
+			const statStr = Object.entries(stats).map(([k,v])=>{
 				const nice = k.replace('magic','').replace(/([A-Z])/,' $1');
 				return `+${v} ${nice}`;
 			}).join(', ');
+			const shown = (typeof GearSystem !== 'undefined' && inst.uid) ? GearSystem.displayName(inst) : item.name;
+			const rarity = (typeof GearSystem !== 'undefined' && inst.uid) ? GearSystem.displayRarity(inst) : item.rarity;
 			const boost = ITEM_BOOSTS[id];
 			const boostStr = boost ? `<div class="eq-sub" style="color:#f0c060;font-size:10px">⚡ ${boost.desc}</div>` : '';
+			const fx = item.effectText && item.effectText !== 'None.' ? `<div class="eq-sub" style="color:#f0c060;font-size:10px">⚡ ${item.effectText}</div>` : '';
 			el.innerHTML = `
 				<div class="eq-icon">${item.icon}</div>
 				<div class="eq-info">
-					<div class="eq-name" style="color:var(--rarity-${item.rarity})">${item.name}</div>
+					<div class="eq-name" style="color:var(--rarity-${rarity})">${shown}</div>
 					<div class="eq-sub">${statStr}</div>
-					${boostStr}
+					${fx}${boostStr}
 				</div>
 				<button class="unequip-btn" data-slot="${slotKey}" title="Unequip">✕</button>
 			`;
@@ -1729,6 +1741,7 @@ function renderEquipment(){
 				e.stopPropagation();
 				unequipItem(slotKey);
 			});
+			el.addEventListener('click', () => { if(inst && inst.itemId) openInspect(inst, slotKey); });
 		} else {
 			el.innerHTML = `
 				<div class="eq-icon" style="opacity:.3">${EQUIP_LABELS[slotKey].icon}</div>
@@ -1740,10 +1753,11 @@ function renderEquipment(){
 }
 
 function unequipItem(slotKey){
-	const id = STATE.equipment[slotKey];
-	if(!id) return;
+	const prev = STATE.equipment[slotKey];
+	if(!prev) return;
 	STATE.equipment[slotKey] = null;
-	addToInventory(id, 1);
+	if(typeof prev === 'object' && prev.uid) STATE.inventory.push(prev);
+	else addToInventory(typeof prev === 'string' ? prev : prev.itemId, 1);
 	saveState(); renderAll();
 }
 
@@ -1755,7 +1769,8 @@ function getFilteredInventory(){
 	const q = searchTerm.toLowerCase();
 	return STATE.inventory.filter(entry => {
 		const item = ITEM_DB[entry.itemId];
-		const name = (typeof scrollDisplayName === 'function' ? scrollDisplayName(entry, ITEM_DB) : (item && item.name)) || '';
+		const shown = (typeof GearSystem !== 'undefined' && entry.uid) ? GearSystem.displayName(entry) : ((typeof scrollDisplayName === 'function' ? scrollDisplayName(entry, ITEM_DB) : (item && item.name)) || '');
+		const name = shown || (item && item.name) || '';
 		return item && (name.toLowerCase().includes(q) || item.name.toLowerCase().includes(q) || item.type.toLowerCase().includes(q));
 	});
 }
@@ -1782,11 +1797,26 @@ function renderInventory(){
 			const entry = pageItems[i];
 			const item = ITEM_DB[entry.itemId];
 			if(item){
-				const shown = (typeof scrollDisplayName === 'function' ? scrollDisplayName(entry, ITEM_DB) : item.name);
-				const rarity = (entry.itemId === 'player_scroll' || entry.spell) ? 'pink' : item.rarity;
+				let shown = (typeof GearSystem !== 'undefined' && entry.uid) ? GearSystem.displayName(entry) : (typeof scrollDisplayName === 'function' ? scrollDisplayName(entry, ITEM_DB) : item.name);
+				if(item.type === 'gem' && typeof GearSystem !== 'undefined'){
+					const q = entry.quality || 'normal';
+					const qn = GearSystem.GEM_QUALITIES[q];
+					shown = (qn ? qn.name + ' ' : '') + item.name;
+					if(q === 'perfect') cell.setAttribute('data-gem-perfect', '1');
+				}
+				let rarity = (entry.itemId === 'player_scroll' || entry.spell) ? 'pink' : item.rarity;
+				if(typeof GearSystem !== 'undefined' && entry.uid) rarity = GearSystem.displayRarity(entry);
 				cell.setAttribute('data-rarity', rarity);
 				cell.setAttribute('data-item-id', entry.itemId);
+				if(entry.variantId) cell.setAttribute('data-variant', '1');
+				if(entry.nightmare) cell.setAttribute('data-nightmare', '1');
+				else if(entry.corruptionId && item.rarity !== 'cursed') cell.setAttribute('data-corrupt', '1');
+				let badge = '';
+				if(entry.nightmare) badge = '<span class="cell-badge">☠</span>';
+				else if(entry.corruptionId && item.rarity !== 'cursed') badge = '<span class="cell-badge">⛓</span>';
+				else if(entry.variantId) badge = '<span class="cell-badge">◆</span>';
 				cell.innerHTML = `
+					${badge}
 					<span class="cell-icon">${item.icon}</span>
 					<span class="cell-name">${shown}</span>
 					${entry.qty > 1 ? `<span class="cell-qty">x${entry.qty}</span>` : ''}
@@ -1794,8 +1824,8 @@ function renderInventory(){
 				cell.addEventListener('mouseenter', e => showTooltip(e, item, entry.qty, entry));
 				cell.addEventListener('mousemove', e => moveTooltip(e));
 				cell.addEventListener('mouseleave', hideTooltip);
-				cell.addEventListener('contextmenu', e => { e.preventDefault(); openCtxMenu(e, entry); });
-				cell.addEventListener('click', e => openCtxMenu(e, entry));
+				cell.addEventListener('contextmenu', e => { e.preventDefault(); e.stopPropagation(); openCtxMenu(e, entry); });
+				cell.addEventListener('click', e => { e.stopPropagation(); openCtxMenu(e, entry); });
 			}
 		}
 		grid.appendChild(cell);
@@ -1807,15 +1837,18 @@ function renderInventory(){
    ============================================================= */
 const tooltipEl = document.getElementById('tooltip');
 function showTooltip(e, item, qty, entry){
-	const shown = (entry && typeof scrollDisplayName === 'function') ? scrollDisplayName(entry, ITEM_DB) : item.name;
-	const rarity = (entry && (entry.itemId === 'player_scroll' || entry.spell)) ? 'pink' : item.rarity;
+	const shown = (entry && typeof GearSystem !== 'undefined' && entry.uid) ? GearSystem.displayName(entry) : ((entry && typeof scrollDisplayName === 'function') ? scrollDisplayName(entry, ITEM_DB) : item.name);
+	let rarity = (entry && (entry.itemId === 'player_scroll' || entry.spell)) ? 'pink' : item.rarity;
+	if(entry && typeof GearSystem !== 'undefined' && entry.uid) rarity = GearSystem.displayRarity(entry);
 	const rarityLabel = rarity === 'pink' ? 'pink · player-made' : rarity;
-	const statLines = Object.entries(item.stats || {}).map(([k,v])=>{
+	const stats = (entry && typeof GearSystem !== 'undefined' && entry.uid) ? GearSystem.getInstanceStats(entry) : (item.stats || {});
+	const statLines = Object.entries(stats).map(([k,v])=>{
 		const nice = k.replace('magic','Magic ');
 		return `<div class="tt-stat">+${v} ${nice}</div>`;
 	}).join('');
-	const boostData = ITEM_BOOSTS[item.id];
+	const boostData = ITEM_BOOSTS[entry && entry.itemId];
 	const boostLine = boostData ? `<div class="tt-stat" style="color:#f0c060;font-size:10px">⚡ ${boostData.desc}</div>` : '';
+	const gearExtra = (entry && typeof GearSystem !== 'undefined' && entry.uid) ? GearSystem.tooltipExtra(entry) : (item.effectText && item.effectText !== 'None.' ? `<div class="tt-stat" style="color:#f0c060">⚡ ${item.effectText}</div>` : '');
 	let extra = '';
 	if(item.type === 'scroll'){
 		const stored = typeof resolveScrollSpell === 'function' ? resolveScrollSpell(entry, ITEM_DB) : (entry && entry.spell) || item.spell;
@@ -1834,6 +1867,7 @@ function showTooltip(e, item, qty, entry){
 		<div class="tt-type">${item.type} · ${rarityLabel}</div>
 		${statLines}
 		${boostLine}
+		${gearExtra}
 		<div class="tt-desc">${item.desc||''}</div>
 		${extra}
 	`;
@@ -1860,16 +1894,20 @@ function openCtxMenu(e, entry){
 	const item = ITEM_DB[entry.itemId];
 	if(!item) return;
 	ctxMenu.innerHTML = '';
-	const equipTypes = { staff:['staff'], robe:['robe'], relic:['relic1','relic2'] };
-	const slots = equipTypes[item.type];
-	if(slots){
-		for(const sl of slots){
-			const opt = document.createElement('div');
-			opt.className = 'ctx-item';
-			opt.textContent = `Equip → ${EQUIP_LABELS[sl].label}`;
-			opt.addEventListener('click', () => { equipItem(entry, sl); closeCtxMenu(); });
-			ctxMenu.appendChild(opt);
-		}
+	const slots = (typeof GearSystem !== 'undefined') ? GearSystem.equipSlotsFor(entry) : ({ staff:['staff'], robe:['robe'], relic:['relic1','relic2'] }[item.type] || []);
+	if(slots.length){
+		const opt = document.createElement('div');
+		opt.className = 'ctx-item';
+		opt.textContent = 'Equip';
+		opt.addEventListener('click', () => { smartEquip(entry); closeCtxMenu(); });
+		ctxMenu.appendChild(opt);
+	}
+	{
+		const insp = document.createElement('div');
+		insp.className = 'ctx-item';
+		insp.textContent = 'Inspect';
+		insp.addEventListener('click', () => { closeCtxMenu(); openInspect(entry); });
+		ctxMenu.appendChild(insp);
 	}
 	if(item.type === 'scroll'){
 		const stored = typeof resolveScrollSpell === 'function' ? resolveScrollSpell(entry, ITEM_DB) : null;
@@ -1910,33 +1948,182 @@ document.addEventListener('click', e => { if(!ctxMenu.contains(e.target)) closeC
 /* =============================================================
    EQUIP / INVENTORY HELPERS
    ============================================================= */
+function smartEquip(entry){
+	const slots = (typeof GearSystem !== 'undefined') ? GearSystem.equipSlotsFor(entry) : [];
+	if(!slots.length) return;
+	let slot = slots.find(sl => !STATE.equipment[sl]) || slots[0];
+	equipItem(entry, slot);
+}
+
 function equipItem(entry, slotKey){
-	const prevId = STATE.equipment[slotKey];
-	// put old item back
-	if(prevId) addToInventory(prevId, 1);
-	STATE.equipment[slotKey] = entry.itemId;
-	removeFromInventory(entry.itemId, 1);
+	const prev = STATE.equipment[slotKey];
+	if(prev){
+		if(typeof prev === 'object' && prev.uid) STATE.inventory.push(prev);
+		else addToInventory(typeof prev === 'string' ? prev : prev.itemId, 1);
+	}
+	if(entry.uid){
+		STATE.equipment[slotKey] = entry;
+		removeFromInventory(entry.itemId, 1, entry.uid);
+	} else if(typeof GearSystem !== 'undefined' && GearSystem.isGear(entry.itemId)){
+		const inst = GearSystem.createInstance(entry.itemId, entry);
+		STATE.equipment[slotKey] = inst;
+		removeFromInventory(entry.itemId, 1, entry.uid);
+	} else {
+		STATE.equipment[slotKey] = entry.itemId;
+		removeFromInventory(entry.itemId, 1);
+	}
+	if(typeof GearSystem !== 'undefined') GearSystem.discover(STATE, STATE.equipment[slotKey]);
 	saveState(); renderAll();
 }
 
 function addToInventory(itemId, qty, extra){
+	if(itemId && typeof itemId === 'object'){
+		STATE.inventory.push(itemId);
+		if(typeof GearSystem !== 'undefined') GearSystem.discover(STATE, itemId);
+		return;
+	}
 	if(itemId === 'player_scroll' || (extra && extra.uid)){
 		STATE.inventory.push(Object.assign({ itemId, qty: qty || 1 }, extra || {}));
 		return;
 	}
-	const existing = STATE.inventory.find(e => e.itemId === itemId && !e.uid);
+	if(typeof GearSystem !== 'undefined' && GearSystem.isGear(itemId)){
+		const inst = GearSystem.createInstance(itemId, extra || {});
+		STATE.inventory.push(inst);
+		GearSystem.discover(STATE, inst);
+		return;
+	}
+	const q = extra && extra.quality;
+	const existing = STATE.inventory.find(e => e.itemId === itemId && !e.uid && (e.quality || 'normal') === (q || e.quality || 'normal'));
 	if(existing) existing.qty += qty;
-	else STATE.inventory.push({ itemId, qty });
+	else STATE.inventory.push(Object.assign({ itemId, qty }, q ? { quality: q } : {}));
+	if(typeof GearSystem !== 'undefined' && GearSystem.isGem(itemId)) GearSystem.discoverGem(STATE, itemId, extra && extra.quality);
 }
 
-function removeFromInventory(itemId, qty, uid){
-	const idx = STATE.inventory.findIndex(e => e.itemId === itemId && (uid ? e.uid === uid : !e.uid));
+function removeFromInventory(itemId, qty, uid, quality){
+	const idx = STATE.inventory.findIndex(e => e.itemId === itemId && (uid ? e.uid === uid : !e.uid) && (quality == null || (e.quality || 'normal') === quality));
 	if(idx === -1) return;
+	if(STATE.inventory[idx].uid){ STATE.inventory.splice(idx, 1); return; }
 	STATE.inventory[idx].qty -= qty;
 	if(STATE.inventory[idx].qty <= 0) STATE.inventory.splice(idx, 1);
 }
 
+let inspectEntry = null;
+let inspectSlot = null;
+
+function openInspect(entry, fromSlot){
+	inspectEntry = entry;
+	inspectSlot = fromSlot || null;
+	const overlay = document.getElementById('inspectOverlay');
+	const card = document.getElementById('inspectCard');
+	if(card) card.classList.remove('wide');
+	const body = document.getElementById('inspectBody');
+	const item = ITEM_DB[entry.itemId];
+	if(typeof GearSystem !== 'undefined' && (entry.uid || GearSystem.isGear(entry.itemId))){
+		const inst = entry.uid ? entry : GearSystem.createInstance(entry.itemId, entry);
+		body.innerHTML = GearSystem.inspectHtml(inst, ITEM_DB);
+		bindInspectGems(inst);
+	} else if(item && item.type === 'gem' && typeof GearSystem !== 'undefined'){
+		const q = entry.quality || 'normal';
+		const qn = (GearSystem.GEM_QUALITIES[q] && GearSystem.GEM_QUALITIES[q].name) || 'Normal';
+		const nums = GearSystem.formatGemModList((GearSystem.GEMS[entry.itemId]||{}).mods, GearSystem.gemQualityMult(q));
+		body.innerHTML = `<div class="insp-name">${qn} ${item.name}</div><div class="insp-type">gem · ${q}</div><div class="insp-body">${item.desc||''}</div><div class="insp-block"><div class="insp-label">Bonuses</div><div class="insp-stat">${nums}</div></div>`;
+	} else {
+		body.innerHTML = `<div class="insp-name">${item ? item.name : entry.itemId}</div><div class="insp-body">${item ? (item.desc||'') : ''}</div>`;
+	}
+	const eqBtn = document.getElementById('inspectEquipBtn');
+	const canEquip = item && (item.type === 'staff' || item.type === 'robe' || item.type === 'relic');
+	eqBtn.style.display = (canEquip && !fromSlot && !entry._collection) ? '' : 'none';
+	overlay.classList.add('open');
+}
+function openCollectionInspect(itemId, view){
+	if(typeof GearSystem === 'undefined') return;
+	const col = GearSystem.ensureCollection(STATE);
+	if(!col.items[itemId]) return;
+	inspectEntry = { itemId: itemId, _collection: true, _colView: view || { itemId: itemId, variantId: '', mode: 'normal', corrId: '' } };
+	if(view) inspectEntry._colView = view;
+	inspectSlot = null;
+	const overlay = document.getElementById('inspectOverlay');
+	const card = document.getElementById('inspectCard');
+	const body = document.getElementById('inspectBody');
+	body.innerHTML = GearSystem.collectionInspectHtml(itemId, col, inspectEntry._colView);
+	if(card) card.classList.add('wide');
+	const eqBtn = document.getElementById('inspectEquipBtn');
+	if(eqBtn) eqBtn.style.display = 'none';
+	overlay.classList.add('open');
+	bindCollectionInspect(itemId);
+}
+function bindCollectionInspect(itemId){
+	const root = document.querySelector('.col-insp');
+	if(!root) return;
+	const cur = inspectEntry && inspectEntry._colView ? inspectEntry._colView : { variantId:'', mode:'normal', corrId:'' };
+	root.querySelectorAll('[data-col-var]').forEach(el => {
+		el.addEventListener('click', () => {
+			if(el.disabled) return;
+			openCollectionInspect(itemId, { variantId: el.getAttribute('data-col-var') || '', mode: cur.mode, corrId: cur.corrId });
+		});
+	});
+	root.querySelectorAll('[data-col-mode]').forEach(el => {
+		el.addEventListener('click', () => {
+			if(el.disabled) return;
+			openCollectionInspect(itemId, { variantId: cur.variantId || '', mode: el.getAttribute('data-col-mode') || 'normal', corrId: cur.corrId });
+		});
+	});
+	root.querySelectorAll('[data-col-corr]').forEach(el => {
+		el.addEventListener('click', () => {
+			openCollectionInspect(itemId, { variantId: cur.variantId || '', mode: cur.mode, corrId: el.getAttribute('data-col-corr') || '' });
+		});
+	});
+}
+
+function bindInspectGems(inst){
+	const body = document.getElementById('inspectBody');
+	body.querySelectorAll('.insp-gem').forEach((el, idx) => {
+		el.addEventListener('click', () => {
+			if(inst.gems[idx]){
+				const ref = GearSystem.parseGemRef(inst.gems[idx]);
+				addToInventory(ref.id, 1, { quality: ref.quality });
+				inst.gems[idx] = null;
+			} else {
+				const gems = STATE.inventory.filter(e => ITEM_DB[e.itemId] && ITEM_DB[e.itemId].type === 'gem');
+				if(!gems.length){ alert('No gems in your inventory.'); return; }
+				const names = gems.map((g,i) => {
+					const qn = (g.quality && GearSystem.GEM_QUALITIES[g.quality]) ? GearSystem.GEM_QUALITIES[g.quality].name : 'Normal';
+					const nums = GearSystem.formatGemModList((GearSystem.GEMS[g.itemId]||{}).mods, GearSystem.gemQualityMult(g.quality || 'normal'));
+					return (i+1)+'. '+(ITEM_DB[g.itemId].icon||'')+' '+qn+' '+ITEM_DB[g.itemId].name+' ('+nums+')';
+				});
+				const choice = prompt('Socket which gem?\n'+names.join('\n'), '1');
+				const n = parseInt(choice, 10) - 1;
+				if(!(n >= 0 && n < gems.length)) return;
+				const pick = gems[n];
+				inst.gems[idx] = { itemId: pick.itemId, quality: pick.quality || 'normal' };
+				removeFromInventory(pick.itemId, 1, pick.uid, pick.quality || 'normal');
+			}
+			if(typeof GearSystem !== 'undefined') GearSystem.discover(STATE, inst);
+			saveState();
+			openInspect(inst, inspectSlot);
+			renderAll();
+		});
+	});
+}
+
+function closeInspect(){
+	document.getElementById('inspectOverlay').classList.remove('open');
+	const card = document.getElementById('inspectCard');
+	if(card) card.classList.remove('wide');
+	inspectEntry = null;
+	inspectSlot = null;
+}
+document.getElementById('inspectCloseBtn')?.addEventListener('click', closeInspect);
+document.getElementById('inspectEquipBtn')?.addEventListener('click', () => {
+	if(inspectEntry) smartEquip(inspectEntry);
+	closeInspect();
+});
+
 function writeSpellToSlot(slotIdx, spell){
+	if(!MagicEngine.isMagicSpell(spell)){
+		alert('This scroll holds an old-style spell. The new rune magic cannot use it — build the spell in the Rune Forge instead.');
+		return;
+	}
 	const copy = typeof cloneSpellData === 'function' ? cloneSpellData(spell) : JSON.parse(JSON.stringify(spell));
 	if(slotIdx === 9) copy.isUltimate = true;
 	else delete copy.isUltimate;
@@ -2641,16 +2828,83 @@ let craftTypeFilter = 'all';
 
 function switchTab(tab){
 	document.getElementById('inventoryTab').style.display = tab === 'inventory' ? 'flex' : 'none';
+	const col = document.getElementById('collectionTab');
+	if(col) col.style.display = tab === 'collection' ? 'flex' : 'none';
 	document.getElementById('craftingTab').style.display  = tab === 'crafting'  ? 'flex' : 'none';
 	document.getElementById('questTab').style.display     = tab === 'quests'    ? 'flex' : 'none';
 	document.getElementById('bestiaryTab').style.display  = tab === 'bestiary'  ? 'flex' : 'none';
 	document.getElementById('dictionaryTab').style.display= tab === 'dictionary'? 'flex' : 'none';
 	document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+	if(tab === 'collection') renderCollection();
 	if(tab === 'crafting') renderCraftList();
 	if(tab === 'quests') renderQuestList();
 	if(tab === 'bestiary') renderBestiary();
 	if(tab === 'dictionary') renderDictSection('shapes');
 }
+
+function renderCollection(){
+	const host = document.getElementById('collectionList');
+	if(!host || typeof GearSystem === 'undefined') return;
+	const col = GearSystem.ensureCollection(STATE);
+	const groups = { fire:'🔥 Fire', ice:'❄️ Ice', earth:'🌿 Jungle', special:'✨ Mythic' };
+	let html = '';
+	for(const dungeon of Object.keys(groups)){
+		html += '<div class="col-dungeon"><h4 style="margin:0 0 8px">'+groups[dungeon]+'</h4><div class="col-grid">';
+		for(const id of Object.keys(GearSystem.ITEMS)){
+			const it = GearSystem.ITEMS[id];
+			if(it.dungeon !== dungeon) continue;
+			const found = !!col.items[id];
+			const tier = found ? GearSystem.collectionTier(id, col) : '';
+			html += '<div class="col-item'+(found?' found':'')+(tier?' tier-'+tier:'')+'"'+(found?' data-col-item="'+id+'"':'')+'>';
+			if(found) html += '<div class="col-ico">'+it.icon+'</div><div class="col-name" style="color:var(--rarity-'+it.rarity+')">'+it.name+'</div>';
+			else html += '<div class="col-ico">?</div><div class="col-name undiscovered">???</div>';
+			html += '</div>';
+		}
+		html += '</div></div>';
+	}
+	html += '<div class="col-dungeon"><h4 style="margin:0 0 8px">💎 Gems</h4><div class="col-grid">';
+	for(const id of Object.keys(GearSystem.GEMS)){
+		const g = GearSystem.GEMS[id];
+		const found = !!col.gems[id];
+		const perfect = !!(col.gemQualities && col.gemQualities[id] && col.gemQualities[id].perfect);
+		html += '<div class="col-item'+(found?' found':'')+(perfect?' tier-gold':'')+'"'+(found?' data-col-gem="'+id+'"':'')+'>';
+		if(found) html += '<div class="col-ico">'+g.icon+'</div><div class="col-name">'+g.name+'</div>';
+		else html += '<div class="col-ico">?</div><div class="col-name undiscovered">???</div>';
+		html += '</div>';
+	}
+	html += '</div></div>';
+	host.innerHTML = html;
+	host.querySelectorAll('[data-col-item]').forEach(el => {
+		el.addEventListener('click', () => openCollectionInspect(el.getAttribute('data-col-item')));
+	});
+	host.querySelectorAll('[data-col-gem]').forEach(el => {
+		el.addEventListener('click', () => {
+			const gid = el.getAttribute('data-col-gem');
+			const gem = GearSystem.GEMS[gid];
+			if(!gem) return;
+			inspectEntry = { itemId: gid, _collection: true };
+			inspectSlot = null;
+			const card = document.getElementById('inspectCard');
+			if(card) card.classList.remove('wide');
+			document.getElementById('inspectBody').innerHTML = GearSystem.collectionGemHtml(gid, col);
+			const eqBtn = document.getElementById('inspectEquipBtn');
+			if(eqBtn) eqBtn.style.display = 'none';
+			document.getElementById('inspectOverlay').classList.add('open');
+		});
+	});
+}
+document.getElementById('colUnlockAll')?.addEventListener('click', () => {
+	if(typeof GearSystem === 'undefined') return;
+	GearSystem.unlockAllCollection(STATE);
+	saveState();
+	renderCollection();
+});
+document.getElementById('colPruneOwned')?.addEventListener('click', () => {
+	if(typeof GearSystem === 'undefined') return;
+	GearSystem.pruneCollectionToOwned(STATE);
+	saveState();
+	renderCollection();
+});
 
 /* ============================================================
    QUEST TAB — displays tutorial & city quest progress
@@ -3224,34 +3478,47 @@ const BESTIARY_ENTRIES = [
 	{ id:'flameSerpent',    name:'Flame Serpent',     icon:'🐍', hp:480,   zone:'Fire Dungeon', boss:false },
 	{ id:'emberMage',       name:'Ember Mage',        icon:'🔥', hp:300,   zone:'Fire Dungeon', boss:false },
 	{ id:'magmaGolem',      name:'Magma Golem',       icon:'🪨', hp:1100,  zone:'Fire Dungeon', boss:false },
+	{ id:'magmaWarden',     name:'Magma Warden',      icon:'🔶', hp:9600,  zone:'Fire Dungeon', boss:true },
 	{ id:'fireSprite',      name:'Fire Sprite',       icon:'✨', hp:200,   zone:'Fire Dungeon', boss:false },
+	{ id:'cinderBeetle',    name:'Cinder Beetle',     icon:'🪲', hp:720,   zone:'Fire Dungeon', boss:false },
+	{ id:'furnaceLeech',    name:'Furnace Leech',     icon:'🩸', hp:180,   zone:'Fire Dungeon', boss:false },
+	{ id:'ashRevenant',     name:'Ash Revenant',      icon:'👻', hp:540,   zone:'Fire Dungeon', boss:false },
+	{ id:'magmaHarvester',  name:'Magma Harvester',   icon:'⚒️', hp:980,   zone:'Fire Dungeon', boss:false },
 	{ id:'fireDragon',      name:'Fire Dragon',       icon:'🐉', hp:15000, zone:'Fire Dungeon', boss:true },
 	{ id:'frostWraith',     name:'Frost Wraith',      icon:'👻', hp:200,   zone:'Ice Dungeon', boss:false },
 	{ id:'iceArcher',       name:'Ice Archer',        icon:'🏹', hp:170,   zone:'Ice Dungeon', boss:false },
 	{ id:'snowBeast',       name:'Snow Beast',        icon:'🐻', hp:600,   zone:'Ice Dungeon', boss:false },
 	{ id:'cryoMage',        name:'Cryo Mage',         icon:'❄️', hp:160,   zone:'Ice Dungeon', boss:false },
 	{ id:'glacierSentinel', name:'Glacier Sentinel',  icon:'🧊', hp:700,   zone:'Ice Dungeon', boss:false },
+	{ id:'frostMantis',     name:'Frost Mantis',      icon:'🦗', hp:280,   zone:'Ice Dungeon', boss:false },
+	{ id:'glacierEel',      name:'Glacier Eel',       icon:'🐟', hp:460,   zone:'Ice Dungeon', boss:false },
+	{ id:'crystalScarab',   name:'Crystal Scarab',    icon:'💎', hp:400,   zone:'Ice Dungeon', boss:false },
+	{ id:'snowboundMimic',  name:'Snowbound Mimic',   icon:'❄️', hp:340,   zone:'Ice Dungeon', boss:false },
 	{ id:'frostColossus',   name:'Frost Colossus',    icon:'🏔️', hp:15000, zone:'Ice Dungeon', boss:true },
-	{ id:'rockGolem',       name:'Rock Golem',        icon:'🪨', hp:900,   zone:'Earth Dungeon', boss:false },
-	{ id:'vineCrawler',     name:'Vine Crawler',      icon:'🌱', hp:380,   zone:'Earth Dungeon', boss:false },
-	{ id:'caveSpider',      name:'Cave Spider',       icon:'🕷️', hp:280,   zone:'Earth Dungeon', boss:false },
-	{ id:'crystalMage',     name:'Crystal Mage',      icon:'💎', hp:340,   zone:'Earth Dungeon', boss:false },
-	{ id:'mudElemental',    name:'Mud Elemental',     icon:'🟤', hp:560,   zone:'Earth Dungeon', boss:false },
-	{ id:'earthColossus',   name:'Earth Colossus',    icon:'⛰️', hp:15000, zone:'Earth Dungeon', boss:true },
+	{ id:'rockGolem',       name:'Rock Golem',        icon:'🪨', hp:900,   zone:'Sylvaris · Outer Caverns', boss:false },
+	{ id:'vineCrawler',     name:'Vine Crawler',      icon:'🌱', hp:380,   zone:'Sylvaris · Outer Caverns', boss:false },
+	{ id:'caveSpider',      name:'Cave Spider',       icon:'🕷️', hp:280,   zone:'Sylvaris · Outer Caverns', boss:false },
+	{ id:'crystalMage',     name:'Crystal Mage',      icon:'💎', hp:340,   zone:'Sylvaris · Outer Caverns', boss:false },
+	{ id:'mudElemental',    name:'Mud Elemental',     icon:'🟤', hp:560,   zone:'Sylvaris · Outer Caverns', boss:false },
+	{ id:'earthColossus',   name:'Verdant Colossus',  icon:'🌳', hp:20000, zone:'The Living Wilds', boss:true },
 	{ id:'ironSentinel',    name:'Iron Sentinel',     icon:'🛡️', hp:980,   zone:'Iron Forge', boss:false },
 	{ id:'forgeDrone',      name:'Forge Drone',       icon:'⚙️', hp:450,   zone:'Iron Forge', boss:false },
 	{ id:'slagBrute',       name:'Slag Brute',        icon:'🔩', hp:1450,  zone:'Iron Forge', boss:false },
 	{ id:'ironColossus',    name:'Iron Colossus',     icon:'🤖', hp:25000, zone:'Iron Forge', boss:true },
-	{ id:'thornWolf',       name:'Thorn Wolf',        icon:'🐺', hp:400,   zone:'Sylvaris Wildes', boss:false },
-	{ id:'sporeFungus',     name:'Spore Fungus',      icon:'🍄', hp:420,   zone:'Sylvaris Wildes', boss:false },
-	{ id:'mossWraith',      name:'Moss Wraith',       icon:'👻', hp:340,   zone:'Sylvaris Wildes', boss:false },
-	{ id:'willowWisp',      name:'Willow Wisp',       icon:'✨', hp:220,   zone:'Sylvaris Wildes', boss:false },
-	{ id:'glowBeetle',      name:'Glow Beetle',       icon:'🪲', hp:380,   zone:'Sylvaris Wildes', boss:false },
-	{ id:'stalactiteBat',   name:'Stalactite Bat',    icon:'🦇', hp:260,   zone:'Sylvaris Wildes', boss:false },
-	{ id:'skyVine',         name:'Sky Vine',          icon:'🌿', hp:520,   zone:'Sylvaris Wildes', boss:false },
-	{ id:'windSylph',       name:'Wind Sylph',        icon:'💨', hp:300,   zone:'Sylvaris Wildes', boss:false },
-	{ id:'elderTreant',     name:'Elder Treant',      icon:'🌳', hp:4000,  zone:'Sylvaris Wildes', boss:true },
-	{ id:'stormRaptor',     name:'Storm Raptor',      icon:'⚡', hp:4000,  zone:'Sylvaris Wildes', boss:true },
+	{ id:'thornWolf',       name:'Thorn Wolf',        icon:'🐺', hp:400,   zone:'The Living Wilds', boss:false },
+	{ id:'sporeFungus',     name:'Spore Fungus',      icon:'🍄', hp:420,   zone:'The Living Wilds', boss:false },
+	{ id:'mossWraith',      name:'Moss Wraith',       icon:'👻', hp:340,   zone:'The Living Wilds', boss:false },
+	{ id:'willowWisp',      name:'Willow Wisp',       icon:'✨', hp:220,   zone:'The Living Wilds', boss:false },
+	{ id:'glowBeetle',      name:'Glow Beetle',       icon:'🪲', hp:380,   zone:'The Living Wilds', boss:false },
+	{ id:'stalactiteBat',   name:'Stalactite Bat',    icon:'🦇', hp:260,   zone:'The Living Wilds', boss:false },
+	{ id:'skyVine',         name:'Sky Vine',          icon:'🌿', hp:520,   zone:'The Living Wilds', boss:false },
+	{ id:'windSylph',       name:'Wind Sylph',        icon:'💨', hp:300,   zone:'The Living Wilds', boss:false },
+	{ id:'barkbackBeetle',  name:'Barkback Beetle',   icon:'🪵', hp:520,   zone:'The Living Wilds', boss:false },
+	{ id:'pollenMoth',      name:'Pollen Moth',       icon:'🦋', hp:240,   zone:'The Living Wilds', boss:false },
+	{ id:'rootParasite',    name:'Root Parasite',     icon:'🌱', hp:300,   zone:'The Living Wilds', boss:false },
+	{ id:'jungleChameleon', name:'Jungle Chameleon',  icon:'🦎', hp:380,   zone:'The Living Wilds', boss:false },
+	{ id:'elderTreant',     name:'Elder Treant',      icon:'🌳', hp:4000,  zone:'The Living Wilds', boss:true },
+	{ id:'stormRaptor',     name:'Storm Raptor',      icon:'⚡', hp:4000,  zone:'The Living Wilds', boss:true },
 	{ id:'deepRootHorror',  name:'Deep Root Horror',  icon:'🌑', hp:25000, zone:'Corrupted Roots', boss:true },
 	{ id:'darkVineCrawler', name:'Darkened Vine Crawler', icon:'🖤', hp:820, zone:'Corrupted Roots', boss:false },
 	{ id:'darkThornWolf',   name:'Darkened Thorn Wolf',   icon:'🐺', hp:920, zone:'Corrupted Roots', boss:false },
@@ -3291,22 +3558,31 @@ const BESTIARY_DATA = {
 	flameSerpent:    { atk:4, def:2, spd:6, desc:'A ground predator that hunts lanes. Watch the glowing burrow line before it erupts behind you, leave the Burning Coil before the head slam, dodge Magma Fang\'s lead/lag globules, and keep moving through Eruption Chase.', drops:[{icon:'🐍',name:'Serpent Scale',chance:'55%'},{icon:'🔥',name:'Ember Shard',chance:'45%'},{icon:'☠️',name:'Venom Gland',chance:'25%'}] },
 	emberMage:       { atk:5, def:2, spd:3, desc:'An area-control caster. Fire Sigils close into a damaging triangle, Rebound Flames ricochet until their paths cross, and Combustion Mark follows you before detonating into four outbound fireballs.', drops:[{icon:'🔥',name:'Ember Shard',chance:'65%'},{icon:'✨',name:'Arcane Dust',chance:'50%'}] },
 	magmaGolem:      { atk:6, def:7, spd:2, desc:'A slow titan whose attacks demand respect. Faultline cracks erupt after a pause, Magma Core is a vulnerable risk window, Volcanic Fists hit twice from the same craters, and Molten Collapse turns its body into ground hazards.', drops:[{icon:'🌋',name:'Molten Core',chance:'35%'},{icon:'🔥',name:'Ember Shard',chance:'70%'},{icon:'🧱',name:'Stone Chip',chance:'55%'}] },
+	magmaWarden:     { atk:9, def:8, spd:6, desc:'The furnace\'s guardian. Magma Fist slams a wide shockwave, Molten Uppercut lifts a body-column, and Volcanic Hammer sends three tall ground waves. Below 70% the furnace ignites and it adds Magma Core, Eruption Rush, and Furnace Collapse. Below 35% lava rises — finish it before the arena is gone.', drops:[{icon:'🔶',name:'Furnace Core',chance:'100%'},{icon:'🌋',name:'Molten Core',chance:'100%'},{icon:'🔶',name:'Lava Essence',chance:'100%'},{icon:'🔥',name:'Ember Shard',chance:'100%'}] },
 	fireSprite:      { atk:2, def:1, spd:8, desc:'A pinprick of living flame. Ember Blink leaves delayed pops, Comet Dive ricochets across the room, Ember Mines chase if you stray close, and Flicker Swarm hides the real sprite behind copies that flash.', drops:[{icon:'🔥',name:'Ember Shard',chance:'50%'},{icon:'🔶',name:'Lava Essence',chance:'30%'}] },
-	fireDragon:      { atk:9, def:8, spd:5, desc:'An ancient fire dragon sealed within the dungeon\'s deepest chamber. Its scales are impervious, its breath incinerates stone, and its roar shakes the very walls around it.', drops:[{icon:'🐉',name:'Dragon Scale',chance:'100%'},{icon:'🦷',name:'Inferno Fang',chance:'80%'},{icon:'🌋',name:'Molten Core',chance:'100%'},{icon:'🔥',name:'Ember Shard',chance:'100%'}] },
+	cinderBeetle:    { atk:5, def:7, spd:3, desc:'A heat-management tank. Hitting the curled shell feeds Heat until it bursts stronger. Ember Roll cuts off your future position and only opens on turns. Furnace Back plates can be popped safely one at a time or chained for a faster kill. Low health is a three-ring Cinder Burst, then a stun window — not a speed-up.', drops:[{icon:'🔥',name:'Ember Shard',chance:'55%'},{icon:'🪲',name:'Scarab Shell',chance:'40%'},{icon:'🩸',name:'Magma Droplet',chance:'25%'}] },
+	furnaceLeech:    { atk:3, def:2, spd:7, desc:'It steals your build. While attached, a cut of spent mana feeds it. Knock it off with a strong hit, or tolerate it and risk Siphon Burst. Near lava it feeds and grows. At low health it splits into weaker leeches that still try to latch on.', drops:[{icon:'🔥',name:'Ember Shard',chance:'50%'},{icon:'✨',name:'Arcane Dust',chance:'40%'},{icon:'🔶',name:'Lava Essence',chance:'20%'}] },
+	ashRevenant:     { atk:5, def:4, spd:4, desc:'It is not dead until the last ember is gone. Missed Ashen Strikes leave reclaimable ash. A collapsed body can reform from any remaining pile. Ash Step is a readable short teleport. Destroy the leftover ember or it resurrects with a sliver of health.', drops:[{icon:'🔥',name:'Ember Shard',chance:'50%'},{icon:'👻',name:'Spirit Wisp',chance:'45%'}] },
+	magmaHarvester:  { atk:6, def:6, spd:2, desc:'The longer fire flies, the worse the sweep. It drinks nearby fire attacks into a brighter core. Molten Sweep and Core Discharge scale with stored Heat. At maximum Heat it overheats — dump damage into the exposed core or eat a massive reset burst.', drops:[{icon:'🔶',name:'Lava Essence',chance:'55%'},{icon:'🔥',name:'Ember Shard',chance:'60%'},{icon:'🌋',name:'Molten Core',chance:'15%'}] },
+	fireDragon:      { atk:9, def:8, spd:5, desc:'Ignaroth rules a volcanic crater. He grounds, perches, and takes flight — Inferno Breath, dives, fire walls, and arena eruptions all have safe zones. Learn the telegraphs; damage him when he slams or lands.', drops:[{icon:'🐉',name:'Dragon Scale',chance:'100%'},{icon:'🦷',name:'Inferno Fang',chance:'80%'},{icon:'🌋',name:'Molten Core',chance:'100%'},{icon:'🔥',name:'Ember Shard',chance:'100%'}] },
 	// Ice Dungeon
 	frostWraith:     { atk:3, def:2, spd:5, desc:'A phasing assassin that splits your attention. Frozen Reflection leaves a delayed ice clone of its last path, Ice Veil is tracked by a fading frost trail, Shard Possession hops between planted shards with freeze bursts, and Frozen Moment slows you harder the longer you stay in the expanding field.', drops:[{icon:'👻',name:'Spirit Wisp',chance:'55%'},{icon:'🧊',name:'Ice Crystal',chance:'40%'}] },
 	iceArcher:       { atk:4, def:2, spd:4, desc:'A precision ranger that punishes lazy dodges. Ricochet Arrow comes back from a wall, Frostline grows ice toward you and leaves slick ground, Three-Point Shot marks current/ahead/behind, and Hunter\'s Mark curves every later arrow until you cleanse it in a warm pocket.', drops:[{icon:'🧊',name:'Ice Crystal',chance:'60%'},{icon:'❄️',name:'Permafrost',chance:'30%'}] },
 	snowBeast:       { atk:5, def:5, spd:3, desc:'A huge bruiser that controls the floor. Avalanche Charge pushes a growing snow wave and turns if you stay close, Frostquake sends three uneven shockwaves, Iceback sheds outbound shards when struck, and Whiteout Roar hides it behind footprints before a late charge.', drops:[{icon:'🐾',name:'Beast Hide',chance:'65%'},{icon:'❄️',name:'Permafrost',chance:'40%'},{icon:'🧊',name:'Ice Crystal',chance:'35%'}] },
 	cryoMage:        { atk:5, def:2, spd:3, desc:'A battlefield-control caster. Frost Geometry turns floor lines into walls then shoots the gaps, Temperature Shift is safer near the center and deadly if you linger there, Ice Echo copies the next spell from a landed duplicate, and Crystal Coffin grows four walls before a finishing shot.', drops:[{icon:'🧊',name:'Ice Crystal',chance:'65%'},{icon:'✨',name:'Arcane Dust',chance:'50%'}] },
 	glacierSentinel: { atk:6, def:7, spd:2, desc:'A slow space-control tank. Moving Fortress shoves you with an advancing shield, Glacier Hammer leaves ice walls that carve the arena, Frozen Orbit launches blocking chunks one at a time, and Absolute Guard reflects shots then leaves it stunned and punishable.', drops:[{icon:'❄️',name:'Permafrost',chance:'70%'},{icon:'💎',name:'Frost Core',chance:'40%'},{icon:'🧊',name:'Ice Crystal',chance:'60%'}] },
+	frostMantis:     { atk:4, def:4, spd:6, desc:'A timing teacher. Frozen Parry catches shots in a short window and throws them back later. Ice Step leaves footprints. Frostblade\'s third slash leads your movement. Winter Counter punishes anyone who swings the stance — wait, then punish.', drops:[{icon:'🧊',name:'Ice Crystal',chance:'55%'},{icon:'💠',name:'Crystal Fragment',chance:'35%'}] },
+	glacierEel:      { atk:4, def:3, spd:6, desc:'It attacks your brakes. Ice Current lengthens your slide. Snap Turn freezes its body into a readable line. Frost Loop ices a region, then it cuts the center. Breaking Charge shatters the ice behind it and accidentally opens a safe path.', drops:[{icon:'❄️',name:'Permafrost',chance:'40%'},{icon:'🧊',name:'Ice Crystal',chance:'50%'}] },
+	crystalScarab:   { atk:4, def:6, spd:4, desc:'Armor is directional. Reposition to the exposed plate. Shard Toss hangs, then all fragments fire at where you were. Bait Crystal Charge into a wall to crack the shell. When enough plates are gone, Shatterback explodes the rest outward.', drops:[{icon:'💠',name:'Crystal Fragment',chance:'60%'},{icon:'🧊',name:'Ice Crystal',chance:'40%'},{icon:'🪲',name:'Scarab Shell',chance:'25%'}] },
+	snowboundMimic:  { atk:4, def:3, spd:5, desc:'Trust less. False Crystal sits still until you approach. Frozen Echo copies the motion but does not hit. Avalanche Feint sells a huge tell and uses your dodge to relocate. Whiteout keeps silhouettes visible while exact position goes fuzzy.', drops:[{icon:'🧊',name:'Ice Crystal',chance:'50%'},{icon:'👻',name:'Spirit Wisp',chance:'35%'}] },
 	frostColossus:   { atk:9, def:8, spd:3, desc:'A colossus of eternal ice older than the dungeon itself. It exhales blizzards, summons ice spikes from the floor, and can freeze entire sections of the arena solid.', drops:[{icon:'💎',name:'Frost Core',chance:'100%'},{icon:'🔷',name:'Glacial Shard',chance:'80%'},{icon:'🌟',name:'Starlight Dew',chance:'60%'},{icon:'❄️',name:'Permafrost',chance:'100%'}] },
-	// Earth Dungeon
+	// Legacy creatures from Sylvaris's outer caverns
 	rockGolem:       { atk:5, def:6, spd:2, desc:'A slow positional tank. Boulder Roll bounces off walls before cracking into smaller rocks, Fault Step splits from one crack into two (jump it), Stone Decoy soaks hits while the real golem walks away, and Gravity Grip cages you in pillars before dropping boulders into the gap.', drops:[{icon:'🧱',name:'Stone Chip',chance:'65%'},{icon:'🪨',name:'Terra Core',chance:'30%'}] },
 	vineCrawler:     { atk:3, def:3, spd:5, desc:'A fast ambusher that rewrites your footing. Vine Tunnel shows two underground paths and only one is real, Thorn Wheel climbs the wall then dives back down, Grasping Ground plants dormant roots that snap inward together, and Seed Bomb grows thorn plants that stay and change the arena.', drops:[{icon:'🌾',name:'Thorned Vine',chance:'60%'},{icon:'🪹',name:'Root Heartwood',chance:'25%'}] },
 	caveSpider:      { atk:3, def:2, spd:7, desc:'Fragile but slippery. Ceiling Drop feints its landing at the last second, Web Swing can release anywhere in the arc, Egg Sac hatches chasing spiderlings while the parent strikes from above, and Web Maze slows you inside silk the spider still treats as open ground.', drops:[{icon:'🧵',name:'Raw Silk',chance:'65%'},{icon:'☠️',name:'Venom Gland',chance:'45%'}] },
 	crystalMage:     { atk:5, def:3, spd:3, desc:'A relay caster — watch the nodes, not just the mage. Crystal Relay hops a beam from crystal to crystal, Shard Rain falls in a rotating safe lane, Prism Clone copies the next attack a beat late, and Crystal Prison closes four rotating gaps before bursting inward.', drops:[{icon:'💠',name:'Crystal Fragment',chance:'60%'},{icon:'✨',name:'Arcane Dust',chance:'50%'},{icon:'🟠',name:'Ancient Amber',chance:'30%'}] },
 	mudElemental:    { atk:4, def:5, spd:2, desc:'A control enemy that makes every step worse. Mud Wave coats the floor instead of bursting, Bog Clone rises for one fake attack then collapses, Sinkhole pulls you in while mud flies at the rim, and Mudslide turns the elemental into the wave itself, leaving a slowing strip behind.', drops:[{icon:'🟠',name:'Ancient Amber',chance:'55%'},{icon:'🌿',name:'Mana Herb',chance:'35%'}] },
-	earthColossus:   { atk:9, def:9, spd:2, desc:'The mountain given form and fury. The Earth Colossus commands geological forces, splitting the arena with earthquakes and calling down avalanches on its enemies.', drops:[{icon:'🪨',name:'Terra Core',chance:'100%'},{icon:'⛰️',name:'Titan Shard',chance:'80%'},{icon:'🌑',name:'Void Shard',chance:'50%'},{icon:'🟠',name:'Ancient Amber',chance:'100%'}] },
+	earthColossus:   { atk:10, def:10, spd:1, desc:'The living heart of the Worldroot — a stationary raid titan fused into the Heartwood Chamber. Five independently targetable systems (Heart, Left Arm, Right Arm, Root Network, Crown) stagger instead of dying. Worldroot Fist, Grasping Earth, Verdant Barrage, Branch Guillotine, Heartbeat, and Sap Flood teach the anatomy; Rooted Rebirth and coordinated Phase 2 attacks turn the arena itself against you; Phase 3 severs the four lifelines before the Heart of the Worldroot finale.', drops:[{icon:'🌱',name:'Worldroot Core',chance:'100%'},{icon:'🪹',name:'Root Heartwood',chance:'100%'},{icon:'🍄',name:'Luminous Spore',chance:'100%'},{icon:'🟠',name:'Ancient Amber',chance:'65%'}] },
 	// Iron Forge
 	ironSentinel:    { atk:6, def:7, spd:3, desc:'An armored defender — go around it. Shield March blocks the front and ends in a bash, Counter Spark punishes anyone who swings during the guard, Magnetic Pull steals metal then hurls it outward, and Assembly Strike telegraphs flying arm pieces before a long-range reconnect punch.', drops:[{icon:'🔩',name:'Iron Plate',chance:'70%'},{icon:'⚙️',name:'Forge Core',chance:'25%'}] },
 	forgeDrone:      { atk:4, def:4, spd:5, desc:'A flying support that reshapes the room. Welding Beam raises metal walls, Spark Mines link into tripwire nets when you get close, Overheat can be interrupted by killing it mid-charge, and Drone Dive ricochets for a second pass instead of stopping.', drops:[{icon:'🔩',name:'Iron Plate',chance:'55%'},{icon:'⬛',name:'Forge Coal',chance:'50%'}] },
@@ -3321,8 +3597,12 @@ const BESTIARY_DATA = {
 	stalactiteBat:   { atk:4, def:2, spd:7, desc:'Ceiling control. Sonic Shriek is narrow up close and huge at range, Dive Bomb tracks a floor shadow then locks, Echo Blast plants orbs that later beam to the bat, and Ceiling Drop mixes real rocks with fakes before the bat dives from the last pile.', drops:[{icon:'🦇',name:'Wing Membrane',chance:'65%'},{icon:'🧱',name:'Stone Chip',chance:'40%'}] },
 	skyVine:         { atk:5, def:4, spd:2, desc:'A stationary lane-cutter. Vine Lash sweeps overlapping arcs, Leaf Barrage fires straight/curve/spiral/boomerang leaves, Vine Grab leaves missed roots as walls, and Canopy Collapse covers the screen then drops panels one at a time.', drops:[{icon:'🌾',name:'Thorned Vine',chance:'70%'},{icon:'🪹',name:'Root Heartwood',chance:'30%'}] },
 	windSylph:       { atk:5, def:2, spd:8, desc:'A momentum thief. Cyclone Spin rides a curved tornado and leaves a pushing wake, Air Slash starts slow then accelerates, Wind Gust shoves you into a follow-up slash, and Pressure Drop goes dead silent before an almost-invisible shockwave.', drops:[{icon:'💨',name:'Wind Essence',chance:'70%'},{icon:'✨',name:'Arcane Dust',chance:'45%'}] },
-	elderTreant:     { atk:7, def:8, spd:1, desc:'One of the oldest living beings in the Wildes — a tree that woke with anger. The Elder Treant commands vines across the entire arena and can root itself to unleash devastating branch sweeps.', drops:[{icon:'💚',name:'Treant Heartstone',chance:'100%'},{icon:'🪵',name:'Enchanted Bark',chance:'100%'},{icon:'🪹',name:'Root Heartwood',chance:'80%'}] },
-	stormRaptor:     { atk:8, def:5, spd:7, desc:'A massive thunder-bird that nests in the highest canopy. It calls lightning from clear skies, dives with talons charged to tens of thousands of volts, and screams with sound that stuns.', drops:[{icon:'🦅',name:'Raptor Crest',chance:'100%'},{icon:'⚡',name:'Electric Plume',chance:'100%'},{icon:'💨',name:'Wind Essence',chance:'80%'}] },
+	barkbackBeetle:  { atk:4, def:6, spd:3, desc:'The environment is its armor and its rebound table. Bark Armor soaks hits until it splinters. Root Charge briefly cages your feet. Bark Roll bounces on predictable angles. Splinter Burst fires opposite the side you broke, so attack direction matters.', drops:[{icon:'🪵',name:'Enchanted Bark',chance:'55%'},{icon:'🌾',name:'Thorned Vine',chance:'40%'}] },
+	pollenMoth:      { atk:3, def:2, spd:7, desc:'It changes how you cast, not just where you stand. Pollen Cloud makes projectiles drift. False Bloom hides the real moth in one glowing flower. Flutter Burst is about the finish point, not every hop. At low health it flees and summons smaller moths if it arrives.', drops:[{icon:'🍄',name:'Luminous Spore',chance:'65%'},{icon:'🌿',name:'Mana Herb',chance:'35%'}] },
+	rootParasite:    { atk:4, def:3, spd:5, desc:'The plants are the weapon. It possesses a vine, flower, or root, then jumps hosts. Root Pulse lights a network before several plants fire. Forced Bloom is one huge host attack, then the parasite is exposed. Kill the rider, not every plant.', drops:[{icon:'🌾',name:'Thorned Vine',chance:'55%'},{icon:'🍄',name:'Luminous Spore',chance:'35%'}] },
+	jungleChameleon: { atk:5, def:3, spd:6, desc:'A camouflage predator. It is never fully invisible — watch eyes, footprints, leaves, and color mismatch. Tongue Strike pulls it to you. Damage forces a Color Shift. Stay hidden too long and Predator Burst is tongue, claw, retreat, hide again.', drops:[{icon:'🐾',name:'Beast Hide',chance:'50%'},{icon:'🌿',name:'Mana Herb',chance:'40%'}] },
+	elderTreant:     { atk:8, def:9, spd:1, desc:'The slow battlefield-control guardian of the Living Wilds. Root upheavals divide safe ground, falling branches advertise their impact with long shadows, and Ancient Growth wakes every snare and crusher in its authored grove. It controls the arena instead of chasing.', drops:[{icon:'💚',name:'Treant Heartstone',chance:'100%'},{icon:'🪵',name:'Enchanted Bark',chance:'100%'},{icon:'🪹',name:'Root Heartwood',chance:'80%'}] },
+	stormRaptor:     { atk:9, def:5, spd:9, desc:'A lightning-infused apex predator. It locks on, dives in, shreds with talons and beak, then vanishes to strike from another angle. Only two ranged tools — a javelin and a short thunderclap. Punish the recovery after each burst.', drops:[{icon:'🦅',name:'Raptor Crest',chance:'100%'},{icon:'⚡',name:'Electric Plume',chance:'100%'},{icon:'💨',name:'Wind Essence',chance:'80%'}] },
 	// Corrupted Roots
 	deepRootHorror:  { atk:8, def:7, spd:2, desc:'Something ancient that lived beneath the Wildes\' roots, corrupted by contact with void energy. It has too many arms, too many eyes, and a hunger that predates the dungeon itself.', drops:[{icon:'🐙',name:'Horror Tendril',chance:'100%'},{icon:'🖤',name:'Shadow Essence',chance:'80%'},{icon:'🌑',name:'Void Shard',chance:'60%'}] },
 	darkVineCrawler: { atk:6, def:4, spd:5, desc:'Not a recolor — it infects the floor. Void Vine Whip leaves expanding black patches, Corrupted Root Snare hops underground before erupting, Black Bloom thorns curve into those patches, and Rotting Tunnel shows a moving trail then explodes upward.', drops:[{icon:'🌾',name:'Thorned Vine',chance:'60%'},{icon:'🫧',name:'Dark Residue',chance:'50%'}] },
@@ -3373,15 +3653,28 @@ const BESTIARY_SPRITE_INFO = {
 	flameSerpent:   { src:'images/newEnemies/flameSerpent.png', cols:8, rows:6, scale:1.15 },
 	emberMage:      { src:'images/newEnemies/emberMage.png', cols:12, rows:6, scale:1.15 },
 	magmaGolem:     { src:'images/newEnemies/magmaGolem.png', cols:10, rows:6, scale:1.15 },
+	magmaWarden:    { src:'images/newEnemies/magmaWarden.png', cols:10, rows:6, scale:1.35 },
 	fireSprite:     { src:'images/newEnemies/fireSprite.png', cols:10, rows:6, scale:1.2 },
+	cinderBeetle:   { src:'images/newEnemies/cinderBeetle.png', cols:8, rows:6, scale:1.15 },
+	furnaceLeech:   { src:'images/newEnemies/furanceLeech.png', cols:8, rows:6, scale:1.2 },
+	ashRevenant:    { src:'images/newEnemies/ashRevenant.png', cols:8, rows:6, scale:1.15 },
+	magmaHarvester: { src:'images/newEnemies/magmaHarvester.png', cols:10, rows:6, scale:1.15 },
+	frostMantis:    { src:'images/newEnemies/frostMantis.png', cols:10, rows:6, scale:1.15 },
+	glacierEel:     { src:'images/newEnemies/glacierEel.png', cols:8, rows:6, scale:1.15 },
+	crystalScarab:  { src:'images/newEnemies/crystalScrab.png', cols:8, rows:6, scale:1.15 },
+	snowboundMimic: { src:'images/newEnemies/snowboundMimic.png', cols:10, rows:6, scale:1.15 },
+	barkbackBeetle: { src:'images/newEnemies/barkbackBeetle.png', cols:8, rows:6, scale:1.15 },
+	pollenMoth:     { src:'images/newEnemies/pollenMoth.png', cols:10, rows:6, scale:1.2 },
+	rootParasite:   { src:'images/newEnemies/rootParasite.png', cols:10, rows:6, scale:1.2 },
+	jungleChameleon:{ src:'images/newEnemies/jungleChameleon.png', cols:8, rows:6, scale:1.15 },
 	frostWraith:    { src:'images/newEnemies/frostWraith.png', cols:10, rows:6, scale:1.15 },
 	iceArcher:      { src:'images/newEnemies/iceArcher.png', cols:10, rows:6, scale:1.15 },
 	snowBeast:      { src:'images/newEnemies/snowBeast.png', cols:8, rows:6, startCol:0, walkFrames:6, scale:1.15 },
 	cryoMage:       { src:'images/newEnemies/cryoMage.png', cols:10, rows:6, scale:1.15 },
 	glacierSentinel:{ src:'images/newEnemies/glacierSentinel.png', cols:10, rows:6, scale:1.15 },
-	fireDragon:     { cols:4, rows:4, scale:1.1 },
+	fireDragon:     { src:'images/newEnemies/fireDragonA.png', cols:6, rows:4, scale:1.1 },
 	frostColossus:  { cols:4, rows:4, scale:1.1 },
-	earthColossus:  { cols:4, rows:4, scale:1.1 },
+	earthColossus:  { src:'images/newEnemies/verdantCore.png', cols:6, rows:4, scale:1.05 },
 	ironColossus:   { cols:4, rows:4, scale:1.1 },
 	babyDragon:     { cols:4, rows:4, scale:1.0 },
 	elderTreant:    { cols:4, rows:4, scale:1.1 },
@@ -3389,7 +3682,7 @@ const BESTIARY_SPRITE_INFO = {
 	deepRootHorror: { cols:4, rows:4, scale:1.0 },
 	fireColossus:   { file:'fire-colossus.png', cols:4, rows:4, scale:1.1 },
 	rockGolem:      { src:'images/newEnemies/rockGolem.png', cols:10, rows:6, scale:1.15 },
-	caveSpider:     { src:'images/newEnemies/caveSpider.png', cols:10, rows:6, scale:1.15 },
+	caveSpider:     { src:'images/newEnemies/caveSpider.png', cols:8, rows:6, scale:1.15 },
 	crystalMage:    { src:'images/newEnemies/crystalMage.png', cols:10, rows:6, scale:1.15 },
 	mudElemental:   { src:'images/newEnemies/mudElemental.png', cols:10, rows:6, scale:1.15 },
 	ironSentinel:   { src:'images/newEnemies/ironSentinel.png', cols:10, rows:6, scale:1.15 },
@@ -3407,7 +3700,8 @@ const BESTIARY_SPRITE_INFO = {
 const BESTIARY_ZONE_THEMES = {
 	'Fire Dungeon':       { sky1:'#1a0a05', sky2:'#2a1008', floor:'#5a2a12', edge:'#7a4422', accent:'#ff6622', wallL:'#3d1a0a', wallR:'#3d1a0a' },
 	'Ice Dungeon':        { sky1:'#0a0e1a', sky2:'#0e1525', floor:'#2a3a5a', edge:'#4a6a8a', accent:'#44aaff', wallL:'#1a2a44', wallR:'#1a2a44' },
-	'Earth Dungeon':      { sky1:'#0e0e08', sky2:'#181408', floor:'#3a3420', edge:'#4a5a34', accent:'#88aa44', wallL:'#2a2414', wallR:'#2a2414' },
+	'Sylvaris · Outer Caverns': { sky1:'#0e0e08', sky2:'#181408', floor:'#3a3420', edge:'#4a5a34', accent:'#88aa44', wallL:'#2a2414', wallR:'#2a2414' },
+	'The Living Wilds':   { sky1:'#07140d', sky2:'#0b2118', floor:'#29452f', edge:'#5f995c', accent:'#9ddd76', wallL:'#172b20', wallR:'#172b20' },
 	'Iron Forge':         { sky1:'#0e0808', sky2:'#1a1010', floor:'#3a2828', edge:'#5a4040', accent:'#bbbbbb', wallL:'#2a1a1a', wallR:'#2a1a1a' },
 	'Sylvaris Wildes':    { sky1:'#0a1a0a', sky2:'#0a120a', floor:'#1a3a1a', edge:'#2a5a2a', accent:'#44cc44', wallL:'#0a2a0a', wallR:'#0a2a0a' },
 	'Corrupted Roots':    { sky1:'#0a0a12', sky2:'#0a0a1a', floor:'#333340', edge:'#4a4a5a', accent:'#884488', wallL:'#1a1a2a', wallR:'#1a1a2a' },
@@ -3715,7 +4009,7 @@ function canCraft(recipe){
 function renderCraftList(){
 	const wrap = document.getElementById('craftList');
 	wrap.innerHTML = '';
-	const RARITY_ORDER = { common:0, uncommon:1, rare:2, epic:3, legendary:4, mythical:5 };
+	const RARITY_ORDER = { common:0, uncommon:1, rare:2, epic:3, legendary:4, cursed:5, mythical:6, mythic:7, nightmare:8 };
 	let recipes = CRAFTING_RECIPES.slice();
 
 	// Filter by type
@@ -3858,32 +4152,60 @@ function renderSpellSlots(){
 		el.className = 'spell-slot' + (isUlt ? ' ultimate-slot' : '');
 		el.style.cssText = 'display:flex;align-items:center;gap:4px';
 		const kbKey = keybinds[i] || '';
-		if(sp){
-			const opts = inventoryManaOpts(i, sp);
-			const cost = displayedSpellMana(sp, opts);
-			const raise = typeof necroSpellRaiseCosts==='function' ? necroSpellRaiseCosts(sp, opts) : null;
-			const req  = calcSpellControlReq(sp);
-			const canUse = stats.magicControl >= req;
-			const manaLabel = (isUlt ? cost+' ⚡' : cost+' 💧') + (raise ? ' · '+raise.total+'✦' : '');
+		if(sp && MagicEngine.isMagicSpell(sp)){
+			const report = MagicEngine.validate(sp, magicProfileFor());
+			const bad = !report.ok;
 			el.innerHTML = `
 				<span class="sp-num">${isUlt ? '⚡0' : (i+1)}</span>
-				<span class="sp-color" style="background:${sp.phases[0]?.color||'#888'}"></span>
-				<span class="sp-name" style="${canUse?'':'color:var(--red);text-decoration:line-through'}">${sp.name}</span>
-				<span class="sp-mana">${manaLabel}</span>
+				<span class="sp-color" style="background:${bad ? '#ff5d7a' : 'linear-gradient(135deg,#9fe6ff,#8d6bff)'}"></span>
+				<span class="sp-name" style="${bad?'color:var(--red)':''}">${sp.passive ? '∞ ' : ''}${escHtml(sp.name || 'Spell')}</span>
+				<span class="sp-mana" title="${report.runeCount} rune${report.runeCount===1?'':'s'}">${report.cost}💧</span>
 				<button class="kb-btn" data-slot="${i}" title="Click to set keybind for this spell" style="margin-left:auto;padding:1px 6px;font-size:.75em;background:var(--panel2);border:1px solid var(--border);border-radius:4px;cursor:pointer;color:var(--text);flex-shrink:0">${kbKey ? '🔑 '+kbKey : '🔑 —'}</button>
 			`;
-			if(!canUse) el.title = `Requires ${req} Control (you have ${stats.magicControl})`;
+			el.title = bad ? '⚠ ' + report.errors[0].text + ' — open the Rune Forge to fix' : 'Open in the Rune Forge';
+		} else if(sp && sp.kind === 'weapon' && sp.weaponId === 'magic'){
+			const it = sp.item;
+			el.innerHTML = `
+				<span class="sp-num">${isUlt ? '⚡0' : (i+1)}</span>
+				<canvas class="sp-wicon" width="40" height="40" style="width:20px;height:20px;flex-shrink:0"></canvas>
+				<span class="sp-name" style="color:#e2ccff">${it ? 'Magical ' + escHtml(it.shape) : 'Magical item'}</span>
+				<span class="sp-eng" style="color:#c9a8ff">${it ? Math.round(it.amount) + ' E · c' + Math.round(10 + (it.over || 0)) : 'empty'}</span>
+				<button class="kb-btn" data-slot="${i}" title="Click to set keybind for this slot" style="margin-left:auto;padding:1px 6px;font-size:.75em;background:var(--panel2);border:1px solid var(--border);border-radius:4px;cursor:pointer;color:var(--text);flex-shrink:0">${kbKey ? '🔑 '+kbKey : '🔑 —'}</button>
+			`;
+			el.title = it ? 'Magical ' + it.shape + ' made of compressed energy — feed it more ' + it.shape + ' energy with Redirect "Into your inventory"' : 'Empty magical item — in a dungeon, Redirect "Into your inventory" energy compressed 20+ in a fist, sword, spear or hammer shape';
+			if(it) MagicEngine.drawItemIcon(el.querySelector('canvas'), it);
+		} else if(sp && sp.kind === 'weapon'){
+			const wd = window.MELEE_WEAPONS && window.MELEE_WEAPONS.weapons[sp.weaponId];
+			el.innerHTML = `
+				<span class="sp-num">${isUlt ? '⚡0' : (i+1)}</span>
+				<canvas class="sp-wicon" width="40" height="40" style="width:20px;height:20px;flex-shrink:0"></canvas>
+				<span class="sp-name" style="color:#ffe6b0">${escHtml(wd ? wd.name : sp.name || 'Weapon')}</span>
+				${sp.engraved ? '<span class="sp-eng" title="Special engraved with: ' + escHtml(sp.engraved.name || 'Spell') + '">ᚱ ' + escHtml(sp.engraved.name || 'Spell') + '</span>' : ''}
+				<button class="kb-btn" data-slot="${i}" title="Click to set keybind for this slot" style="margin-left:auto;padding:1px 6px;font-size:.75em;background:var(--panel2);border:1px solid var(--border);border-radius:4px;cursor:pointer;color:var(--text);flex-shrink:0">${kbKey ? '🔑 '+kbKey : '🔑 —'}</button>
+			`;
+			el.title = 'Weapon — click to change it or engrave a spell into its special';
+			const ic = el.querySelector('canvas');
+			if(typeof PlayerRig !== 'undefined') PlayerRig.weaponIcon(ic, sp.weaponId);
 		} else {
-			el.innerHTML = `<span class="sp-num">${isUlt ? '⚡0' : (i+1)}</span><span class="sp-empty" style="flex:1">${isUlt ? 'Ultimate — click to create' : 'Empty — click to create'}</span>
+			el.innerHTML = `<span class="sp-num">${isUlt ? '⚡0' : (i+1)}</span><span class="sp-empty" style="flex:1">Empty — click to add a spell or weapon</span>
 				<button class="kb-btn" data-slot="${i}" title="Click to set keybind for this spell" style="margin-left:auto;padding:1px 6px;font-size:.75em;background:var(--panel2);border:1px solid var(--border);border-radius:4px;cursor:pointer;color:var(--text);flex-shrink:0">${kbKey ? '🔑 '+kbKey : '🔑 —'}</button>`;
 		}
-		// Main slot click opens builder (not keybind button)
+		// swap button: choose spell or weapon for this slot
+		const swap = document.createElement('button');
+		swap.className = 'kb-btn sc-swap';
+		swap.title = 'Spell or weapon? Change what this slot holds';
+		swap.textContent = '⇄';
+		swap.style.cssText = 'padding:1px 6px;font-size:.8em;background:var(--panel2);border:1px solid var(--border);border-radius:4px;cursor:pointer;color:var(--text);flex-shrink:0';
+		swap.addEventListener('click', e => { e.stopPropagation(); openSlotChooser(i); });
+		el.insertBefore(swap, el.querySelector('.kb-btn'));
+		// Main slot click: spells open the Rune Forge, weapons / empty slots open the chooser
 		el.addEventListener('click', e => {
 			if(e.target.closest('.kb-btn')) return;
-			openSpellBuilder(i);
+			if(sp && MagicEngine.isMagicSpell(sp)) openSpellBuilder(i);
+			else openSlotChooser(i);
 		});
 		// Keybind button
-		el.querySelector('.kb-btn').addEventListener('click', e => {
+		el.querySelector('.kb-btn:not(.sc-swap)').addEventListener('click', e => {
 			e.stopPropagation();
 			const btn = e.currentTarget;
 			btn.textContent = '🔑 Press key...';
@@ -4887,800 +5209,85 @@ function handleVowClose(){
 }
 
 /* =============================================================
-   SPELL BUILDER
+   RUNE FORGE — every slot opens the programmable rune tree editor
    ============================================================= */
-function newPhase(){
-	return {
-		shape:'missile', behavior:'straight', width:1, height:1, speed:1,
-		duration:1, power:1, count:1, spread:0, effects:[], color:'#4488ff',
-		trail:'sparkle', nextTrigger:'onHit',
-		orbitRadius:80, orbitSpeed:3, orbitDuration:1.5,
-		spiralRadius:40, spiralFreq:0.12,
-		timedReleaseDelay:0.5,
-		phaseForkDelay:1, phaseForkRepeats:1,
-		aroundSelfCount:4, aroundSelfRadius:50,
-		chainStunTime:0,
-		rainHeight:150,
-		barrageHeight:200,
-		groundRadius:200, groundAutoLock:true,
-		summonRange:0, summonHealth:0, summonSpeed:0, summonClose:false, summonSelfReliance:false, necroSummonType:'random',
-		effectPower:1, effectDuration:1,
-		randomDelayMax:0.5,
-		evenDelayDuration:0.5,
-		afterHitEffect:'none', polygonSides:6,
-		noHit:false, vortexDuration:1,
-		holdDown:false,
-		// Domain expansion properties
-		domainElement:'burn', domainColor:'#ff4400', domainPattern:'flames',
-		// Transformation properties
-		transformAuraStyle:'pulse', transformAuraColor:'#ff8800', transformAuraColor2:'#ffffff', transformAuraStrength:1,
-		transformBuffPoints:{}, // {speed:0, elemDmg:0, elemDmgType:'burn', tp:false, health:0, archmageElem:false, summonAbsorb:false, summonPower:0, explosionImmunity:false, elemImmunity:false}
-		transformLoadoutName:'', // which transformation loadout to switch to ('' = first found)
-	};
+function storeSlotSpell(slotIdx, def){
+	STATE.spells[slotIdx] = def;
+	if(STATE.activeLoadoutIdx >= 0 && STATE.activeLoadoutIdx < STATE.loadouts.length){
+		STATE.loadouts[STATE.activeLoadoutIdx].spells[slotIdx] = def ? JSON.parse(JSON.stringify(def)) : null;
+		if(STATE.loadouts[STATE.activeLoadoutIdx].type === 'transformation')
+			STATE.transformSpells[slotIdx] = def ? JSON.parse(JSON.stringify(def)) : null;
+	}
+	saveState();
+	renderSpellSlots();
+	notifyGameSpellsChanged();
 }
-
+function openSlotChooser(slotIdx){
+	if(typeof SlotChooser === 'undefined'){ openSpellBuilder(slotIdx); return; }
+	SlotChooser.open({
+		slot: slotIdx,
+		current: STATE.spells[slotIdx],
+		tint: null,
+		onSpell: function(){ openSpellBuilder(slotIdx, true); },
+		onWeapon: function(id, name){
+			const cur = STATE.spells[slotIdx], ws = MagicEngine.makeWeaponSlot(id, name);
+			if(cur && cur.kind === 'weapon' && cur.weaponId === id && cur.engraved) ws.engraved = cur.engraved;      // same weapon keeps its engraving
+			if(cur && cur.kind === 'weapon' && cur.weaponId === id && cur.item) ws.item = cur.item;                // …and a magical item keeps what it holds
+			storeSlotSpell(slotIdx, ws);
+		},
+		onEngrave: function(){ openEngraveForge(slotIdx); },
+		onUnengrave: function(){ const cur = STATE.spells[slotIdx]; if(cur && cur.kind === 'weapon'){ const ws = JSON.parse(JSON.stringify(cur)); delete ws.engraved; storeSlotSpell(slotIdx, ws); } },
+		onClear: function(){ storeSlotSpell(slotIdx, null); }
+	});
+}
+/* engrave a rune spell into a weapon's special: the forge edits the spell stored on the weapon slot */
+function openEngraveForge(slotIdx){
+	if(typeof MagicForge === 'undefined'){ alert('The Rune Forge failed to load. Refresh and try again.'); return; }
+	const ws = STATE.spells[slotIdx];
+	if(!ws || ws.kind !== 'weapon') return;
+	const wd = window.MELEE_WEAPONS && window.MELEE_WEAPONS.weapons[ws.weaponId];
+	const wName = wd ? wd.name : (ws.name || 'Weapon');
+	const spName = wd && wd.moves && wd.moves.special ? wd.moves.special.name : 'Special';
+	const spell = ws.engraved && MagicEngine.isMagicSpell(ws.engraved) ? JSON.parse(JSON.stringify(ws.engraved)) : MagicEngine.blankSpell(spName + ' Engraving');
+	MagicForge.open({
+		slot: slotIdx,
+		slotLabel: wName + ' · ' + spName + ' engraving',
+		clearLabel: 'Remove engraving',
+		clearText: 'This removes the spell engraved into the ' + wName + '\'s special. The weapon stays in its slot.',
+		spell,
+		profile: magicProfileFor(),
+		onSave: function(def){ const cur = STATE.spells[slotIdx]; if(!cur || cur.kind !== 'weapon') return; const n = JSON.parse(JSON.stringify(cur)); delete def.isUltimate; n.engraved = def; storeSlotSpell(slotIdx, n); },
+		onClear: function(){ const cur = STATE.spells[slotIdx]; if(!cur || cur.kind !== 'weapon') return; const n = JSON.parse(JSON.stringify(cur)); delete n.engraved; storeSlotSpell(slotIdx, n); },
+		onProfileChange: function(mp){ STATE.magicProfile = mp; saveState(); notifyGameSpellsChanged(); },
+		onClose: function(){ renderSpellSlots(); }
+	});
+}
 function openSpellBuilder(slotIdx){
-	editingSlot = slotIdx;
+	if(typeof MagicForge === 'undefined'){ alert('The Rune Forge failed to load. Refresh and try again.'); return; }
 	const existing = STATE.spells[slotIdx];
-	builderSpell = existing ? JSON.parse(JSON.stringify(existing)) : { name: slotIdx === 9 ? 'New Ultimate' : 'New Spell', phases:[newPhase()] };
-	if(slotIdx === 9) builderSpell.isUltimate = true;
-	else delete builderSpell.isUltimate;
-	const isUlt = (slotIdx === 9);
-	const titleEl = document.getElementById('modalTitle');
-	if(titleEl) titleEl.textContent = isUlt ? `⚡ Ultimate Builder — Slot 0` : `Spell Builder — Slot ${slotIdx+1}`;
-	if(typeof resetNewSpellBuilder==='function') resetNewSpellBuilder();
-	document.getElementById('spellModal').classList.add('open');
-	renderBuilder();
-}
-
-function closeSpellBuilder(){
-	document.getElementById('spellModal').classList.remove('open');
-	editingSlot = -1;
-	builderSpell = null;
-	if(typeof stopNewSpellBuilder==='function') stopNewSpellBuilder();
-}
-
-document.getElementById('modalClose').addEventListener('click', closeSpellBuilder);
-document.getElementById('cancelSpellBtn').addEventListener('click', closeSpellBuilder);
-document.getElementById('saveSpellBtn').addEventListener('click', () => {
-	const spellCopy = JSON.parse(JSON.stringify(builderSpell));
-	if(editingSlot === 9) spellCopy.isUltimate = true;
-	else delete spellCopy.isUltimate;
-	STATE.spells[editingSlot] = spellCopy;
-	// Auto-save into the active loadout so it stays in sync
-	if(STATE.activeLoadoutIdx >= 0 && STATE.activeLoadoutIdx < STATE.loadouts.length){
-		STATE.loadouts[STATE.activeLoadoutIdx].spells[editingSlot] = JSON.parse(JSON.stringify(spellCopy));
-		if(STATE.loadouts[STATE.activeLoadoutIdx].type === 'transformation')
-			STATE.transformSpells[editingSlot] = JSON.parse(JSON.stringify(spellCopy));
-	}
-	saveState();
-	closeSpellBuilder();
-	renderSpellSlots();
-	notifyGameSpellsChanged();
-});
-document.getElementById('clearSpellBtn').addEventListener('click', () => {
-	STATE.spells[editingSlot] = null;
-	// Auto-save the cleared slot into the active loadout
-	if(STATE.activeLoadoutIdx >= 0 && STATE.activeLoadoutIdx < STATE.loadouts.length){
-		STATE.loadouts[STATE.activeLoadoutIdx].spells[editingSlot] = null;
-		if(STATE.loadouts[STATE.activeLoadoutIdx].type === 'transformation')
-			STATE.transformSpells[editingSlot] = null;
-	}
-	saveState();
-	closeSpellBuilder();
-	renderSpellSlots();
-	notifyGameSpellsChanged();
-});
-
-/* ---------- Spell Code System (Export / Import) ---------- */
-function encodeSpell(spell){
-	const json = JSON.stringify(spell);
-	return 'MB1:' + btoa(unescape(encodeURIComponent(json)));
-}
-function decodeSpell(code){
-	try {
-		code = code.trim();
-		if(!code.startsWith('MB1:')) return null;
-		const json = decodeURIComponent(escape(atob(code.slice(4))));
-		const obj = JSON.parse(json);
-		if(!obj || !obj.name || !Array.isArray(obj.phases) || obj.phases.length === 0) return null;
-		// Sanitise each phase to only keep known keys
-		const knownKeys = Object.keys(newPhase());
-		obj.phases = obj.phases.slice(0,5).map(ph => {
-			const clean = newPhase();
-			for(const k of knownKeys){ if(ph[k] !== undefined) clean[k] = ph[k]; }
-			return clean;
-		});
-		obj.name = String(obj.name).slice(0,30);
-		return obj;
-	} catch(e){ return null; }
-}
-
-document.getElementById('exportSpellBtn').addEventListener('click', () => {
-	if(!builderSpell) return;
-	const code = encodeSpell(builderSpell);
-	navigator.clipboard.writeText(code).then(() => {
-		const btn = document.getElementById('exportSpellBtn');
-		btn.textContent = '✅ Copied!';
-		setTimeout(() => { btn.textContent = '📋 Export Code'; }, 1500);
-	}).catch(() => {
-		prompt('Copy this spell code:', code);
+	const spell = MagicEngine.isMagicSpell(existing) ? JSON.parse(JSON.stringify(existing)) : MagicEngine.blankSpell('Spell ' + (slotIdx === 9 ? '0' : slotIdx + 1));
+	MagicForge.open({
+		slot: slotIdx,
+		slotLabel: 'Slot ' + (slotIdx === 9 ? '0' : slotIdx + 1),
+		spell,
+		profile: magicProfileFor(),
+		onSave: function(def){ delete def.isUltimate; storeSlotSpell(slotIdx, def); },
+		onClear: function(){ storeSlotSpell(slotIdx, null); },
+		onProfileChange: function(mp){ STATE.magicProfile = mp; saveState(); notifyGameSpellsChanged(); },
+		onClose: function(){ renderSpellSlots(); }
 	});
-});
-
-document.getElementById('importSpellBtn').addEventListener('click', () => {
-	const code = prompt('Paste a spell code:');
-	if(!code) return;
-	const spell = decodeSpell(code);
-	if(!spell){
-		alert('Invalid spell code. Make sure you copied the full code starting with MB1:');
-		return;
-	}
-	builderSpell = spell;
-	renderBuilder();
-});
-
-document.getElementById('addPhaseBtn').addEventListener('click', () => {
-	const vowPhaseBonus = calcVowBoostsForSlot(editingSlot).phases || 0;
-	const ph0beh = builderSpell.phases[0]?.behavior;
-	const maxPhases = ph0beh === 'domain' ? 2 : ph0beh === 'transformation' ? 4 : ((editingSlot === 9) ? 5 : 3) + vowPhaseBonus;
-	if(builderSpell.phases.length >= maxPhases) return;
-	builderSpell.phases.push(newPhase());
-	if(typeof selectNewSpellPhase==='function') selectNewSpellPhase(builderSpell.phases.length-1);
-	renderBuilder();
-});
-
-function renderBuilder(){
-	if(typeof renderNewSpellBuilder==='function'){
-		renderNewSpellBuilder();
-		return;
-	}
-	const stats = computeStats();
-	const _vbBuilder = calcVowBoostsForSlot(editingSlot);
-	const cost = displayedSpellMana(builderSpell, inventoryManaOpts(editingSlot, builderSpell));
-	const discMult = spellManaDiscountMult(inventoryManaOpts(editingSlot, builderSpell));
-	const totalDiscountPct = Math.round((1 - discMult) * 100);
-	const req  = calcSpellControlReq(builderSpell);
-	const canUse = stats.magicControl >= req;
-	const isUlt = (editingSlot === 9);
-	const isTransformLoadout = STATE.loadouts[STATE.activeLoadoutIdx]?.type === 'transformation';
-	const vowPhaseBonus = _vbBuilder.phases || 0;
-	const _ph0beh = builderSpell.phases[0]?.behavior;
-	const maxPhases = _ph0beh === 'domain' ? 2 : _ph0beh === 'transformation' ? 4 : (isUlt ? 5 : 3) + vowPhaseBonus;
-
-	/* Gather vow-locked effects & shapes */
-	const vowLockedEffects = new Set();
-	const vowLockedShapes  = new Set();
-	for(const v of STATE.vows){
-		if(!v) continue;
-		if(v.sacrifice === 'effects') for(const fx of v.sacrificedEffects||[]) vowLockedEffects.add(fx);
-		if(v.sacrifice === 'shapes')  for(const sh of v.sacrificedShapes||[])  vowLockedShapes.add(sh);
-	}
-
-	// meta
-	document.getElementById('spellMeta').innerHTML = `
-		<div class="prow">
-			<label>${isUlt ? '⚡ Ultimate Name' : 'Spell Name'}</label>
-			<input type="text" id="spellNameInput" value="${escHtml(builderSpell.name)}" maxlength="30"/>
-		</div>
-		${isUlt ? `<div class="meta-chip" style="background:rgba(255,170,0,.15);color:#ffaa00">⚡ ULTIMATE — Costs Total Mana (${cost}⚡)</div>` : `<div class="meta-chip">Mana Cost: <b style="color:var(--blue)">${cost}</b>${totalDiscountPct > 0 ? ` <span style="color:var(--green);font-size:.85em">(-${totalDiscountPct}% discount)</span>` : ''}</div>`}
-		<div class="meta-chip">Control Req: <b style="color:${canUse?'var(--green)':'var(--red)'}">${req}</b> / ${stats.magicControl}</div>
-		<div class="meta-chip">Phases: <b>${builderSpell.phases.length}</b>/${maxPhases}</div>
-		${isUlt ? '<div class="meta-chip" style="color:#ffaa00">Max Power: 10 · Larger Size · Longer Effects</div>' : ''}
-		${(() => {
-			let total = 1;
-			for(const p of builderSpell.phases) total *= (p.behavior==='aroundSelf' ? (p.aroundSelfCount||4) : (p.count||1));
-			const cap = isUlt ? 200 : 50;
-			const over = total > cap;
-			return `<div class="meta-chip">Total Projectiles: <b style="color:${over?'var(--red)':'var(--green)'}">${total}</b> / ${cap}${over?' (over cap!)':''}</div>`;
-		})()}
-	`;
-	document.getElementById('spellNameInput').addEventListener('input', e => {
-		builderSpell.name = e.target.value || 'Unnamed';
-	});
-
-	// description
-	document.getElementById('spellDesc').textContent = generateSpellDescription(builderSpell);
-
-	// phases
-	const wrap = document.getElementById('phasesWrap');
-	wrap.innerHTML = '';
-	builderSpell.phases.forEach((ph, idx) => {
-		/* Auto-strip vow-locked effects & shapes from existing phases */
-		if(vowLockedEffects.size) ph.effects = ph.effects.filter(fx => !vowLockedEffects.has(fx));
-		/* Auto-strip item-locked effects from existing phases */
-		ph.effects = ph.effects.filter(fx => !EFFECT_ITEM_REQ[fx] || hasItemEquipped(EFFECT_ITEM_REQ[fx]));
-		/* Auto-strip rank-locked effects */
-		ph.effects = ph.effects.filter(fx => isEffectUnlocked(fx));
-		if(vowLockedShapes.has(ph.shape) || (SHAPE_ITEM_REQ[ph.shape] && !hasItemEquipped(SHAPE_ITEM_REQ[ph.shape])) || !isShapeUnlocked(ph.shape)){
-			const firstAvail = Object.keys(SHAPES).find(k => !vowLockedShapes.has(k) && isShapeUnlocked(k));
-			if(firstAvail) ph.shape = firstAvail;
-		}
-		if((BEH_ITEM_REQ[ph.behavior] && !hasItemEquipped(BEH_ITEM_REQ[ph.behavior])) || !isBehaviorUnlocked(ph.behavior)){
-			const firstAvailBeh = Object.keys(BEHAVIORS).find(k => isBehaviorUnlocked(k));
-			if(firstAvailBeh) ph.behavior = firstAvailBeh;
-		}
-		/* Clamp power to rank max */
-		const rankPow = getRankMaxPower();
-		if(ph.power > rankPow) ph.power = rankPow;
-		const card = document.createElement('div');
-		card.className = 'phase-card';
-		const isLast = idx === builderSpell.phases.length - 1;
-
-		let html = `<h4>Phase ${idx+1}`;
-		if(builderSpell.phases.length > 1){
-			html += ` <button class="remove-phase" data-idx="${idx}" title="Remove phase">✕</button>`;
-		}
-		html += `</h4>`;
-
-		// Shape
-		html += `<div class="prow"><label>Shape</label><select data-idx="${idx}" data-prop="shape">`;
-		for(const [k,v] of Object.entries(SHAPES).sort((a,b)=>(SHAPE_RANK_REQ[a[0]]??99)-(SHAPE_RANK_REQ[b[0]]??99)||a[1].controlReq-b[1].controlReq)){
-			const shLocked = vowLockedShapes.has(k);
-			const itemReq = SHAPE_ITEM_REQ[k];
-			const itemLocked = itemReq && !hasItemEquipped(itemReq);
-			const rankLocked = !isShapeUnlocked(k);
-			const locked = shLocked || itemLocked || rankLocked;
-			const lockLabel = shLocked ? ' 🔒 vow' : (itemLocked ? ` 🔒 ${ITEM_DB[itemReq]?.name||itemReq}` : (rankLocked ? ` 🔒 ${MAGE_RANKS[SHAPE_RANK_REQ[k]]?.name||'?'}` : ''));
-			html += `<option value="${k}" ${ph.shape===k?'selected':''} ${locked?'disabled':''}>${v.icon} ${v.label} (ctrl ${v.controlReq}+)${v.dmgNote?' ['+v.dmgNote+']':''}${lockLabel}  </option>`;
-		}
-		html += `</select></div>`;
-
-		// Check if this is a domain phase (phase 1 with domain behavior)
-		const isDomainPhase = idx === 0 && ph.behavior === 'domain';
-		// Check if this is a transformation phase (phase 1 with transformation behavior)
-		const isTransformPhase = idx === 0 && ph.behavior === 'transformation';
-		// Check if spell has domain (affects subsequent phases)
-		const spellHasDomain = builderSpell.phases[0]?.behavior === 'domain';
-		// Check if spell has transformation (affects subsequent phases)
-		const spellHasTransformation = builderSpell.phases[0]?.behavior === 'transformation';
-
-		// Behavior (summons have no projectile path)
-		if(ph.shape !== 'summon'){
-		html += `<div class="prow"><label>Behavior</label><select data-idx="${idx}" data-prop="behavior">`;
-		for(const [k,v] of Object.entries(BEHAVIORS).sort((a,b)=>(BEHAVIOR_RANK_REQ[a[0]]??99)-(BEHAVIOR_RANK_REQ[b[0]]??99)||a[1].controlReq-b[1].controlReq)){
-			const behItemReq = BEH_ITEM_REQ[k];
-			const behItemLocked = behItemReq && !hasItemEquipped(behItemReq);
-			const behRankLocked = !isBehaviorUnlocked(k);
-			// Domain/Transformation only available for ultimates on phase 1
-			const domainLocked = v.ultimateOnly && (!isUlt || idx > 0);
-			// Transformation behavior not allowed inside transformation loadouts
-			const transformSelfLocked = k === 'transformation' && isTransformLoadout;
-			// If spell has domain and this is phase 2+, behavior is forced to homing
-			const forcedHoming = spellHasDomain && idx > 0 && k !== 'homing';
-			const locked = behItemLocked || behRankLocked || domainLocked || forcedHoming || transformSelfLocked;
-			let lockLabel = behItemLocked ? ` 🔒 ${ITEM_DB[behItemReq]?.name||behItemReq}` : (behRankLocked ? ` 🔒 ${MAGE_RANKS[BEHAVIOR_RANK_REQ[k]]?.name||'?'}` : '');
-			if(domainLocked && !behItemLocked && !behRankLocked) lockLabel = ' 🔒 Ult Phase 1 Only';
-			if(forcedHoming && !behItemLocked && !behRankLocked) lockLabel = ' 🔒 Domain forces Homing';
-			if(transformSelfLocked && !behItemLocked && !behRankLocked) lockLabel = ' 🔒 Not in transform loadout';
-			html += `<option value="${k}" ${ph.behavior===k?'selected':''} ${locked?'disabled':''}>${v.label} (ctrl ${v.controlReq}+)${v.dmgNote?' ['+v.dmgNote+']':''}${lockLabel}</option>`;
-		}
-		html += `</select></div>`;
-		} else {
-			ph.behavior = 'straight';
-		}
-
-		// Domain-specific settings (phase 1 only)
-		if(isDomainPhase){
-			if(!ph.domainElement) ph.domainElement = 'burn';
-			if(!ph.domainColor) ph.domainColor = '#ff4400';
-			if(!ph.domainPattern) ph.domainPattern = 'flames';
-			html += `<div class="prow" style="border-top:2px solid #ffaa00;padding-top:8px;margin-top:8px"><label style="color:#ffaa00;font-weight:bold">⚡ DOMAIN EXPANSION ⚡</label></div>`;
-			html += `<div class="prow" style="color:#aaa;font-size:.85em">Creates massive zone larger than screen. Next phases attack from edges with homing. Spells with same element get +50% damage while active.</div>`;
-			html += `<div class="prow"><label>Domain Element</label><select data-idx="${idx}" data-prop="domainElement">`;
-			for(const el of DOMAIN_ELEMENTS){
-				const fx = EFFECTS[el];
-				html += `<option value="${el}" ${ph.domainElement===el?'selected':''}>${fx.icon} ${fx.label}</option>`;
-			}
-			html += `</select></div>`;
-			html += `<div class="prow"><label>Domain Color</label><input type="color" value="${ph.domainColor}" data-idx="${idx}" data-prop="domainColor"/></div>`;
-			html += `<div class="prow"><label>Visual Pattern</label><select data-idx="${idx}" data-prop="domainPattern">
-				<option value="flames" ${ph.domainPattern==='flames'?'selected':''}>🔥 Flames</option>
-				<option value="crystals" ${ph.domainPattern==='crystals'?'selected':''}>❄️ Crystals</option>
-				<option value="skulls" ${ph.domainPattern==='skulls'?'selected':''}>☠️ Skulls</option>
-				<option value="lightning" ${ph.domainPattern==='lightning'?'selected':''}>⚡ Lightning</option>
-				<option value="void" ${ph.domainPattern==='void'?'selected':''}>🌑 Void</option>
-				<option value="stars" ${ph.domainPattern==='stars'?'selected':''}>⭐ Stars</option>
-			</select></div>`;
-			// Skip normal sliders for domain phase - add domain-specific ones
-			html += `<div class="prow"><label>Duration: ${ph.duration.toFixed(1)}s</label>
-				<div class="range-row">
-					<input type="range" min="3" max="15" step="0.5" value="${ph.duration}" data-idx="${idx}" data-prop="duration"/>
-					<span class="range-val">${ph.duration.toFixed(1)}s</span>
-				</div></div>`;
-		}
-
-		// Transformation-specific settings (phase 1 only)
-		if(isTransformPhase){
-			if(!ph.transformAuraStyle) ph.transformAuraStyle='pulse';
-			if(!ph.transformAuraColor) ph.transformAuraColor='#ff8800';
-			if(!ph.transformAuraColor2) ph.transformAuraColor2='#ffffff';
-			if(!ph.transformAuraStrength) ph.transformAuraStrength=1;
-			if(!ph.transformBuffPoints) ph.transformBuffPoints={};
-			if(!ph.transformLoadoutName) ph.transformLoadoutName='';
-			const bp=ph.transformBuffPoints;
-			const totalPts=(bp.speed||0)+(bp.elemDmg||0)+(bp.tp?3:0)+(bp.health||0)+(bp.archmageElem?3:0)+(bp.summonAbsorb?5:0)+(bp.summonPower||0)+(bp.explosionImmunity?3:0)+(bp.elemImmunity?5:0);
-			const remPts=5-totalPts;
-			html += `<div class="prow" style="border-top:2px solid #ff8800;padding-top:8px;margin-top:8px"><label style="color:#ff8800;font-weight:bold">⚡ TRANSFORMATION ⚡</label></div>`;
-			html += `<div class="prow" style="color:#aaa;font-size:.85em">Transforms for 60 seconds. Switches to your Transformation loadout spells (power 15, size 5.5, 4 phases). 25k mana.</div>`;
-			// Aura Style
-			html += `<div class="prow" style="border-top:1px solid var(--border);padding-top:6px"><label style="color:var(--accent2)">🌟 Aura Settings</label></div>`;
-			html += `<div class="prow"><label>Aura Style</label><select data-idx="${idx}" data-prop="transformAuraStyle">
-				<option value="pulse" ${ph.transformAuraStyle==='pulse'?'selected':''}>💫 Pulse — glowing rings</option>
-				<option value="orbit" ${ph.transformAuraStyle==='orbit'?'selected':''}>🔵 Orbit — orbiting particles</option>
-				<option value="spiral" ${ph.transformAuraStyle==='spiral'?'selected':''}>🌀 Spiral — spinning wisps</option>
-				<option value="nova" ${ph.transformAuraStyle==='nova'?'selected':''}>⭐ Nova — radiating spikes</option>
-				<option value="veil" ${ph.transformAuraStyle==='veil'?'selected':''}>✨ Veil — flowing upward</option>
-				<option value="shatter" ${ph.transformAuraStyle==='shatter'?'selected':''}>💎 Shatter — crystal lattice</option>
-				<option value="corona" ${ph.transformAuraStyle==='corona'?'selected':''}>☀️ Corona — sun corona</option>
-				<option value="storm" ${ph.transformAuraStyle==='storm'?'selected':''}>⚡ Storm — lightning arcs</option>
-				<option value="powerleakage" ${ph.transformAuraStyle==='powerleakage'?'selected':''}>🔥 Power Leakage — sharp crackling pillar</option>
-				<option value="powersurge" ${ph.transformAuraStyle==='powersurge'?'selected':''}>🌊 Power Surge — wide flowing energy column</option>
-			</select></div>`;
-			const _aStrV = ph.transformAuraStrength||1;
-			html += `<div class="prow"><label>Aura Strength: ${_aStrV}</label>
-				<div class="range-row"><input type="range" min="1" max="10" step="1" value="${_aStrV}" data-idx="${idx}" data-prop="transformAuraStrength"/><span class="range-val">${_aStrV}</span></div></div>`;
-			html += `<div class="prow"><label>Aura Color (Primary)</label><input type="color" value="${ph.transformAuraColor}" data-idx="${idx}" data-prop="transformAuraColor"/></div>`;
-			html += `<div class="prow"><label>Aura Color (Secondary)</label><input type="color" value="${ph.transformAuraColor2||'#ffffff'}" data-idx="${idx}" data-prop="transformAuraColor2"/></div>`;
-			// Transformation Loadout selector
-			const transLoadouts=STATE.loadouts.filter(l=>l.type==='transformation');
-			html += `<div class="prow"><label>Transformation Loadout</label><select data-idx="${idx}" data-prop="transformLoadoutName">
-				<option value=""${!ph.transformLoadoutName?' selected':''}>— First found —</option>`;
-			for(const tl of transLoadouts) html+=`<option value="${tl.name}"${ph.transformLoadoutName===tl.name?' selected':''}>${tl.name}</option>`;
-			html+=`</select></div>`;
-			if(transLoadouts.length===0) html+=`<div class="prow" style="color:#ff8800;font-size:.82em">ℹ️ No Transformation loadouts yet. Create one in the Loadout Manager.</div>`;
-			// Buff point allocation
-			html += `<div class="prow" style="border-top:1px solid var(--border);padding-top:6px"><label style="color:var(--accent2)">💠 Buff Points: <b>${remPts}</b> / 5 remaining</label></div>`;
-			if(remPts<0) html+=`<div class="prow" style="color:#ff4444;font-size:.82em">⚠️ Over budget! Remove some buffs. Excess points will be ignored.</div>`;
-			// speed
-			html+=`<div class="prow"><label>🏃 Speed +${(bp.speed||0)*15}% (${bp.speed||0} pts)</label>
-				<input type="range" min="0" max="5" step="1" value="${bp.speed||0}" data-idx="${idx}" data-prop="transformBuffPoints.speed"/></div>`;
-			// elem dmg
-			html+=`<div class="prow"><label>💥 Elem Damage +${(bp.elemDmg||0)*10}% (${bp.elemDmg||0} pts)</label>
-				<input type="range" min="0" max="5" step="1" value="${bp.elemDmg||0}" data-idx="${idx}" data-prop="transformBuffPoints.elemDmg"/></div>`;
-			if((bp.elemDmg||0)>0){
-				html+=`<div class="prow"><label>Elem Type</label><select data-idx="${idx}" data-prop="transformBuffPoints.elemDmgType">`;
-				for(const el of ['burn','freeze','poison','stun','lifesteal']){
-					const fx=EFFECTS[el];
-					html+=`<option value="${el}"${(bp.elemDmgType||'burn')===el?' selected':''}>${fx.icon} ${fx.label}</option>`;
-				}
-				html+=`</select></div>`;
-			}
-			// tp
-			html+=`<div class="prow"><label>🌀 Ranger TP (3 pts) <input type="checkbox" data-idx="${idx}" data-prop="transformBuffPoints.tp" ${bp.tp?'checked':''}/></label></div>`;
-			// health
-			html+=`<div class="prow"><label>❤️ Health +${(bp.health||0)*15}% (${bp.health||0} pts)</label>
-				<input type="range" min="0" max="5" step="1" value="${bp.health||0}" data-idx="${idx}" data-prop="transformBuffPoints.health"/></div>`;
-			// archmage elem
-			html+=`<div class="prow"><label>🔮 Archmage Elemental (3 pts) <input type="checkbox" data-idx="${idx}" data-prop="transformBuffPoints.archmageElem" ${bp.archmageElem?'checked':''}/></label></div>`;
-			// summon absorb
-			html+=`<div class="prow"><label>👾 Summon Absorb (5 pts) <input type="checkbox" data-idx="${idx}" data-prop="transformBuffPoints.summonAbsorb" ${bp.summonAbsorb?'checked':''}/></label></div>`;
-			// summon power
-			html+=`<div class="prow"><label>👾 Summon Power +${(bp.summonPower||0)*10}% (${bp.summonPower||0} pts)</label>
-				<input type="range" min="0" max="5" step="1" value="${bp.summonPower||0}" data-idx="${idx}" data-prop="transformBuffPoints.summonPower"/></div>`;
-			// explosion immunity
-			html+=`<div class="prow"><label>💣 Explosion Immunity (3 pts) <input type="checkbox" data-idx="${idx}" data-prop="transformBuffPoints.explosionImmunity" ${bp.explosionImmunity?'checked':''}/></label></div>`;
-			// elemental immunity
-			html+=`<div class="prow"><label>🛡️ Elemental Immunity (5 pts) <input type="checkbox" data-idx="${idx}" data-prop="transformBuffPoints.elemImmunity" ${bp.elemImmunity?'checked':''}/></label></div>`;
-		}
-
-		// sliders: width, height, speed, duration, power - skip for domain or transformation phase 1
-		if(!isDomainPhase && !isTransformPhase){
-		const isBigShape = ph.shape === 'solidify' || ph.shape === 'wall';
-		// Domain spells cap power at 10 max on phase 2+
-		const domainPowerCap = spellHasDomain && idx > 0;
-		// Transformation spells get enhanced limits (power 15, size 5.5) on phase 2+
-		const transEnhanced = (spellHasTransformation && idx > 0) || isTransformLoadout;
-		// Rank caps power output
-		const rankPowerCap = getRankMaxPower();
-		const basePowerMax = domainPowerCap ? 10 : transEnhanced ? 15 : (isUlt ? 20 : 10);
-		const powerMax = Math.min(basePowerMax, rankPowerCap);
-		const sizeMax = ph.shape==='summon' ? 2 : (transEnhanced ? 5.5 : isBigShape?(isUlt?10:6):(isUlt?8:3));
-		const durMax = ph.shape==='summon' ? 60 : ((ph.behavior==='stationary'||ph.behavior==='selfCast'||ph.behavior==='ground'||ph.behavior==='control'||ph.shape==='beam'||(ph.effects&&ph.effects.includes('solidify')))?30:isUlt?10:5);
-		if(ph.duration > durMax) ph.duration = durMax;
-		if(ph.width > sizeMax) ph.width = sizeMax;
-		if(ph.height > sizeMax) ph.height = sizeMax;
-		const sliders = [
-			{ prop:'width',    label:'Width',    min:0.3, max:sizeMax, step:0.1 },
-			{ prop:'height',   label:'Height',   min:0.3, max:sizeMax, step:0.1 },
-			{ prop:'speed',    label:'Speed',    min:0.3, max:isUlt?5:3, step:0.1 },
-			{ prop:'duration', label:'Duration', min:0.3, max:durMax, step:0.1 },
-			{ prop:'power',    label:'Power',    min:0.5, max:powerMax, step:0.1 },
-		];
-		for(const sl of sliders){
-			html += `<div class="prow"><label>${sl.label}: ${ph[sl.prop].toFixed(1)}</label>
-				<div class="range-row">
-					<input type="range" min="${sl.min}" max="${sl.max}" step="${sl.step}" value="${ph[sl.prop]}" data-idx="${idx}" data-prop="${sl.prop}"/>
-					<span class="range-val">${ph[sl.prop].toFixed(1)}</span>
-				</div></div>`;
-		}
-
-		// count
-		html += `<div class="prow"><label>Projectile Count</label>
-			<input type="number" min="1" max="${isUlt?200:50}" value="${ph.count}" data-idx="${idx}" data-prop="count" style="width:72px"/></div>`;
-
-		// spread (if count > 1)
-		if(ph.count > 1){
-			html += `<div class="prow"><label>Spread Angle: ${ph.spread}°</label>
-				<input type="range" min="0" max="360" step="5" value="${ph.spread}" data-idx="${idx}" data-prop="spread"/>
-			</div>`;
-		}
-
-		// chain-specific settings
-		if(ph.shape === 'chain'){
-			if(ph.chainStunTime == null) ph.chainStunTime = 0;
-			html += `<div class="prow" style="border-top:1px solid var(--border);padding-top:6px"><label style="color:var(--accent2)">Chain Settings</label></div>`;
-			html += `<div class="prow"><label>Chain Stun: ${ph.chainStunTime.toFixed(1)}s (+${Math.round(ph.chainStunTime*25)} mana)</label>
-				<div class="range-row">
-					<input type="range" min="0" max="3" step="0.1" value="${ph.chainStunTime}" data-idx="${idx}" data-prop="chainStunTime"/>
-					<span class="range-val">${ph.chainStunTime.toFixed(1)}</span>
-				</div></div>`;
-		}
-
-		// aroundSelf-specific settings
-		if(ph.behavior === 'aroundSelf'){
-			if(!ph.aroundSelfCount) ph.aroundSelfCount = 4;
-			html += `<div class="prow" style="border-top:1px solid var(--border);padding-top:6px"><label style="color:var(--accent2)">Around Self Settings</label></div>`;
-			html += `<div class="prow"><label>Around Self Count: ${ph.aroundSelfCount}</label>
-				<input type="range" min="4" max="16" step="1" value="${ph.aroundSelfCount}" data-idx="${idx}" data-prop="aroundSelfCount"/></div>`;
-			html += `<div class="prow"><label>Around Self Radius: ${ph.aroundSelfRadius||50}</label>
-				<input type="range" min="20" max="150" step="5" value="${ph.aroundSelfRadius||50}" data-idx="${idx}" data-prop="aroundSelfRadius"/></div>`;
-		}
-
-		// rain-specific settings
-		if(ph.behavior === 'rain'){
-			if(!ph.rainHeight) ph.rainHeight = 150;
-			if(ph.stackedRain === undefined) ph.stackedRain = false;
-			html += `<div class="prow" style="border-top:1px solid var(--border);padding-top:6px"><label style="color:var(--accent2)">Rain Settings</label></div>`;
-			html += `<div class="prow"><label>Rain Height: ${ph.rainHeight}</label>
-				<input type="range" min="50" max="800" step="10" value="${ph.rainHeight}" data-idx="${idx}" data-prop="rainHeight"/></div>`;
-			html += `<div class="prow"><label style="cursor:pointer"><input type="checkbox" ${ph.stackedRain?'checked':''} data-idx="${idx}" data-prop="stackedRain" style="margin-right:5px"/>Stacked Rain — all fall from one spot <span style="color:var(--gold)">(+50 mana)</span></label></div>`;
-		}
-
-		// barrage-specific settings
-		if(ph.behavior === 'barrage'){
-			if(!ph.barrageHeight) ph.barrageHeight = 200;
-			html += `<div class="prow" style="border-top:1px solid var(--border);padding-top:6px"><label style="color:var(--accent2)">Barrage Settings</label></div>`;
-			html += `<div class="prow"><label>Barrage Spread: ${ph.barrageHeight}</label>
-				<input type="range" min="30" max="600" step="10" value="${ph.barrageHeight}" data-idx="${idx}" data-prop="barrageHeight"/></div>`;
-		}
-
-		// orbit-specific settings
-		if(ph.behavior === 'orbit'){
-			html += `<div class="prow" style="border-top:1px solid var(--border);padding-top:6px"><label style="color:var(--accent2)">Orbit Settings</label></div>`;
-			html += `<div class="prow"><label>Orbit Radius: ${ph.orbitRadius}</label>
-				<input type="range" min="30" max="200" step="5" value="${ph.orbitRadius}" data-idx="${idx}" data-prop="orbitRadius"/></div>`;
-			html += `<div class="prow"><label>Orbit Speed: ${ph.orbitSpeed.toFixed(1)}</label>
-				<input type="range" min="0.5" max="8" step="0.5" value="${ph.orbitSpeed}" data-idx="${idx}" data-prop="orbitSpeed"/></div>`;
-			html += `<div class="prow"><label>Orbit Duration: ${ph.orbitDuration.toFixed(1)}s</label>
-				<input type="range" min="0.5" max="5" step="0.1" value="${ph.orbitDuration}" data-idx="${idx}" data-prop="orbitDuration"/></div>`;
-		}
-
-		// ground-specific settings (radius)
-		if(ph.behavior === 'ground'){
-			if(!ph.groundRadius) ph.groundRadius = 200;
-			html += `<div class="prow" style="border-top:1px solid var(--border);padding-top:6px"><label style="color:var(--accent2)">Ground Settings</label></div>`;
-			html += `<div class="prow"><label>Auto Lock-on</label><select data-idx="${idx}" data-prop="groundAutoLock">
-				<option value="true" ${ph.groundAutoLock!==false?'selected':''}>Yes — locks to nearest enemy</option>
-				<option value="false" ${ph.groundAutoLock===false?'selected':''}>No — erupts at your feet</option>
-			</select></div>`;
-			html += `<div class="prow"><label>Lock-on Radius: ${ph.groundRadius}px</label>
-				<input type="range" min="100" max="800" step="50" value="${ph.groundRadius}" data-idx="${idx}" data-prop="groundRadius"/></div>`;
-		}
-
-		// summon-specific settings (range and orders)
-		if(ph.shape === 'summon'){
-			if(ph.summonRange==null) ph.summonRange = 0;
-			if(ph.summonSelfReliance==null) ph.summonSelfReliance = false;
-			html += `<div class="prow" style="border-top:1px solid var(--border);padding-top:6px"><label style="color:var(--accent2)">Summon Upgrades</label></div>`;
-			html += `<div class="prow"><label>+Range: ${ph.summonRange} (${600+ph.summonRange*100}px)</label>
-				<input type="range" min="0" max="10" step="1" value="${ph.summonRange}" data-idx="${idx}" data-prop="summonRange"/></div>`;
-			html += `<div class="prow"><label>Approach</label><select data-idx="${idx}" data-prop="summonClose">
-				<option value="false" ${!ph.summonClose?'selected':''}>Stay at range</option>
-				<option value="true" ${ph.summonClose?'selected':''}>Follow enemy</option>
-			</select></div>`;
-			html += `<div class="prow"><label>Orders</label><select data-idx="${idx}" data-prop="summonSelfReliance">
-				<option value="false" ${!ph.summonSelfReliance?'selected':''}>Follow cursor</option>
-				<option value="true" ${ph.summonSelfReliance?'selected':''}>Lock on to enemy</option>
-			</select></div>`;
-		}
-		} // end if(!isDomainPhase)
-
-		// effects — grouped by category (domain/transformation phase shows no effects)
-		if(!isDomainPhase && !isTransformPhase){
-		html += `<div class="prow"><label>Effects</label></div>`;
-		const catOrder = ['overall','elemental','movement','cc','support','buff','utility','store'];
-		for(const cat of catOrder){
-			const catInfo = EFFECT_CATEGORIES[cat];
-			const catEffects = Object.entries(EFFECTS).filter(([k,v])=>v.category===cat).sort((a,b)=>(EFFECT_RANK_REQ[a[0]]??99)-(EFFECT_RANK_REQ[b[0]]??99)||a[1].controlReq-b[1].controlReq);
-			if(!catEffects.length) continue;
-			html += `<div class="prow" style="margin-top:4px"><label style="font-size:.85em;color:var(--accent2)">${catInfo.label}${catInfo.exclusive?' <span style="color:#ff6b6b;font-size:.8em"> (pick one)</span>':''}</label><div class="fx-grid">`;
-			for(const [k,v] of catEffects){
-				const active = ph.effects.includes(k);
-				const vowLocked = vowLockedEffects.has(k);
-				const fxItemReq = EFFECT_ITEM_REQ[k];
-				const fxItemLocked = fxItemReq && !hasItemEquipped(fxItemReq);
-				const fxRankLocked = !isEffectUnlocked(k);
-				// check if another exclusive effect in this category is already active
-				const solidifyBlockedShapes = new Set(['explosion','vortex','summon','allyOrb']);
-				const shapeSolidifyBlocked = k==='solidify' && solidifyBlockedShapes.has(ph.shape);
-				const blocked = vowLocked || fxItemLocked || fxRankLocked || shapeSolidifyBlocked || (!active && catInfo.exclusive && catEffects.some(([k2])=>k2!==k && ph.effects.includes(k2)));
-				const lockLabel = vowLocked ? ' 🔒 vow' : (fxItemLocked ? ` 🔒 ${ITEM_DB[fxItemReq]?.name||fxItemReq}` : (fxRankLocked ? ` 🔒 ${MAGE_RANKS[EFFECT_RANK_REQ[k]]?.name||'?'}` : (shapeSolidifyBlocked ? ' 🚫 shape' : '')));
-				html += `<div class="fx-chip ${active&&!vowLocked&&!fxItemLocked&&!fxRankLocked?'active':''} ${blocked?'blocked':''}" data-idx="${idx}" data-fx="${k}" data-cat="${cat}" title="${v.desc} (ctrl ${v.controlReq}+)${v.dmgNote?' ['+v.dmgNote+']':''}${vowLocked?' — sacrificed by binding vow' : (fxItemLocked ? ' — requires '+(ITEM_DB[fxItemReq]?.name||fxItemReq) : (fxRankLocked ? ' — requires '+MAGE_RANKS[EFFECT_RANK_REQ[k]]?.name+' rank' : (shapeSolidifyBlocked ? ' — solidify cannot be used with this shape' : (blocked ? ' — already have one from this category' : ''))))}">${v.icon} ${v.label}${v.dmgNote?' <span style="font-size:9px;color:#ff9;opacity:0.7">['+v.dmgNote+']</span>' : ''}${lockLabel}</div>`;
-			}
-			html += `</div></div>`;
-		}
-
-		// effect intensity settings (for burn/poison/freeze/stun)
-		const tunableEffects = ['burn','poison','freeze','stun'];
-		const hasTunable = ph.effects.some(fx => tunableEffects.includes(fx));
-		if(hasTunable){
-			if(!ph.effectPower) ph.effectPower = 1;
-			if(!ph.effectDuration) ph.effectDuration = 1;
-			const onlyBurnPoison = ph.effects.filter(fx => tunableEffects.includes(fx)).every(fx => fx==='burn'||fx==='poison');
-			html += `<div class="prow" style="border-top:1px solid var(--border);padding-top:6px"><label style="color:var(--accent2)">Effect Intensity</label></div>`;
-			if(!onlyBurnPoison){
-				html += `<div class="prow"><label>Effect Power: ${ph.effectPower.toFixed(1)}x</label>
-					<input type="range" min="0.5" max="3" step="0.1" value="${ph.effectPower}" data-idx="${idx}" data-prop="effectPower"/></div>`;
-			} else {
-				html += `<div class="prow"><label style="color:#888">Effect Power: N/A (burn/poison use hit damage)</label></div>`;
-			}
-			html += `<div class="prow"><label>Effect Duration: ${ph.effectDuration.toFixed(1)}x</label>
-				<input type="range" min="0.5" max="3" step="0.1" value="${ph.effectDuration}" data-idx="${idx}" data-prop="effectDuration"/></div>`;
-		}
-
-		// damage store percentage (if damageStore effect is active)
-		if(ph.effects.includes('damageStore')){
-			if(ph.damageStorePercent == null) ph.damageStorePercent = 0.5;
-			const dsPct = Math.round(ph.damageStorePercent * 100);
-			html += `<div class="prow" style="border-top:1px solid var(--border);padding-top:6px"><label style="color:var(--accent2)">Damage Store Settings</label></div>`;
-			html += `<div class="prow"><label>Store Percent: ${dsPct}%</label>
-				<div class="range-row">
-					<input type="range" min="0.1" max="1" step="0.05" value="${ph.damageStorePercent}" data-idx="${idx}" data-prop="damageStorePercent"/>
-					<span class="range-val">${dsPct}%</span>
-				</div></div>`;
-		}
-
-		// timed release settings (if timedRelease effect is active)
-		if(ph.effects.includes('timedRelease')){
-			const trd = ph.timedReleaseDelay != null ? ph.timedReleaseDelay : 0.5;
-			html += `<div class="prow" style="border-top:1px solid var(--border);padding-top:6px"><label style="color:var(--accent2)">Timed Release Settings</label></div>`;
-			html += `<div class="prow"><label>Trigger Delay: ${trd.toFixed(1)}s</label>
-				<div class="range-row">
-					<input type="range" min="0" max="4" step="0.1" value="${trd}" data-idx="${idx}" data-prop="timedReleaseDelay"/>
-					<span class="range-val">${trd.toFixed(1)}</span>
-				</div></div>`;
-		}
-
-		// phase fork settings (if phaseFork effect is active)
-		if(ph.effects.includes('phaseFork')){
-			const pfd = ph.phaseForkDelay != null ? ph.phaseForkDelay : 1;
-			const pfr = ph.phaseForkRepeats != null ? ph.phaseForkRepeats : 1;
-			const pfct = !!ph.phaseForkCursorTrack;
-			html += `<div class="prow" style="border-top:1px solid var(--border);padding-top:6px"><label style="color:var(--accent2)">Phase Fork Settings</label></div>`;
-			html += `<div class="prow"><label>Fork Delay: ${pfd.toFixed(1)}s</label>
-				<div class="range-row">
-					<input type="range" min="0" max="5" step="0.1" value="${pfd}" data-idx="${idx}" data-prop="phaseForkDelay"/>
-					<span class="range-val">${pfd.toFixed(1)}</span>
-				</div></div>`;
-			html += `<div class="prow"><label>Repeat Casts: ${pfr}</label>
-				<div class="range-row">
-					<input type="range" min="1" max="25" step="1" value="${pfr}" data-idx="${idx}" data-prop="phaseForkRepeats"/>
-					<span class="range-val">${pfr}</span>
-				</div></div>`;
-			html += `<div class="prow"><label style="display:flex;align-items:center;gap:6px"><input type="checkbox" data-idx="${idx}" data-prop="phaseForkCursorTrack" ${pfct?'checked':''}/> Cursor Tracking <span style="font-size:.8em;color:#ff9">(−15% fork damage)</span></label></div>`;
-		}
-
-		// random delay settings
-		if(ph.effects.includes('randomDelay')){
-			const rdMax = ph.randomDelayMax != null ? ph.randomDelayMax : 0.5;
-			html += `<div class="prow" style="border-top:1px solid var(--border);padding-top:6px"><label style="color:var(--accent2)">Random Delay Settings</label></div>`;
-			html += `<div class="prow"><label>Max Delay: ${rdMax.toFixed(1)}s</label>
-				<div class="range-row">
-					<input type="range" min="0.1" max="3" step="0.1" value="${rdMax}" data-idx="${idx}" data-prop="randomDelayMax"/>
-					<span class="range-val">${rdMax.toFixed(1)}</span>
-				</div></div>`;
-		}
-		// even delay settings
-		if(ph.effects.includes('evenDelay')){
-			const edDur = ph.evenDelayDuration != null ? ph.evenDelayDuration : 0.5;
-			html += `<div class="prow" style="border-top:1px solid var(--border);padding-top:6px"><label style="color:var(--accent2)">Even Delay Settings</label></div>`;
-			html += `<div class="prow"><label>Total Duration: ${edDur.toFixed(1)}s</label>
-				<div class="range-row">
-					<input type="range" min="0.1" max="3" step="0.1" value="${edDur}" data-idx="${idx}" data-prop="evenDelayDuration"/>
-					<span class="range-val">${edDur.toFixed(1)}</span>
-				</div></div>`;
-		}
-		} // end if(!isDomainPhase) for effects
-
-		// color (available for all phases including domain)
-		html += `<div class="prow"><label>Color</label>
-			<input type="color" value="${ph.color}" data-idx="${idx}" data-prop="color"/></div>`;
-
-		// These options don't apply to domain phase 1
-		if(!isDomainPhase){
-		// noHit toggle — spell doesn't damage enemies/players
-		html += `<div class="prow"><label>No Hit (Harmless)</label><select data-idx="${idx}" data-prop="noHit">
-			<option value="false" ${!ph.noHit?'selected':''}>Off — deals damage normally</option>
-			<option value="true" ${ph.noHit?'selected':''}>On — visual only, no damage</option>
-		</select></div>`;
-
-		// holdDown toggle — only available on phase 1 (prevents hold breaking multi-phase logic)
-		if(idx === 0){
-			html += `<div class="prow"><label>Hold Down</label><select data-idx="${idx}" data-prop="holdDown">
-				<option value="false" ${!ph.holdDown?'selected':''}>Off — fires immediately</option>
-				<option value="true" ${ph.holdDown?'selected':''}>On — hold before throwing</option>
-			</select></div>`;
-		} else {
-			html += `<div class="prow" style="opacity:0.45"><label>Hold Down</label><span style="font-size:0.82em;color:var(--muted)">Hold only available on Phase 1</span></div>`;
-		}
-
-		// trail
-		html += `<div class="prow"><label>Trail</label><select data-idx="${idx}" data-prop="trail">`;
-		for(const t of TRAILS){
-			html += `<option value="${t}" ${ph.trail===t?'selected':''}>${t.charAt(0).toUpperCase()+t.slice(1)}</option>`;
-		}
-		html += `</select></div>`;
-
-		// after-hit effect
-		html += `<div class="prow"><label>After-Hit Effect</label><select data-idx="${idx}" data-prop="afterHitEffect">`;
-		for(const [k,v] of Object.entries(AFTER_HIT_EFFECTS)){
-			const sel = (ph.afterHitEffect||'none')===k ? 'selected' : '';
-			html += `<option value="${k}" ${sel}>${v.icon} ${v.label}</option>`;
-		}
-		html += `</select></div>`;
-
-		// polygon-specific settings
-		if(ph.shape === 'polygon'){
-			if(!ph.polygonSides) ph.polygonSides = 6;
-			html += `<div class="prow" style="border-top:1px solid var(--border);padding-top:6px"><label style="color:var(--accent2)">Polygon Settings</label></div>`;
-			html += `<div class="prow"><label>Sides: ${ph.polygonSides}</label>
-				<div class="range-row">
-					<input type="range" min="3" max="12" step="1" value="${ph.polygonSides}" data-idx="${idx}" data-prop="polygonSides"/>
-					<span class="range-val">${ph.polygonSides}</span>
-				</div></div>`;
-		}
-
-		// vortex-specific settings
-		if(ph.shape === 'vortex'){
-			const vDur = ph.vortexDuration != null ? ph.vortexDuration : 1;
-			html += `<div class="prow" style="border-top:1px solid var(--border);padding-top:6px"><label style="color:var(--accent2)">Vortex Settings</label></div>`;
-			html += `<div class="prow"><label>Duration: ${vDur.toFixed(1)}x</label>
-				<div class="range-row">
-					<input type="range" min="0.5" max="4" step="0.5" value="${vDur}" data-idx="${idx}" data-prop="vortexDuration"/>
-					<span class="range-val">${vDur.toFixed(1)}x</span>
-				</div></div>`;
-		}
-		} // end if(!isDomainPhase) for noHit/trail/etc
-
-		// next trigger (not for last phase)
-		if(!isLast){
-			html += `<div class="prow" style="border-top:1px solid var(--border);padding-top:6px"><label>Trigger Next Phase</label><select data-idx="${idx}" data-prop="nextTrigger">`;
-			for(const [k,v] of Object.entries(TRIGGERS)){
-				html += `<option value="${k}" ${ph.nextTrigger===k?'selected':''}>${v.label}</option>`;
-			}
-			html += `</select></div>`;
-			// afterHitDelay: show delay slider
-			if(ph.nextTrigger === 'afterHitDelay'){
-				if(ph.nextTriggerDelay == null) ph.nextTriggerDelay = 0.5;
-				html += `<div class="prow"><label>Hit Delay: ${ph.nextTriggerDelay.toFixed(1)}s</label>
-					<div class="range-row">
-						<input type="range" min="0.1" max="4" step="0.1" value="${ph.nextTriggerDelay}" data-idx="${idx}" data-prop="nextTriggerDelay"/>
-						<span class="range-val">${ph.nextTriggerDelay.toFixed(1)}s</span>
-					</div></div>`;
-			}
-			// arrow between phases
-			html += `<div class="arrow-between">→</div>`;
-		}
-
-		card.innerHTML = html;
-		wrap.appendChild(card);
-	});
-
-	// wire up events in phase cards
-	wrap.querySelectorAll('.remove-phase').forEach(btn => {
-		btn.addEventListener('click', () => {
-			builderSpell.phases.splice(+btn.dataset.idx, 1);
-			renderBuilder();
-		});
-	});
-	wrap.querySelectorAll('select[data-prop], input[type=color][data-prop]').forEach(el => {
-		el.addEventListener('change', () => {
-			const prop = el.dataset.prop;
-			let val = el.value;
-			if(val === 'true') val = true;
-			else if(val === 'false') val = false;
-			const ph = builderSpell.phases[+el.dataset.idx];
-			if(prop.includes('.')){const [obj,key]=prop.split('.');if(!ph[obj])ph[obj]={};ph[obj][key]=val;}
-			else ph[prop] = val;
-			renderBuilder();
-		});
-	});
-	wrap.querySelectorAll('input[type=checkbox][data-prop]').forEach(el => {
-		el.addEventListener('change', () => {
-			const prop = el.dataset.prop;
-			const ph = builderSpell.phases[+el.dataset.idx];
-			if(prop.includes('.')){const [obj,key]=prop.split('.');if(!ph[obj])ph[obj]={};ph[obj][key]=el.checked;}
-			else ph[prop] = el.checked;
-			renderBuilder();
-		});
-	});
-	wrap.querySelectorAll('input[type=range][data-prop]').forEach(el => {
-		el.addEventListener('input', () => {
-			const val = parseFloat(el.value);
-			const prop = el.dataset.prop;
-			const ph = builderSpell.phases[+el.dataset.idx];
-			if (prop === 'aroundSelfCount' || prop === 'aroundSelfRadius' || prop === 'rainHeight' || prop === 'barrageHeight' || prop === 'polygonSides') {
-				ph[prop] = Math.round(val);
-				renderBuilder(); return;
-			}
-			if(prop.includes('.')){const [obj,key]=prop.split('.');if(!ph[obj])ph[obj]={};ph[obj][key]=Math.round(val);renderBuilder();return;}
-			ph[prop] = val;
-			const row = el.closest('.prow');
-			const valSpan = row.querySelector('.range-val');
-			if(valSpan) valSpan.textContent = val.toFixed ? val.toFixed(1) : val;
-			const lbl = row.querySelector('label');
-			if(lbl){
-				const prop = el.dataset.prop;
-				const niceLabel = prop.charAt(0).toUpperCase() + prop.slice(1).replace(/([A-Z])/g,' $1');
-				lbl.textContent = `${niceLabel}: ${typeof val==='number'&&val%1!==0?val.toFixed(1):val}${prop.includes('uration')?'s':prop==='spread'?'°':''}`;
-			}
-			updateBuilderMeta();
-		});
-	});
-	wrap.querySelectorAll('input[type=number][data-prop]').forEach(el => {
-		el.addEventListener('change', () => {
-			const _cMax = (editingSlot === 9) ? 200 : 50;
-			builderSpell.phases[+el.dataset.idx][el.dataset.prop] = Math.max(1,Math.min(_cMax,+el.value));
-			renderBuilder();
-		});
-	});
-	wrap.querySelectorAll('.fx-chip').forEach(el => {
-		el.addEventListener('click', () => {
-			if(el.classList.contains('blocked')) return;
-			const ph = builderSpell.phases[+el.dataset.idx];
-			const fx = el.dataset.fx;
-			const i = ph.effects.indexOf(fx);
-			if(i >= 0){
-				ph.effects.splice(i,1);
-			} else {
-				const cat = EFFECTS[fx]?.category;
-				if(cat && EFFECT_CATEGORIES[cat]?.exclusive){
-					for(const [k2,v2] of Object.entries(EFFECTS)){
-						if(v2.category===cat && k2!==fx){
-							const j = ph.effects.indexOf(k2);
-							if(j>=0) ph.effects.splice(j,1);
-						}
-					}
-				}
-				ph.effects.push(fx);
-			}
-			renderBuilder();
-		});
-	});
-}
-
-function updateBuilderMeta(){
-	const stats = computeStats();
-	const cost = displayedSpellMana(builderSpell, inventoryManaOpts(editingSlot, builderSpell));
-	const discMult = spellManaDiscountMult(inventoryManaOpts(editingSlot, builderSpell));
-	const totalDiscountPct = Math.round((1 - discMult) * 100);
-	const req  = calcSpellControlReq(builderSpell);
-	const canUse = stats.magicControl >= req;
-	const meta = document.getElementById('spellMeta');
-	const chips = meta.querySelectorAll('.meta-chip, .nb-chip');
-	if(chips[0]) chips[0].innerHTML = `Mana <b style="color:var(--blue)">${cost}</b>${totalDiscountPct > 0 ? ` <span style="color:var(--green);font-size:.85em">(-${totalDiscountPct}%)</span>` : ''}`;
-	if(chips[1]) chips[1].innerHTML = `Control <b style="color:${canUse?'var(--green)':'var(--red)'}">${req}</b> / ${stats.magicControl}`;
-	if(chips[2]) chips[2].innerHTML = `Phases <b>${builderSpell.phases.length}</b>`;
-	const desc = document.getElementById('spellDesc');
-	if(desc) desc.textContent = generateSpellDescription(builderSpell);
 }
 
 /* =============================================================
    SPELL DESCRIPTION GENERATOR
    ============================================================= */
 function generateSpellDescription(spell){
-	if(!spell || !spell.phases.length) return 'Empty spell.';
+	if(spell && typeof MagicEngine !== 'undefined' && MagicEngine.isMagicSpell(spell)){
+		const n = Object.keys(spell.nodes).length;
+		const r = spell.nodes[spell.rootId], R = r && MagicEngine.Runes[r.type];
+		return 'Rune spell — ' + n + ' rune' + (n === 1 ? '' : 's') + (R ? ', begins with ' + R.name : '') + '.';
+	}
+	if(!spell || !spell.phases || !spell.phases.length) return 'Empty spell.';
 	const parts = [];
 	spell.phases.forEach((ph, i) => {
 		const shape = SHAPES[ph.shape]?.label || ph.shape;
@@ -5773,14 +5380,17 @@ document.getElementById('craftFilter').addEventListener('change', e => {
 });
 
 document.getElementById('testBtn').addEventListener('click', () => {
-	// Clear inventory (not spells)
 	STATE.inventory = [];
 	STATE.equipment = { staff:null, robe:null, relic1:null, relic2:null };
-	// Give one of every item in ITEM_DB (ingredients get extra for crafting)
-	for (const [id, item] of Object.entries(ITEM_DB)) {
-		if(id === 'player_scroll') continue;
-		const qty = item.type === 'ingredient' ? 50 : (id === 'blank_scroll' ? 5 : 1);
-		STATE.inventory.push({ itemId: id, qty });
+	if(typeof GearSystem !== 'undefined'){
+		for(const inst of GearSystem.allBaseGearInstances()){
+			STATE.inventory.push(inst);
+			GearSystem.discover(STATE, inst);
+		}
+		for(const g of GearSystem.allGemEntries()){
+			STATE.inventory.push(g);
+			GearSystem.discoverGem(STATE, g.itemId, g.quality || 'perfect');
+		}
 	}
 	saveState();
 	renderAll();
@@ -5790,7 +5400,6 @@ document.getElementById('testBtn').addEventListener('click', () => {
 document.addEventListener('keydown', e => {
 	if(e.key === 'Escape'){
 		if(document.getElementById('scrollModal') && document.getElementById('scrollModal').classList.contains('open')){ closeScrollPicker(); return; }
-		if(document.getElementById('spellModal').classList.contains('open')) closeSpellBuilder();
 	}
 });
 
