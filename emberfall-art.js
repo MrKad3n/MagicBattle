@@ -6,7 +6,7 @@
 (function (global) {
 	'use strict';
 
-	const V = 'v=2';
+	const V = 'v=3';
 	const IMG = {};
 	function img(path) {
 		if (!IMG[path]) {

@@ -1014,6 +1014,7 @@
 	function paramControl(n, p, setter){
 		const setV = setter || (v => { n.params[p.key] = v; });
 		const wrap = h('div', 'mf-field');
+		wrap.dataset.key = p.key;      // the tutorial coach points at fields by key
 		const val = n.params[p.key];
 		const top = h('div', 'mf-field-top');
 		top.innerHTML = '<label>' + esc(p.label) + '</label>';
@@ -1117,6 +1118,7 @@
 			const grid = h('div', 'mf-shapes');
 			for(const o of paramOptionsOf(p, n.params)){
 				const b = h('button', 'mf-shape' + (val === o.value ? ' on' : '') + (o.value === 'custom' ? ' mf-shape-own' : ''));
+				b.dataset.v = o.value;
 				b.title = o.value === 'custom' ? 'Draw your own shape (brush, eraser, and shapes you can drag in, stretch and turn)' : o.label;
 				b.innerHTML = (o.value === 'custom' ? customIcon(n.params.poly) : shapeIcon(o.value)) + '<span>' + esc(o.label.replace('Keep current shape', 'Keep').replace('Crescent ', '').replace('Your own shape', 'Draw your own')) + '</span>';
 				b.addEventListener('click', () => {
@@ -1160,6 +1162,7 @@
 				const seg = h('div', 'mf-seg');
 				for(const o of opts){
 					const b = h('button', String(val) === String(o.value) ? 'on' : '', esc(o.label));
+					b.dataset.v = o.value;
 					b.addEventListener('click', () => { pushUndo(); n.params[p.key] = o.value; markDirty(); refresh(); });
 					seg.appendChild(b);
 				}
@@ -1305,7 +1308,7 @@
 			const s = h('select', 'mf-select');
 			for(const id in ME.Conditions){ const c = ME.Conditions[id]; const op = h('option', null, esc(c.name)); op.value = id; if(id === l.cond.type) op.selected = true; s.appendChild(op); }
 			s.addEventListener('change', () => { pushUndo(); l.cond.type = s.value; l.cond.params = ME.condDefaults(s.value); markDirty(); refresh(); });
-			const f = h('div', 'mf-field'); f.innerHTML = '<div class="mf-field-top"><label>Wait until</label></div>'; f.appendChild(s);
+			const f = h('div', 'mf-field'); f.dataset.key = 'cond'; f.innerHTML = '<div class="mf-field-top"><label>Wait until</label></div>'; f.appendChild(s);
 			box.appendChild(f);
 			const cd = ME.Conditions[l.cond.type];
 			if(cd){
@@ -1588,9 +1591,11 @@
 			for(const t of list){
 				const pts = mp.allocations[t.id] || 0;
 				const row = h('div', 'mf-tech-row');
+				row.dataset.tech = t.id;
 				row.innerHTML = '<span class="nm" style="color:' + t.color + '">' + esc(t.name) + '</span><span class="mf-tech-pts">' + [0,1,2,3].map(i => '<i class="' + (i < pts ? 'on' : '') + '"></i>').join('') + '</span>'
 					+ '<small style="color:var(--mf-dim);width:92px">pow ×' + ME.Techniques.power(pts).toFixed(2) + '<br>eff ' + Math.round(ME.Techniques.efficiency(pts) * 100) + '%</small>';
 				const minus = h('button', 'mf-btn', '−'), plus = h('button', 'mf-btn', '+');
+				minus.classList.add('tp-minus'); plus.classList.add('tp-plus');
 				minus.addEventListener('click', () => { if(pts > 0){ mp.allocations[t.id] = pts - 1; changed(); } });
 				plus.addEventListener('click', () => {
 					const invested = Object.keys(mp.allocations).filter(k => mp.allocations[k] > 0);
@@ -1929,5 +1934,7 @@
 		S.els.dbg.textContent = lines.join('\n');
 	}
 
-	root.MagicForge = { open, close: () => close(), isOpen: () => !!S, _state: () => S };
+	root.MagicForge = { open, close: () => close(), isOpen: () => !!S, _state: () => S,
+		/* bring a rune (by node id) into view — used by the tutorial coach when what it points at is off screen */
+		reveal: (id) => { if(S && S.def.nodes[id]) centerOn(id); } };
 })(window);

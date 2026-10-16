@@ -2,11 +2,17 @@
    as the Western Approach and the King's North Road, each ~22000 px long, joined at the grid's crossings by
    fingerpost junctions (press L to turn onto the other road, exactly like the J6 crossroads).
 
-     I6–I5  The Upper Millstream    80000 – 102000   x = north     (emberfall-layout-millstream.js)
-     I5–I4  The Pineward Rise      104000 – 126000   x = north     (emberfall-layout-pineward.js)
-     I5–J5  The Frostline Causeway 128000 – 150000   x = east      (emberfall-layout-causeway.js)
-     J5–J4  The Northwatch Pass    152000 – 174000   x = north     (emberfall-layout-northpass.js)
-     I4–J4  The Highland Traverse  176000 – 198000   x = east      (emberfall-layout-traverse.js)
+     J5–J4  The Northwatch Pass     78000 – 100000   x = north     (emberfall-layout-northpass.js)
+     I6–I5  The Upper Millstream   102000 – 124000   x = north     (emberfall-layout-millstream.js)
+     I5–I4  The Pineward Rise      124000 – 146000   x = north     (emberfall-layout-pineward.js)
+     I5–J5  The Frostline Causeway 148000 – 170000   x = east      (emberfall-layout-causeway.js)
+     I4–J4  The Highland Traverse  172000 – 194000   x = east      (emberfall-layout-traverse.js)
+
+   Roads that carry straight on along the same grid line are one continuous stretch of ground with no
+   transition (c57), just like the Western Approach running into the city at J6:
+     J6 → J5 → J4   the King's North Road runs straight into the Northwatch Pass (seam at 78000)
+     I6 → I5 → I4   the Upper Millstream runs straight into the Pineward Rise (seam at 124000)
+   Only turns onto a road in another direction use a fingerpost (press L).
 
    Junction heights and climates match on both sides, so turning at a crossing never drops you somewhere else:
      I6  B−120   meadow          (Western Approach start ↔ Millstream start)
@@ -24,17 +30,17 @@
 	/* the junction points (x where you arrive, facing) */
 	const J = {
 		I6_west: { x: 360, face: 1 },             // Western Approach start (Valedorn Fields)
-		I6_mill: { x: 80760, face: 1 },           // Millstream start
-		I5_mill: { x: 101060, face: -1 },         // Millstream end
-		I5_pine: { x: 104760, face: 1 },          // Pineward start
-		I5_cause: { x: 128760, face: 1 },         // Causeway start (west end)
-		I4_pine: { x: 125060, face: -1 },         // Pineward end
-		I4_trav: { x: 176760, face: 1 },          // Traverse start (west end)
-		J5_north: { x: 76560, face: -1 },         // King's North Road end (the shrine)
-		J5_cause: { x: 149060, face: -1 },        // Causeway end (east end)
-		J5_pass: { x: 152760, face: 1 },          // Northwatch Pass start
-		J4_pass: { x: 173060, face: -1 },         // Northwatch Pass end
-		J4_trav: { x: 197060, face: -1 }          // Traverse end (east end)
+		I6_mill: { x: 102760, face: 1 },          // Millstream start
+		I5_mill: { x: 122300, face: -1 },         // the I5 crossroads on the Millstream/Pineward road, heading south
+		I5_pine: { x: 122300, face: 1 },          // … heading north
+		I5_cause: { x: 148760, face: 1 },         // Causeway start (west end)
+		I4_pine: { x: 145060, face: -1 },         // Pineward end
+		I4_trav: { x: 172760, face: 1 },          // Traverse start (west end)
+		J5_north: { x: 76560, face: -1 },         // the J5 shrine on the North Road/Northwatch road, heading south
+		J5_pass: { x: 76560, face: 1 },           // … heading north
+		J5_cause: { x: 169060, face: -1 },        // Causeway end (east end)
+		J4_pass: { x: 99060, face: -1 },          // Northwatch Pass end
+		J4_trav: { x: 193060, face: -1 }          // Traverse end (east end)
 	};
 
 	function drawMouth(ctx, cam, x, y, v, t) {
@@ -149,18 +155,28 @@
 		};
 		const kit = Object.assign({}, K, {
 			F, J, talk,
-			region(id, x0, name, grid) {
+			region(id, x0, name, grid, o) {
+				o = o || {};
 				const r = { id, x0, x1: x0 + 22000, name, grid, start: x0 + 900 };
 				W.regions.push(r);
-				W.walls.push(x0 + 260, x0 + 21740);
+				if (!o.openStart) W.walls.push(x0 + 260);
+				if (!o.openEnd) W.walls.push(x0 + 21740);
 				return r;
 			},
 			/* mountain shoulders closing both ends of a segment (a wall you cannot climb) */
-			ends(x0, yStart, yEnd) {
-				E.ground([[x0, B - 2700], [x0 + 300, B - 2700], [x0 + 560, yStart, 'l'], [x0 + 620, yStart]]);
-				E.ground([[x0 + 21380, yEnd], [x0 + 21440, yEnd], [x0 + 21700, B - 2700, 'l'], [x0 + 22000, B - 2700]]);
-				E.rockBody(x0, x0 + 600);
-				E.rockBody(x0 + 21400, x0 + 22000);
+			ends(x0, yStart, yEnd, o) {
+				// an open end runs on, level, into the next road on the same line (no wall, no transition)
+				o = o || {};
+				if (o.openStart) E.ground([[x0, yStart], [x0 + 620, yStart]]);
+				else {
+					E.ground([[x0, B - 2700], [x0 + 300, B - 2700], [x0 + 560, yStart, 'l'], [x0 + 620, yStart]]);
+					E.rockBody(x0, x0 + 600);
+				}
+				if (o.openEnd) E.ground([[x0 + 21380, yEnd], [x0 + 22000, yEnd]]);
+				else {
+					E.ground([[x0 + 21380, yEnd], [x0 + 21440, yEnd], [x0 + 21700, B - 2700, 'l'], [x0 + 22000, B - 2700]]);
+					E.rockBody(x0 + 21400, x0 + 22000);
+				}
 			},
 			/* a fingerpost junction: one sign per road leaving it. each = { label, way, to: J.key, point } */
 			junction(x, list, o) {
@@ -243,16 +259,14 @@
 		E.zone(56000, 61000, 'north', 0.02, 0.3);
 		E.zone(61000, 68600, 'north', 0.3, 0.5);
 		E.zone(68600, 74800, 'north', 0.5, 0.85);
-		E.zone(74800, 79000, 'north', 0.95, 1);
+		E.zone(74800, 78000, 'north', 0.95, 1);
 
 		/* ---------------------------------------------------------------- junctions on the old roads */
 		// I6: the Western Approach starts in Valedorn Fields at the hedgerow — the Millstream runs north from here
 		kit.junction(140, [{ label: 'The Upper Millstream', way: 'North', to: 'I6_mill', point: -1 }]);
 		// J5: the shrine at the end of the King's North Road — west along the Frostline, north up the pass
-		kit.junction(75900, [
-			{ label: 'The Frostline Causeway', way: 'West', to: 'J5_cause', point: -1 },
-			{ label: 'The Northwatch Pass', way: 'North', to: 'J5_pass', point: 1 }
-		], { snowy: true });
+		// (the Northwatch Pass carries straight on north from here: no sign needed for it)
+		kit.junction(75900, [{ label: 'The Frostline Causeway', way: 'West', to: 'J5_cause', point: -1 }], { snowy: true });
 		// the shrine's old remark about three roads now comes true
 		E.material(76300, 77700, M.snow);
 

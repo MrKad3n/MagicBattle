@@ -1,4 +1,5 @@
 /* The King's North Road (J6–J5): 56000 – 78000, reached from the crossroads by the city gate (press L).
+   At J5 it runs straight on, with no transition, into the Northwatch Pass (78000 – 100000).
    Rolling farmland → Northwatch hill and tower → the Old Bridge over the deep gorge (broken in the middle) →
    the abandoned farmstead on the high meadow → pine forest and the royal hunter's camp → the cold climb to the
    pass and its shrine, with snow. */
@@ -15,7 +16,7 @@
 			[64180, B + 420], [65480, B + 420, 'l'], [65520, B + 230], [65640, B + 230, 'l'], [65680, B + 40], [65800, B + 40, 'l'],
 			[65840, B - 150], [65960, B - 150, 'l'], [66000, B - 340], [66090, B - 340, 'l'], [66120, B - 480], [66600, B - 480], [67200, B - 560],
 			[68600, B - 560], [69400, B - 440], [70200, B - 500], [71000, B - 500], [72400, B - 700], [73600, B - 820],
-			[74800, B - 960], [76300, B - 1100], [77700, B - 1100], [78000, B - 2600, 'l']
+			[74800, B - 960], [76300, B - 1100], [78000, B - 1100]
 		]);
 		E.rough(57600, 63300, 28, 81);
 		E.rough(66600, 76200, 30, 82);
@@ -29,7 +30,6 @@
 		E.material(74800, 78000, M.snow);
 		E.rockBody(56000, 56800);
 		E.rockBody(63860, 66140);
-		E.rockBody(77600, 78000);
 
 		district(56500, 'King’s North Road');
 		road('banner', 56950, 300);

@@ -76,6 +76,7 @@
 			maxPerOwner: 12, maxGlobal: 48,      // building past your limit crumbles your oldest construct
 			lifeBase: 40, lifePerE: 0.04, lifePerComp: 0.8, lifeMax: 120,      // seconds — constructs are temporary
 			gravity: 0.38, maxSpeed: 18, friction: 0.82,
+			crushRate: 0.25, crushRelease: 1.4, crushWeight: 1.2,      // pinned against terrain: pressure = √mass × (closing speed + weight); the host decides who holds and who is crushed
 			integrityPerE: 1, integrityMin: 6, integrityMax: 6000, reinforceCap: 1.6,
 			conversion: 0.72, conversionPerEff: 0.23,      // material per energy (always under 1: no free material)
 			recoverBase: 0.45, recoverPerEff: 0.25,        // the most a construct can ever give back (a share of its material)
@@ -434,9 +435,10 @@
 		{ value:'constructDestroyed', label:'Its construct was destroyed' },
 		{ value:'constructDismantled', label:'Its construct was dismantled (reverse Construction)' },
 		{ value:'constructEnergyRecovered', label:'Energy was recovered from a construct' },
-		{ value:'constructImpact',    label:'Its construct struck something' }
+		{ value:'constructImpact',    label:'Its construct struck something' },
+		{ value:'constructCrush',     label:'Its construct crushed someone' }
 	];
-	const CONSTRUCT_MEM = { constructCreated:1, constructDamaged:1, constructDestroyed:1, constructDismantled:1, constructEnergyRecovered:1, constructImpact:1 };
+	const CONSTRUCT_MEM = { constructCreated:1, constructDamaged:1, constructDestroyed:1, constructDismantled:1, constructEnergyRecovered:1, constructImpact:1, constructCrush:1 };
 	function remember(b, key, n){ if(!b || b.foreign) return; const m = b.mem || (b.mem = {}); m[key] = (m[key] || 0) + (n == null ? 1 : n); }
 	function memCount(b, key){
 		if(!b || b.foreign) return 0;
@@ -5712,6 +5714,18 @@
 					for(const q of c.wp){ const mm = obbRect(q, ent.x, ent.y, w, h); if(mm && (!m || mm.d > m.d)) m = mm; }
 					if(!m) break;
 					let nx = m.nx, ny = m.ny, d = m.d;
+					// a construct that moved into it this frame pushes it the way it was moving (a falling block lands on your head,
+					// it does not shove you sideways out from under it) — when that way out is short enough to be this frame's motion
+					const mv = Math.hypot(c.dxF || 0, c.dyF || 0);
+					if(mv > 1.5){
+						const ax = Math.abs(c.dyF || 0) >= Math.abs(c.dxF || 0) ? 0 : Math.sign(c.dxF), ay = ax ? 0 : Math.sign(c.dyF);
+						const ahead = ((ent.x + w / 2) - c.x) * ax + ((ent.y + h / 2) - c.y) * ay;      // it is in front of the construct, the way it moves
+						if((ax || ay) && (nx * ax + ny * ay) < 0.55 && ahead > 0){
+							const over = (t) => { for(const q of c.wp) if(obbRect(q, ent.x + ax * t, ent.y + ay * t, w, h)) return true; return false; };
+							const lim = (ax ? w : h) + (ax ? c.bx1 - c.bx0 : c.by1 - c.by0);
+							if(!over(lim)){ let lo = 0, hi = lim; for(let k = 0; k < 8; k++){ const mid = (lo + hi) / 2; if(over(mid)) lo = mid; else hi = mid; } nx = ax; ny = ay; d = hi; }
+						}
+					}
 					// walking into a low edge (a seam between boxes, a small ledge): step up onto it instead of stopping
 					if(Math.abs(nx) > 0.55 && (ent.vy || 0) >= 0){
 						let up = 0;
@@ -5719,9 +5733,29 @@
 						if(up > 0 && up <= 14){ nx = 0; ny = -1; d = up; }
 					}
 					const nxp = ent.x + nx * (d + 0.01), nyp = ent.y + ny * (d + 0.01);
-					if(o.free && !o.free(nxp, nyp, w, h)){ c.ghost.add(ent); break; }      // never push anyone into a wall: let them through instead
-					ent.x = nxp; ent.y = nyp;
+					if(o.free && !o.free(nxp, nyp, w, h)){
+						// pinned: the construct presses it against terrain. Without a crush hook (or with no pressure) it is let through, as before;
+						// with one, it is crushed — or, strong enough, it braces and holds the construct back
+						const r = o.crush ? pinned(c, ent, nx, ny, d, o) : 'ghost';
+						if(r === 'ghost'){ c.ghost.add(ent); break; }
+						res = res || {}; res.crushed = res.crushed || (r === 'crushed' ? c : null); res.braced = res.braced || (r === 'held' ? c : null);
+						if(ny < -0.55){ ent.onGround = true; if(ent.vy > 0) ent.vy = 0; }
+						continue;      // the construct was put back off it: look again
+					}
+					// sideways, a deep overlap (it was left under a construct, or one settled over it) slides it out over a few frames
+					if(Math.abs(nx) > 0.55 && d > 12){ d = 12; }
+					if(c._crush && c._crush.has(ent)) c._crush.delete(ent);
+					ent.x += nx * (d + 0.01); ent.y += ny * (d + 0.01);
 					res = res || {};
+					// a moving construct carries what it shoves: it takes on the construct's motion (natural pushing, not just a nudge out)
+					if(c.dxF || c.dyF){
+						const along = c.dxF * nx + c.dyF * ny;
+						if(along > 0.2){
+							if(Math.abs(nx) > 0.55 && 'vx' in ent){ const want = c.dxF; if(Math.abs(ent.vx || 0) < Math.abs(want) || (ent.vx || 0) * want < 0) ent.vx = want; }
+							if(ny < -0.55 && c.dyF < 0 && 'vy' in ent) ent.vy = Math.min(ent.vy || 0, c.dyF);
+							if(o.shove && along > 3) o.shove(ent, c.dxF, c.dyF, c);
+						}
+					}
 					if(ny < -0.55){
 						if(ent.vy > 0) ent.vy = 0;
 						ent.onGround = true; res.ground = c;
@@ -5745,6 +5779,43 @@
 			}
 			return res;
 		};
+		/* a creature pinned between a construct and terrain. Pressure = √mass × (how fast it closes in + its weight when it lies on top).
+		   The host's crush(ent, pressure, c, info) answers 'held' (it braces: the construct is pushed back off it and stopped),
+		   'crushed' (it takes damage, at its own rate, and stays pinned) or 'ghost' (let it slip through). After crushRelease seconds
+		   pinned it slips free anyway, so nobody is ever trapped for good. */
+		function pinned(c, ent, nx, ny, d, o){
+			const closing = Math.max(0, (c.dxF || 0) * nx + (c.dyF || 0) * ny);
+			const onTop = ny > 0.55 && (movable(c) || (c.core && c.core.alive));
+			const weight = onTop ? CC.crushWeight * Math.max(0, c.gMul == null ? 1 : c.gMul) : 0;
+			const P = Math.sqrt(Math.max(1, c.mass)) * (closing + weight);
+			if(P < 1){ return 'ghost'; }
+			c._crush = c._crush || new Map();
+			let st = c._crush.get(ent);
+			if(!st || W.time - st.last > 0.3){ st = { t0: W.time, last: W.time, next: W.time }; c._crush.set(ent, st); }
+			st.last = W.time;
+			if(W.time - st.t0 > CC.crushRelease){ c._crush.delete(ent); return 'ghost'; }
+			let r = 'crushed';
+			if(W.time >= st.next){
+				st.next = W.time + CC.crushRate;
+				try { r = o.crush(ent, P, c, { nx, ny, closing, weight }) || 'crushed'; } catch(e){ r = 'ghost'; }
+				st.r = r;
+			} else r = st.r || 'crushed';
+			if(r === 'crushed' && !st.fx){ st.fx = true; rememberC(c, 'constructCrush'); W.rings.push({ x: ent.x + ent.w / 2, y: ent.y + ent.h / 2, r: 4, max: 30, age: 0, life: 14, color: constructColors(c).mid }); }
+			if(r === 'held' || r === 'crushed'){
+				// the construct rests against it (it does not sink through what it is crushing): pushed back off it, its motion toward it
+				// stopped. Bracing ends the pinning; being crushed goes on (damage every crushRate) until it slips free
+				if(r === 'held') c._crush.delete(ent);
+				if(movable(c) || (c.core && c.core.alive)){
+					c.x -= nx * (d + 0.5); c.y -= ny * (d + 0.5); constructParts(c);
+					const vn = (c.vx || 0) * nx + (c.vy || 0) * ny; if(vn > 0){ c.vx -= vn * nx; c.vy -= vn * ny; }
+					if(c.core && c.core.alive){ c.core.x = c.x; c.core.y = c.y; const kn = (c.core.vx || 0) * nx + (c.core.vy || 0) * ny; if(kn > 0){ c.core.vx -= kn * nx; c.core.vy -= kn * ny; } }
+					if(onTop){ c.onGround = true; }
+					return r;
+				}
+				return 'ghost';
+			}
+			return r;
+		}
 		/* a melee strike (the host passes the attack's box once per frame): each construct is hit once per attack */
 		W.strikeConstructs = function(box, dmg, o){
 			if(!box || !W.constructs.length) return 0;

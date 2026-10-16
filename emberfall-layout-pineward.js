@@ -1,4 +1,4 @@
-/* I5–I4 — The Pineward Rise (104000 – 126000; walking right = north).
+/* I5–I4 — The Pineward Rise (124000 – 146000; walking right = north). It carries straight on from the Upper Millstream.
    The quiet western road toward the Frostmere foothills: an old trade road into the pines with weathered markers,
    Pinewatch Lodge in its clearing (and its locked storeroom), the Broken Milepost and its three stones, the
    forgotten settlement of Hollowmere, the windfall where the wolves hunt, the Barkhide's hollow, the Coldstone Cut
@@ -7,13 +7,13 @@
 	'use strict';
 	(global.EmberfallFrontierSegs = global.EmberfallFrontierSegs || []).push(function (k) {
 		const { E, W, A, B, M, bld, house, tree, bush, road, dress, plat, water, lamp, district, grove, scatter, fence, F, talk } = k;
-		const X = 104000;
+		const X = 124000;
 		const x = (u) => X + u;
-		k.region('pineward', X, 'The Pineward Rise', 'I5 — I4');
+		k.region('pineward', X, 'The Pineward Rise', 'I5 — I4', { openStart: true });
 
 		/* ------------------------------------------------------------ the land */
 		const G = (pts) => E.ground(pts.map(([u, y, m]) => m ? [x(u), B + y, m] : [x(u), B + y]));
-		k.ends(X, B - 520, B - 1300);
+		k.ends(X, B - 520, B - 1300, { openStart: true });
 		G([
 			[620, -520], [1400, -540], [2300, -560],
 			// Pinewatch clearing
@@ -33,8 +33,8 @@
 		E.rough(x(5000), x(7400), 18, 402);
 		E.rough(x(10900), x(13900), 30, 403);
 		E.rough(x(17300), x(19800), 20, 404);
-		E.material(x(600), x(21400), M.meadow);
-		E.material(x(700), x(7400), M.dirt);
+		E.material(x(0), x(21400), M.meadow);
+		E.material(x(0), x(7400), M.dirt);
 		E.material(x(11300), x(13000), M.rock);
 		E.material(x(14400), x(16900), M.dry);
 		E.material(x(17200), x(21400), M.rock);
@@ -46,13 +46,10 @@
 
 		/* ------------------------------------------------------------ I5: the trade road */
 		district(x(600), 'The Old Trade Road');
-		k.junction(x(640), [
-			{ label: 'The Upper Millstream', way: 'South', to: 'I5_mill', point: -1 },
-			{ label: 'The Frostline Causeway', way: 'East', to: 'I5_cause', point: 1 }
-		]);
-		grove(x(620), x(7600), 190, ['pine0', 'pine1', 'pine2', 'spruce0', 'spruce1'], 460, 660, 601, { layer: 'back' });
+		// the I5 fingerpost (east to the Causeway) stands by the shrine just behind you; this road runs straight on
+		grove(x(-300), x(7600), 190, ['pine0', 'pine1', 'pine2', 'spruce0', 'spruce1'], 460, 660, 601, { layer: 'back' });
 		grove(x(1200), x(2300), 340, ['pine1', 'spruce0', 'birch1'], 480, 620, 602);
-		scatter(x(620), x(7600), 150, ['fern0', 'fern1', 'bush2', 'rock1', 'heather0'], 50, 100, 603);
+		scatter(x(0), x(7600), 150, ['fern0', 'fern1', 'bush2', 'rock1', 'heather0'], 50, 100, 603);
 		// old stone markers along the road
 		for (const [u, g] of [[1500, 'ᚱ'], [4900, 'ᛉ']]) {
 			bld('marker', x(u), { w: 80, h: 140, seed: u, stones: [{ x: 40, w: 46, h: 120, lean: 0.03, glyph: g }] }, { key: 'pwmark' + u });

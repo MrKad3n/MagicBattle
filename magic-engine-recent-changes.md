@@ -2345,9 +2345,127 @@ A gust used to add speed every frame, so a jump carried you much too far. Now:
   - World map: the five new map lines are clickable.
 - **Cache-busters:** emberfall-art v3 (assets v=2), world/layout/north/interiors/life v2, city v43, the new frontier, layout and foe files v1.
 
+## c56 — Dungeons in the open world's art, and an N map
+
+- **The Fire, Ice and Earth dungeons now use EmberFall's art** (`dungeon-skin.js`). Collision and the tile grid are unchanged; only the look is new.
+  - **Rock:**
+    - Painted in 1024 px chunks from the open world's textures: rockface for Fire and Earth, rockface-cold for Ice.
+    - Edges come out rounded and rough instead of square.
+    - The rock darkens with depth, has a lit rim on top and a shadow underneath.
+    - Each theme has its own veins: molten cracks that pulse in Fire, pale frost veins in Ice, faint glowing lichen in Earth.
+  - **Floors:** every floor carries a surface strip, like the open world's grass: ash with embers (Fire), drifted snow (Ice), cave moss (Earth).
+  - **Props:**
+    - Painted flora stands on floors and hangs from ceilings:
+      - Fire: basalt, ember crystals, charred trees, dripstones;
+      - Ice: ice crystals, snowy rocks, dead trees, icicles;
+      - Earth: ferns, mushrooms, green crystals, roots and vines.
+    - Glowing props add light to DungeonVision.
+    - New props come from `tools/ef_dungeon.py`.
+  - **Platforms:**
+    - Stamped platforms show as the same rock.
+    - Moving platforms are rock slabs with the floor strip; rafts are lashed logs, ice floes or basalt.
+    - Collapsing, thin-ice and growing platforms keep their kit art, so their warnings still read.
+  - **Cave wall:** the deeprock texture with slight parallax, tinted per theme.
+  - **Turning it off:** `?skin=0`, or `DungeonSkin.setEnabled(false)`, switches back to the old look.
+  - **Fix:** a float rounding loop in the floor-strip tiling could freeze the page; it is fixed.
+  - **Performance:** in headless tests, about 30 fps with the skin against 34–36 without. The backdrop is pre-tinted into a seamless tile.
+- **Press N for a map of where you are** (`where-map.js`). It uses the main menu's coordinate grid, A–S by 1–13, over the coordinate map.
+  - **Open world:** every EmberFall road is drawn on the map. The road you're on is highlighted, with a "You are here" marker placed by how far along it you are. The heading names the road, its two grid points, the nearest grid point, and the district or the room you're in.
+  - **Dungeons and other places:** the marker sits on the place the dungeon lies under (Cinderwatch, Aurorafall, the Sylvaris Wildes…), with how deep and how far across you are.
+  - **Closing and pausing:** N or Esc closes it. The game pauses while it's open, except in co-op.
+  - The controls line now shows "N — Map".
+- **Cache-busters:** emberfall-art v4 (assets v=3), fire-art v16, ice-art v7, jungle-art v3, ice-world v15, dungeon-skin v1, where-map v2, tutorials v2, tutorial-coach v1, emberfall-frontier v2, frontier layouts v2 (north v3).
+
+## c57 — Straight roads without transitions, tutorials, Story Mode 1 removed
+
+- **Roads that carry straight on are now one continuous road.** Before, you had to press L at the end of a road even when the next road continued in the same direction. Now you only press L to turn, just like at J6, where the Western Approach runs straight into the city.
+  - **J6 → J5 → J4:** the King's North Road runs straight into the Northwatch Pass at the J5 shrine.
+  - **I6 → I5 → I4:** the Upper Millstream runs straight into the Pineward Rise at I5.
+  - **At the crossroads:** the mountain walls and the "straight on" fingerposts are gone. One fingerpost stays at each crossroads for the turn: at I5 east to the Causeway, at J5 west to the Causeway.
+  - **Arriving from the Causeway:** turning onto either J5 road puts you at the J5 shrine facing the right way; turning onto either I5 road puts you at the I5 crossroads. Height and climate match, as before.
+  - **New world positions:**
+
+    | Road | x |
+    | --- | --- |
+    | Northwatch Pass | 78000–100000 |
+    | Upper Millstream | 102000–124000 |
+    | Pineward Rise | 124000–146000 |
+    | Frostline Causeway | 148000–170000 |
+    | Highland Traverse | 172000–194000 |
+
+    The seams are dressed with snow and pines, so they don't show.
+  - **Updated to match:** the junction table, the N map (`where-map.js` ROADS) and the grid-map links.
+- **🎓 Tutorials** (`tutorials.js`), a new tab in the inventory. A **🎓 Tutorials** button sits on the main menu's Inventory card, and `inventory.html?tab=tutorials&t=<id>` opens a single guide.
+  - **29 illustrated guides in seven groups:**
+    - Getting started: welcome, controls, spell slots, stats and rank.
+    - Rune magic: your first spell, the Rune Forge, a rune reference, connectors and conditions, compression and shapes, techniques, zones and Draw Out, passives.
+    - Advanced magic: Anchor and tethers, reinforcement, Domain Expansion, Construction, Infinity.
+    - Combat: melee, engraving and magical items, enemy mages and bosses.
+    - Your mage: gear, vows, classes and loadouts, bestiary and dictionary.
+    - The world: EmberFall, roads, junctions and the N map.
+    - Game modes: dungeons, sandbox and the Mage Arena, PvP, raids.
+  - **What a guide holds:** steps, key tables and tips, with diagrams where they help.
+  - **Finding and tracking:** guides can be searched, previous / next buttons move between them, and read guides get a ✓ (`magicBattle_tutorialsRead`).
+- **Story Mode 1 removed.**
+  - **Main menu:** the Story Mode 1 card is gone. The world map moved into the Map card, which now has **World Map** and **Grid Map** buttons.
+  - **World map:** the "Academy Grounds" location is gone, and EmberFall is labelled City.
+  - **Old links:** `dungeon.html?mode=openworld` now redirects to EmberFall City. The old mode's code is still in the file, but nothing reaches it.
+- **Cache-busters:** emberfall-frontier v2, the layouts north v3 and millstream / pineward / causeway / northpass / traverse v2, where-map v2, tutorials v1.
+
+## c57b — Fix: PvP arena render error
+
+- **The bug:** the Tempest Spires arena threw `Cannot read properties of undefined (reading 'concat')` every frame once its lightning bolts started.
+- **The cause:** c54 added a second function named `floorAt`, for the arena-picker previews, and it replaced the arena's own `floorAt(x)`.
+- **The fix:** the preview helper is now `snapFloorAt`. Tested: all five arenas run in practice without errors.
+- **Cache-buster:** pvp-arena v4.
+
+## c58 — Hands-on guided lessons; constructs that push, crush and never fling you
+
+- **Guided lessons** (`tutorial-coach.js`, plus the 🎓 Tutorials tab). The tutorials now have you *do* things instead of only telling you about them.
+  - **How a step looks:**
+    - A coach card says what to do next.
+    - A glowing ring and a bouncing arrow point at the exact button, rune, connector or setting.
+    - Each step ticks itself off the moment you've done it.
+    - A forge window left open over the next target (Techniques…) is pointed out first, with "press Done".
+  - **Spell lessons:** you build a real spell in the Rune Forge, saved into an empty slot. The coach then takes you to the **Sandbox** to select it and use it on the training dummies. Lessons carry on across pages.
+  - **The ten lessons:**
+    - Moving and fighting;
+    - Your first spell (an arrow);
+    - Timing (a proximity mine with a "Wait until enemy is nearby" connector);
+    - Techniques (a Thermal fire bolt, including investing the Technique Point);
+    - Over-compression (a piercing spear);
+    - Zones (fill a zone from the environment, then draw a shot out of it in a second branch);
+    - Reinforcement (a passive armour on yourself);
+    - Construction (build a platform and stand on it);
+    - Weapons (combo, launcher, special);
+    - Exploring EmberFall (talk, the N map, a building).
+  - **In game:** the ring and arrow point at your hotbar slot and at the nearest training dummy. In the forge, the view pans by itself to a rune that's off screen.
+  - **Controls:** you can Skip a step or Exit a lesson at any time. Finished lessons get a ✓ (`magicBattle_lessonsDone`).
+  - **Reference guides:** they are still there under 📖, and each links to its guided lesson.
+  - **Forge changes:** fields, shape buttons, options and the Techniques rows carry `data-key` / `data-v` / `data-tech` tags so the coach can point at them.
+- **Fix: a construct could throw you to the far end of the map.** This happened in the Colosseum and in other platform worlds.
+  - **The cause:** the construct's "is this spot free" test only sampled five points, so a construct could push you a few pixels into the floor. The floor's sideways collision then threw you out of its *far* side — 3,900 px across the Colosseum.
+  - **The fix:**
+    - The free test is now an exact rectangle check against tiles, platforms and the ground.
+    - A body sunk into a platform is now lifted onto it, or pushed out the shortest way.
+- **Constructs touch people more naturally:**
+  - A construct moving into someone pushes them the way it's moving: a falling block lands on your head instead of popping you out sideways.
+  - Shoved creatures take on the construct's motion, and you ride constructs that lift you.
+  - A deep overlap slides you out over a few frames (at most 12 px a frame) instead of jumping.
+- **Crushing:**
+  - **When it happens:** a construct that pins someone against terrain — falling on them, or driven into them against a wall or the floor — crushes them. This includes you, and it includes your own constructs.
+  - **Pressure:** √mass × (closing speed + its weight when it lies on top).
+  - **What you can bear:** 30 × Defence factor × (1 + 4 × self damage-resist reinforcement + 1.5 × self knockback-resist). Defence counts +6% per point over 8.
+  - **Bracing:** bear it and you brace, and the construct is held up on you. Don't, and you take `(pressure − what you bear) × 0.12` damage every ¼ s, with the construct resting on you.
+  - **Escape:** after 1.4 s pinned you always slip free.
+  - **Enemies:** they bear `20 + 1.5·√maxHP`, and bosses ×3.
+  - **New memory event:** "Its construct crushed someone" (`constructCrush`).
+  - **Tests:** two new engine checks (194 / 194 passing).
+- **Cache-busters:** magic-engine v61, magic-techniques v43, magic-forge v22, tutorials v2, tutorial-coach v1, and pvp-arena v4 is now referenced from dungeon.html.
+
 # Current state (summary of everything above, up to date)
 
-Cache-busters: **magic-engine v60, magic-techniques v42, rune-mages v12, magic-forge v21 (css v9), shape-editor v3, pvp-arena v3, pvp-net v9, gear-data v5, gear-system v10, melee-combat v42, player-rig v4, slot-chooser js v4 / css v3, dungeon-vision v10, emberfall-art v3, emberfall-city v43, emberfall world/layout/interiors/life v2, frontier files v1.**
+Cache-busters: **magic-engine v61, magic-techniques v43, rune-mages v12, magic-forge v22 (css v9), shape-editor v3, pvp-arena v4, pvp-net v9, gear-data v5, gear-system v10, melee-combat v42, player-rig v4, slot-chooser js v4 / css v3, dungeon-vision v10, emberfall-art v4, emberfall-city v43, fire-art v16, ice-art v7, jungle-art v3, ice-world v15, dungeon-skin v1, where-map v1, emberfall world/layout/interiors/life v2, frontier files v1.**
 
 ## Controls
 
@@ -2357,6 +2475,8 @@ Cache-busters: **magic-engine v60, magic-techniques v42, rune-mages v12, magic-f
 | T | The "trigger key" condition |
 | R | Weapon special; on magical items, throw — or hold for the Light / dark beam, or an Anti-Magic / restoring slash |
 | P | Release the magical item you are holding |
+| L | Turn onto another road at a fingerpost (open world) |
+| N | The map: where you are on the world grid |
 | Del / Shift+Del (forge) | Delete branch / delete one rune |
 | ⟲ Reset, ∞ Passive (forge top bar) | Start the spell over / make it a passive spell |
 
@@ -2397,6 +2517,10 @@ Cache-busters: **magic-engine v60, magic-techniques v42, rune-mages v12, magic-f
   - Compress rune cost is `5 + (power − 10) × 0.9` past 10.
 - **Enemy vortex attacks** pull your energy and can turn it against you.
 - **Construction:** energy becomes a solid construct shaped by its Shape (bigger with energy, tougher with compression). It has real collision: you stand on it and ride it, walls block, projectiles and energy break against it, and Light is blocked. It keeps its energy's Anchor state and technique as its material. Integrity and cracks, shattering, lasts 40–120 s. 12 per caster. Drawn as its exact Shape. Rotate turns it. Gravity reinforcement gives it a Gravity core, shown as a pulsing aura: heavier, or lighter / floating. Target that Gravity energy to move, anchor or turn the construct; when moved, it points where it goes unless you've Rotated it. Reverse (*Target → Construct* first) dismantles yours back into raw energy: once, within Max Output, never all of it.
+  - **Contact and crushing (c58):** a moving construct pushes creatures the way it moves.
+  - **Crushing:** pinning someone against terrain crushes them (√mass × (closing speed + weight)).
+    - You bear `30 × Defence factor × (1 + 4·damage-resist + 1.5·knockback-resist reinforcement on yourself)`; creatures bear `20 + 1.5·√maxHP` (bosses ×3).
+    - If you can bear it, you brace and hold the construct up. If not, you take damage every ¼ s, and you always slip free after 1.4 s.
 
 ## Spells
 

@@ -816,6 +816,7 @@
 		for(let i = 0; i < d.platforms.length; i++){
 			const p = d.platforms[i];
 			if(!p || p._gone) continue;
+			if(global.DungeonSkin && DungeonSkin.owns && DungeonSkin.owns(p)) continue;
 			if(p.kind === 'move' || p.kind === 'raft' || p.kind === 'orbit'){
 				drawPlatform(ctx, p);
 			} else if((p.kind === 'collapse' || p.kind === 'pillar') && !p._stamped){

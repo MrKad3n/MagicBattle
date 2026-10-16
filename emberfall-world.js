@@ -7,7 +7,7 @@
 
 	const TS = 40;
 	const BASE = 4600;
-	const WORLD_W = 200000;      // the Western Approach, the city and the North Road (0 – 78000) and the northern frontier (80000 – 198000)
+	const WORLD_W = 200000;      // the Western Approach, the city and the North Road (0 – 78000) and the northern frontier (78000 – 194000)
 	const WORLD_H = 6400;
 	const BEDROCK = WORLD_H - 80;
 	const STEP = 8;

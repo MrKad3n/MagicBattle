@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Magic Battle — Dungeon</title>
 <script>
+/* Story Mode 1 (the Academy Grounds, mode=openworld) was removed in c57: old links land in EmberFall City instead. */
+(function(){ try{ var q = new URLSearchParams(location.search); if(q.get('mode') === 'openworld'){ location.replace('dungeon.html?mode=city'); } }catch(e){} })();
+</script>
+<script>
 /* Reload guard. A live-reload dev server (VS Code Live Server, Five Server, live-server …) reloads the page whenever ANY
    file in the folder changes — and something (Git / GitHub Desktop / OneDrive) keeps rewriting files in this folder
    (only their line endings). While you are playing that looks like the page refreshing at random. Here the server's
@@ -182,7 +186,7 @@ body.ai-chat-open #hud{pointer-events:none;opacity:0.45}
 <div id="versionBadge" style="position:fixed;left:8px;bottom:6px;z-index:99999;font:11px/1.2 monospace;color:rgba(255,255,255,0.5);pointer-events:none;text-shadow:0 1px 2px rgba(0,0,0,0.85);user-select:none;">v1.0.0</div>
 <div id="hud">
 	<div>WASD / Arrows — Move &amp; Jump</div>
-	<div>1-0 — Select Spell / Weapon · Click — Cast / Attack · Shift — Dash · Q — Parry</div>
+	<div>1-0 — Select Spell / Weapon · Click — Cast / Attack · Shift — Dash · Q — Parry · N — Map</div>
 </div>
 <a href="dungeons.html" id="backBtn">← Back</a>
 <div id="dungeonName"></div>
@@ -342,18 +346,18 @@ body.ai-chat-open #hud{pointer-events:none;opacity:0.45}
 <script src="https://js.puter.com/v2/" onload="try{puter.quiet=true}catch(e){}"></script>
 <script src="conversational-npc.js"></script>
 <script src="emberfall-props.js?v=10"></script>
-<script src="emberfall-art.js?v=3"></script>
+<script src="emberfall-art.js?v=4"></script>
 <script src="emberfall-world.js?v=2"></script>
 <script src="emberfall-layout.js?v=2"></script>
 <script src="emberfall-layout-city.js?v=1"></script>
-<script src="emberfall-layout-north.js?v=2"></script>
+<script src="emberfall-layout-north.js?v=3"></script>
 <script src="emberfall-frontier-art.js?v=1"></script>
-<script src="emberfall-frontier.js?v=1"></script>
-<script src="emberfall-layout-millstream.js?v=1"></script>
-<script src="emberfall-layout-pineward.js?v=1"></script>
-<script src="emberfall-layout-causeway.js?v=1"></script>
-<script src="emberfall-layout-northpass.js?v=1"></script>
-<script src="emberfall-layout-traverse.js?v=1"></script>
+<script src="emberfall-frontier.js?v=2"></script>
+<script src="emberfall-layout-millstream.js?v=2"></script>
+<script src="emberfall-layout-pineward.js?v=2"></script>
+<script src="emberfall-layout-causeway.js?v=2"></script>
+<script src="emberfall-layout-northpass.js?v=2"></script>
+<script src="emberfall-layout-traverse.js?v=2"></script>
 <script src="emberfall-foes.js?v=1"></script>
 <script src="emberfall-interiors.js?v=2"></script>
 <script src="emberfall-keep.js?v=1"></script>
@@ -362,22 +366,22 @@ body.ai-chat-open #hud{pointer-events:none;opacity:0.45}
 <script src="npc-profiles.js"></script>
 <script src="scrolls.js?v=2"></script>
 <script src="spell-cost.js?v=14"></script>
-<script src="magic-engine.js?v=60"></script>
-<script src="magic-techniques.js?v=42"></script>
+<script src="magic-engine.js?v=61"></script>
+<script src="magic-techniques.js?v=43"></script>
 <script src="rune-mages.js?v=12"></script>
-<script src="pvp-arena.js?v=3"></script>
+<script src="pvp-arena.js?v=4"></script>
 <script src="gear-data.js?v=5"></script>
 <script src="gear-system.js?v=10"></script>
 <script src="nightmare-system.js?v=1"></script>
 <script src="fire-dungeon-templates.js?v=33"></script>
 <script src="fire-dungeon-world.js?v=55"></script>
-<script src="fire-art.js?v=15"></script>
+<script src="fire-art.js?v=16"></script>
 <script src="ice-dungeon-templates.js?v=11"></script>
 <script src="ice-dungeon-world.js?v=16"></script>
-<script src="ice-art.js?v=6"></script>
+<script src="ice-art.js?v=7"></script>
 <script src="jungle-dungeon-templates.js?v=28"></script>
 <script src="jungle-dungeon-world.js?v=36"></script>
-<script src="jungle-art.js?v=2"></script>
+<script src="jungle-art.js?v=3"></script>
 <script>
 /* =========================================================
    Magic Battle — Unified Spell Battle Engine
@@ -8783,6 +8787,7 @@ function computeTileEdges(){
 	if(typeof FireArt !== 'undefined' && FireArt.invalidateTiles) FireArt.invalidateTiles();
 	if(typeof JungleArt !== 'undefined' && JungleArt.invalidateTiles) JungleArt.invalidateTiles();
 	if(typeof IceArt !== 'undefined' && IceArt.invalidateTiles) IceArt.invalidateTiles();
+	if(typeof DungeonSkin !== 'undefined' && DungeonSkin.invalidate) DungeonSkin.invalidate();
 }
 
 /* =============================================================
@@ -13412,10 +13417,61 @@ function moveEntityTile(ent){
 	if(MAGIC_WORLD && MAGIC_WORLD.constructs && MAGIC_WORLD.constructs.length) magicConstructCollide(ent, px, py);
 }
 function magicConstructFree(x, y, w, h){
-	return !projectilePointBlocked(x + 3, y + 3) && !projectilePointBlocked(x + w - 3, y + 3) && !projectilePointBlocked(x + 3, y + h - 3) && !projectilePointBlocked(x + w - 3, y + h - 3) && !projectilePointBlocked(x + w / 2, y + h / 2);
+	/* is this whole rect clear of terrain? (exact for the tile world and for platform worlds — a few sample points let a
+	   construct shove someone a few pixels into a floor, and the floor then threw them out of its far side) */
+	if(!isFinite(x) || !isFinite(y)) return false;
+	const e = 0.5;
+	if(projectileUsesTileWalls(x + w / 2, y + h / 2) || projectileUsesTileWalls(x + w / 2, y + h - 2)){
+		if(rectOverlapsSolid(x + e, y + e, w - 2 * e, h - 2 * e)) return false;
+	}
+	if(!IS_DUNGEON){
+		if(!IS_SYLVARIS && !IS_OBSERVATORY && !IS_DRAGONGRAVEYARD && !IS_STORMISLANDS && y + h > GROUND_Y + e) return false;
+		for(const plat of sandboxPlatforms){
+			if(plat._gone || plat.oneway || plat._frag || (plat.y === GROUND_Y && !IS_SYLVARIS && !IS_OBSERVATORY && !IS_DRAGONGRAVEYARD && !IS_STORMISLANDS)) continue;
+			if(x + w - e > plat.x && x + e < plat.x + plat.w && y + h - e > plat.y && y + e < plat.y + plat.h) return false;
+		}
+		if(IS_CITY && typeof EmberfallCity !== 'undefined' && EmberfallCity.solidAt){
+			for(const fx of [0.15, 0.5, 0.85]) for(const fy of [0.1, 0.5, 0.95]) if(EmberfallCity.solidAt(x + w * fx, y + h * fy)) return false;
+		}
+	}
+	return true;
+}
+/* Crushing: a construct pinning someone against terrain. Pressure (√mass × closing speed + its weight) against what the
+   creature can bear — for you: your Defence and the magic reinforcing yourself (damage and knockback resistance). Bear it and you
+   brace: the construct is stopped against you. Don't, and you are crushed (damage every quarter second) until you slip free. */
+function magicCrushResist(ent){
+	if(ent === player){
+		const D = (typeof stats !== 'undefined' && stats && isFinite(stats.magicDefence)) ? stats.magicDefence : 8;
+		const def = 1 + Math.max(0, D - 8) * 0.06;
+		const dr = window.magicReinfSelf ? magicReinfSelf('damageResist') : 0, kr = window.magicReinfSelf ? magicReinfSelf('knockbackResist') : 0;
+		return 30 * def * (1 + 4 * dr + 1.5 * kr);
+	}
+	const hp = ent.maxHp || ent.maxHealth || ent.hp || 100;
+	const boss = ent.isBoss || (ent.typeDef && ent.typeDef.isBoss) || ent.bossPhase;
+	return (20 + Math.sqrt(Math.max(1, hp)) * 1.5) * (boss ? 3 : 1);
+}
+function magicConstructCrush(ent, P, c, info){
+	if(!ent || ent.dead) return 'ghost';
+	const R = magicCrushResist(ent);
+	if(P <= R) return 'held';
+	const dmg = Math.max(1, (P - R) * 0.12);
+	if(ent === player){
+		if(typeof health !== 'undefined' && health <= 0) return 'ghost';
+		const wasIF = player.iFrames; player.iFrames = 0;
+		damagePlayer(dmg, []);
+		player.iFrames = Math.max(player.iFrames || 0, Math.min(wasIF || 0, 6));
+		if(!player._crushMsgT || player._crushMsgT < performance.now()){ player._crushMsgT = performance.now() + 2500; if(typeof magicSay === 'function') magicSay('Crushed!', '#ff9d7a'); }
+	} else if(MAGIC_HOST && MAGIC_HOST.damageEnemy){
+		MAGIC_HOST.damageEnemy(ent, dmg, { x: ent.x + ent.w / 2, y: ent.y + ent.h / 2, color: '#d9c8ff', instance: c.inst });
+		ent.stunTimer = Math.max(ent.stunTimer || 0, 10);
+	}
+	return 'crushed';
 }
 function magicConstructCollide(ent, px, py){
-	try { MAGIC_WORLD.collideEntity(ent, px, py, { free: magicConstructFree, enemy: ent !== player && !ent.runeMage }); }
+	try {
+		const r = MAGIC_WORLD.collideEntity(ent, px, py, { free: magicConstructFree, enemy: ent !== player && !ent.runeMage, crush: magicConstructCrush });
+		if(r && r.crushed && ent === player){ player.vx *= 0.3; }
+	}
 	catch(e){ if(typeof window.reportGameError === 'function') window.reportGameError('construct collision', e && e.message, '', null); }
 }
 /* Tilemap collision for an entity — stepped to prevent tunneling */
@@ -13618,8 +13674,19 @@ function moveEntitySandbox(ent){
 				const toLeft = center - plat.x;
 				const toRight = plat.x + plat.w - center;
 				ent.x = toLeft < toRight ? plat.x - ent.w : plat.x + plat.w;
-			} else if(ent.vx > 0){ ent.x = plat.x - ent.w; }
-			else if(ent.vx < 0){ ent.x = plat.x + plat.w; }
+			} else {
+				// how deep it is on each side: a body only a little sunk into the top is lifted onto it, and anything embedded
+				// is pushed out by the shortest way — never thrown out of the far side of a wide platform (that sent the
+				// player across the whole Colosseum when a construct pressed them into the floor)
+				const inL = ent.x + ent.w - plat.x, inR = plat.x + plat.w - ent.x, inT = ent.y + ent.h - plat.y;
+				if(inT > 0 && inT <= 14 && ent.y + ent.h * 0.5 < plat.y + 2){ ent.y = plat.y - ent.h; if(ent.vy > 0) ent.vy = 0; ent.onGround = true; continue; }
+				const step = Math.abs(ent.vx || 0) + Math.abs(ent.launchVx || 0) + 2;
+				if(ent.vx > 0 && inL <= step + 0.5) ent.x = plat.x - ent.w;
+				else if(ent.vx < 0 && inR <= step + 0.5) ent.x = plat.x + plat.w;
+				else if(!ent.vx) continue;      // not moving sideways: the vertical pass deals with it
+				else if(Math.min(inL, inR) <= 120) ent.x = inL < inR ? plat.x - ent.w : plat.x + plat.w;
+				else { ent.y = plat.y - ent.h; if(ent.vy > 0) ent.vy = 0; ent.onGround = true; continue; }
+			}
 			ent.vx = 0;
 			if(ent.launchVx) ent.launchVx = 0;
 		}
@@ -36440,6 +36507,8 @@ function render(){
 				ctx.fill();
 			}
 		}
+	} else if(IS_DUNGEON && typeof DungeonSkin !== 'undefined' && DungeonSkin.drawBackdrop(ctx)){
+		/* the open-world cave wall (dungeon-skin.js) */
 	} else if(typeof DUNGEON_TYPE !== 'undefined' && DUNGEON_TYPE === 'fire' && typeof FireArt !== 'undefined' && FireArt.drawBackdrop){
 		FireArt.drawBackdrop(ctx);
 	} else if(dungeon && dungeon._jungle && typeof JungleArt !== 'undefined' && JungleArt.drawBackdrop){
@@ -36476,7 +36545,9 @@ function render(){
 		// Sea temple tile colors (for Storm Islands tiles past x:13400)
 		const templeCol = IS_STORMISLANDS ? Math.floor(13400 / TILE) : 99999;
 
-		if(DUNGEON_TYPE === 'fire' && typeof FireArt !== 'undefined' && FireArt.drawTiles && FireArt.drawTiles(ctx)){
+		if(IS_DUNGEON && typeof DungeonSkin !== 'undefined' && DungeonSkin.drawTiles(ctx)){
+			/* Rock, floors and props painted with the open world's art (dungeon-skin.js). */
+		} else if(DUNGEON_TYPE === 'fire' && typeof FireArt !== 'undefined' && FireArt.drawTiles && FireArt.drawTiles(ctx)){
 			/* Fire walls/floors come from the cached 80px tileset. */
 		} else if(dungeon && dungeon._jungle && typeof JungleArt !== 'undefined' && JungleArt.drawTiles && JungleArt.drawTiles(ctx)){
 			/* Jungle walls/floors come from the living-wilds tileset. */
@@ -42730,7 +42801,7 @@ function updateDebugPanel(){
 <script src="late-dungeon-kit.js?v=1"></script>
 <script src="advanced-roster-kit.js?v=3"></script>
 <script src="ice-props.js?v=3"></script>
-<script src="ice-world.js?v=14"></script>
+<script src="ice-world.js?v=15"></script>
 <script src="jungle-props.js?v=27"></script>
 <script src="jungle-world.js?v=26"></script>
 <script src="jungle-puzzle-kit.js?v=5"></script>
@@ -42744,6 +42815,9 @@ function updateDebugPanel(){
 <script src="special-rooms.js?v=6"></script>
 <script src="dungeon-env.js?v=55"></script>
 <script src="dungeon-vision.js?v=10"></script>
+<script src="dungeon-skin.js?v=1"></script>
+<script src="where-map.js?v=2"></script>
+<script src="tutorial-coach.js?v=1"></script>
 <script src="challenger-raid.js?v=34"></script>
 <script>
 const DUNGEON_MAP_KEY = 'magicBattle_showDungeonMap';
@@ -43052,7 +43126,8 @@ function guarded(where, fn){
 function loop(){
 	requestAnimationFrame(loop);          // scheduled first: nothing below can stop the next frame
 	const t0=performance.now();
-	guarded('update', update);
+	// the N map pauses the world (except in co-op, where the others keep playing)
+	if(!(window.__whereMapOpen && !(typeof IS_COOP !== 'undefined' && IS_COOP))) guarded('update', update);
 	guarded('debug panel', updateDebugPanel);
 	if(typeof updateBossHpTestHud === 'function') guarded('boss hud', updateBossHpTestHud);
 	if(++_hudFrame%(_onlineLite?3:1)===0) guarded('hud', updateHealthHUD);

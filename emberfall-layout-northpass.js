@@ -1,4 +1,4 @@
-/* J5–J4 — The Northwatch Pass (152000 – 174000; walking right = north).
+/* J5–J4 — The Northwatch Pass (78000 – 100000; walking right = north). It carries straight on from the King's North Road.
    The direct, exposed route into the Frostmere Range: rocky foothills with snow in the cracks, the climb around the
    ridge (a watch platform, broken walls, abandoned crates), the ruined Frostline Gatehouse at the narrows, the
    Shivercut Mine, the Broken Supply Span across the ravine, the wind-scoured upper shelves, and the high snowfield
@@ -7,13 +7,13 @@
 	'use strict';
 	(global.EmberfallFrontierSegs = global.EmberfallFrontierSegs || []).push(function (k) {
 		const { E, W, A, B, M, bld, house, tree, bush, road, dress, plat, water, lamp, district, grove, scatter, F, talk } = k;
-		const X = 152000;
+		const X = 78000;
 		const x = (u) => X + u;
-		k.region('northpass', X, 'The Northwatch Pass', 'J5 — J4');
+		k.region('northpass', X, 'The Northwatch Pass', 'J5 — J4', { openStart: true });
 
 		/* ------------------------------------------------------------ the land */
 		const G = (pts) => E.ground(pts.map(([u, y, m]) => m ? [x(u), B + y, m] : [x(u), B + y]));
-		k.ends(X, B - 1100, B - 2000);
+		k.ends(X, B - 1100, B - 2000, { openStart: true });
 		G([
 			[620, -1100], [1500, -1130], [2400, -1180],
 			// around the ridge: the climb, in short pitches
@@ -31,11 +31,11 @@
 		E.rough(x(620), x(2400), 22, 601);
 		E.rough(x(8400), x(12500), 22, 602);
 		E.rough(x(14300), x(21380), 26, 603);
-		E.material(x(600), x(21400), M.snow);
+		E.material(x(0), x(21400), M.snow);
 		for (const [a, b] of [[700, 1300], [1900, 2500], [3000, 3200], [3600, 3800]]) E.material(x(a), x(b), M.frost);
 		E.material(x(12600), x(14200), M.rock);
 		E.rockBody(x(600), x(21400));
-		E.zone(x(0), x(6000), 'north', 0.95, 1);
+		E.zone(x(0), x(6000), 'north', 1, 1);
 		E.zone(x(6000), x(22100), 'alpine', 1, 1);
 		k.wind(x(1200), x(5400), 0.5);
 		k.wind(x(8600), x(12400), 0.45);
@@ -43,12 +43,9 @@
 
 		/* ------------------------------------------------------------ J5: the foothill gate */
 		district(x(600), 'The Foothill Gate');
-		k.junction(x(640), [
-			{ label: 'The King’s North Road', way: 'South', to: 'J5_north', point: -1 },
-			{ label: 'The Frostline Causeway', way: 'West', to: 'J5_cause', point: -1 }
-		], { snowy: true });
-		grove(x(620), x(3000), 420, ['pine-snow0', 'pine-snow1', 'dead-snow0'], 360, 520, 801, { layer: 'back' });
-		scatter(x(620), x(5600), 170, ['rock-snow0', 'rock-cold0', 'rock-snow1', 'bush-snow0'], 50, 140, 802);
+		// the J5 fingerpost (west to the Causeway) stands by the shrine just behind you; this road runs straight on
+		grove(x(-1400), x(3000), 420, ['pine-snow0', 'pine-snow1', 'dead-snow0'], 360, 520, 801, { layer: 'back' });
+		scatter(x(-300), x(5600), 170, ['rock-snow0', 'rock-cold0', 'rock-snow1', 'bush-snow0'], 50, 140, 802);
 		bush('boulder-snow0', x(1700), 230, { layer: 'back' });
 
 		/* ------------------------------------------------------------ the ridge climb */

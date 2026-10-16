@@ -1,4 +1,4 @@
-/* I5–J5 — The Frostline Causeway (128000 – 150000; walking right = east).
+/* I5–J5 — The Frostline Causeway (148000 – 170000; walking right = east).
    The climate changes as you walk: a pine brook at I5, a broad rocky shelf where the stream starts to freeze,
    Rimewater Crossing (its west approach broken away), the Frostline boundary stones, Sella's weather post on the
    windy long shelf, the stranded caravan on the icy bend, the icy hollows, and the snowbound eastern approach that
@@ -7,7 +7,7 @@
 	'use strict';
 	(global.EmberfallFrontierSegs = global.EmberfallFrontierSegs || []).push(function (k) {
 		const { E, W, A, B, M, bld, house, tree, bush, road, dress, plat, water, lamp, district, grove, scatter, fence, F, talk } = k;
-		const X = 128000;
+		const X = 148000;
 		const x = (u) => X + u;
 		k.region('causeway', X, 'The Frostline Causeway', 'I5 — J5');
 

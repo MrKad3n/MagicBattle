@@ -1,4 +1,4 @@
-/* I4–J4 — The Highland Traverse (176000 – 198000; walking right = east).
+/* I4–J4 — The Highland Traverse (172000 – 194000; walking right = east).
    The long shelf under the Frostmere Range, linking the top of the Pineward Rise (I4) to the top of the Northwatch
    Pass (J4). It starts in frost-touched pines and climbs, mile by mile, into rock and snow with the mountains
    always looming to the north: the Highland Gate, the King's Aqueduct striding across the shelf (and its
@@ -9,7 +9,7 @@
 	'use strict';
 	(global.EmberfallFrontierSegs = global.EmberfallFrontierSegs || []).push(function (k) {
 		const { E, W, A, B, M, bld, house, tree, bush, road, dress, plat, water, lamp, district, grove, scatter, F, talk } = k;
-		const X = 176000;
+		const X = 172000;
 		const x = (u) => X + u;
 		k.region('traverse', X, 'The Highland Traverse', 'I4 — J4');
 

@@ -502,6 +502,7 @@
 		for(let i = 0; i < d.platforms.length; i++){
 			const p = d.platforms[i];
 			if(!p || p._gone || p._jungleHidden) continue;
+			if(global.DungeonSkin && DungeonSkin.owns && DungeonSkin.owns(p)) continue;
 			if(p.kind === 'move' || p.kind === 'raft' || p.kind === 'orbit' || p._growT){
 				drawPlatform(ctx, p);
 			}
@@ -513,6 +514,7 @@
 		for(let i = 0; i < d.platforms.length; i++){
 			const p = d.platforms[i];
 			if(!p || p._gone || p._jungleHidden) continue;
+			if(global.DungeonSkin && DungeonSkin.owns && DungeonSkin.owns(p)) continue;
 			if(p.kind === 'move' || p.kind === 'raft' || p.kind === 'orbit') continue;
 			drawPlatform(ctx, p);
 		}

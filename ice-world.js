@@ -1104,6 +1104,7 @@
 		/* --- platforms --- */
 		for(const p of platforms()){
 			if(p._gone) continue;
+			if(global.DungeonSkin && DungeonSkin.owns && DungeonSkin.owns(p)) continue;
 			drawPlatform(ctx, p);
 		}
 

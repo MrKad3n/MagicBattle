@@ -2237,6 +2237,24 @@
 			if(rock){ rock.vx = 12; rock.vy = -1; }
 			S11.step(30);
 			ok('D11 A moving construct strikes creatures in its way', rock && en.hp < 500 && ME.memCount(rock, 'constructImpact') >= 1, 'enemy hp 500 → ' + r1(en.hp));
+			// crushing: a falling construct pins a creature against the floor. The host's crush hook decides: crushed (it rests on it) or held (it braces)
+			{
+				const crushRun = (answer) => {
+					const S = csim(); const k = build(S, 400, 'cube', null, { x: 520, y: 180 }).k;
+					const ent = rect(500, FLOOR - 40, 30, 40); let calls = 0, maxPop = 0;
+					const free = (x, y, w, h) => y + h <= FLOOR + 0.01;
+					for(let i = 0; i < 120; i++){
+						const px = ent.x, py = ent.y; ent.vy = Math.min(14, ent.vy + 0.6); ent.y += ent.vy; if(ent.y + ent.h > FLOOR){ ent.y = FLOOR - ent.h; ent.vy = 0; }
+						S.step(1);
+						S.W.collideEntity(ent, px, py, { free, crush: (e, P) => { calls++; return P > 0 ? answer : 'ghost'; } });
+						maxPop = Math.max(maxPop, Math.abs(ent.x - px));
+					}
+					return { k, ent, calls, maxPop };
+				};
+				const c1 = crushRun('crushed'), c2 = crushRun('held');
+				ok('D11b A falling construct crushes a pinned creature (and rests on it)', c1.k && c1.calls >= 1 && c1.k.y < FLOOR - 40 && ME.memCount(c1.k, 'constructCrush') >= 1 && c1.maxPop <= 13, 'crush calls ' + c1.calls + ' · construct y ' + (c1.k ? r1(c1.k.y) : '—') + ' · biggest sideways pop ' + r1(c1.maxPop));
+				ok('D11c A creature strong enough braces: the construct is held on top of it', c2.k && c2.calls >= 1 && c2.k.y + 10 < c2.ent.y && c2.maxPop <= 13, 'construct y ' + (c2.k ? r1(c2.k.y) : '—') + ' · creature y ' + r1(c2.ent.y));
+			}
 			const S12 = csim(); const w12 = build(S12, 200, 'cube', null, { x: 500, y: 200 }, [ anch ]).k; const i12 = w12 ? w12.integrity : 0;
 			const box = { x: 470, y: 180, w: 50, h: 40 };
 			S12.W.strikeConstructs(box, 30, { attackId: 7 }); S12.W.strikeConstructs(box, 30, { attackId: 7 }); const once = w12 ? i12 - w12.integrity : 0;

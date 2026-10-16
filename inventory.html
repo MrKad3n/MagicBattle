@@ -551,6 +551,7 @@ select,select option{background:#1c1a30;color:#e8eaff}
 			<button class="tab-btn" data-tab="quests" onclick="switchTab('quests')" style="display:none">🗺️ Quests</button>
 			<button class="tab-btn" data-tab="bestiary" onclick="switchTab('bestiary')">📖 Bestiary</button>
 			<button class="tab-btn" data-tab="dictionary" onclick="switchTab('dictionary')">📚 Spell Dictionary</button>
+			<button class="tab-btn" data-tab="tutorials" onclick="switchTab('tutorials')">🎓 Tutorials</button>
 		</div>
 
 		<!-- Inventory Tab -->
@@ -601,6 +602,12 @@ select,select option{background:#1c1a30;color:#e8eaff}
 		<div id="bestiaryTab" class="panel" style="flex:1;display:none;flex-direction:column;overflow-y:auto">
 			<h3>Bestiary <span id="bestiaryCount" style="font-size:12px;color:var(--muted);font-weight:normal"></span></h3>
 			<div id="bestiaryList" style="display:flex;flex-direction:column;gap:6px"></div>
+		</div>
+
+		<!-- Tutorials Tab (tutorials.js) -->
+		<div id="tutorialsTab" class="panel" style="flex:1;display:none;flex-direction:column;min-height:0;overflow:hidden">
+			<h3>🎓 Tutorials</h3>
+			<div id="tutorialsHost" style="flex:1;min-height:0;display:flex"></div>
 		</div>
 
 		<!-- Spell Dictionary Tab -->
@@ -703,15 +710,17 @@ select,select option{background:#1c1a30;color:#e8eaff}
      ============================================================ -->
 <script src="scrolls.js?v=2"></script>
 <script src="spell-cost.js?v=14"></script>
-<script src="magic-engine.js?v=60"></script>
-<script src="magic-techniques.js?v=42"></script>
+<script src="magic-engine.js?v=61"></script>
+<script src="magic-techniques.js?v=43"></script>
 <script src="shape-editor.js?v=3"></script>
-<script src="magic-forge.js?v=21"></script>
+<script src="magic-forge.js?v=22"></script>
 <script src="player-rig.js?v=4"></script>
 <script src="melee-weapons.js?v=2"></script>
 <script src="slot-chooser.js?v=4"></script>
 <script src="gear-data.js?v=5"></script>
 <script src="gear-system.js?v=10"></script>
+<script src="tutorial-coach.js?v=1"></script>
+<script src="tutorials.js?v=2"></script>
 <script>
 /* =============================================================
    DATA DEFINITIONS
@@ -2834,13 +2843,26 @@ function switchTab(tab){
 	document.getElementById('questTab').style.display     = tab === 'quests'    ? 'flex' : 'none';
 	document.getElementById('bestiaryTab').style.display  = tab === 'bestiary'  ? 'flex' : 'none';
 	document.getElementById('dictionaryTab').style.display= tab === 'dictionary'? 'flex' : 'none';
+	document.getElementById('tutorialsTab').style.display = tab === 'tutorials' ? 'flex' : 'none';
+	document.body.classList.toggle('tutorials-open', tab === 'tutorials');
 	document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
 	if(tab === 'collection') renderCollection();
 	if(tab === 'crafting') renderCraftList();
 	if(tab === 'quests') renderQuestList();
 	if(tab === 'bestiary') renderBestiary();
 	if(tab === 'dictionary') renderDictSection('shapes');
+	if(tab === 'tutorials' && typeof Tutorials !== 'undefined'){
+		const h = document.getElementById('tutorialsHost');
+		if(!h.dataset.mounted){ Tutorials.mount(h); h.dataset.mounted = '1'; }
+	}
 }
+/* inventory.html?tab=tutorials&t=<id> opens straight to a guide */
+window.addEventListener('load', () => {
+	try{
+		const q = new URLSearchParams(location.search);
+		if(q.get('tab') === 'tutorials'){ switchTab('tutorials'); if(q.get('t') && typeof Tutorials !== 'undefined') Tutorials.open(q.get('t')); }
+	}catch(e){}
+});
 
 function renderCollection(){
 	const host = document.getElementById('collectionList');

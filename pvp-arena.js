@@ -1624,7 +1624,7 @@
 		const cy = (c.y1 - c.y0) <= vh ? c.y1 - vh : clamp(my - vh * Math.max(0.74, map.camBias || 0), c.y0, c.y1 - vh);
 		return { x: cx, y: cy };
 	}
-	function floorAt(map, x, yRef){
+	function snapFloorAt(map, x, yRef){
 		let best = null;
 		for(const q of map.solids.concat(map.ledges)){
 			if(q.wall || q.invisible || q.ceiling || x < q.x + 20 || x > q.x + q.w - 20) continue;
@@ -1659,7 +1659,7 @@
 			drawBack(g);
 			for(const sd of [ 'left', 'right' ]){
 				// each fighter at their spawn, or pulled into the picture onto the nearest floor
-				const sp = map.spawns[sd], fx = clamp(sp.x, c.x + 170, c.x + SNAP_W - 170), fy = fx === sp.x ? sp.y : floorAt(map, fx, sp.y);
+				const sp = map.spawns[sd], fx = clamp(sp.x, c.x + 170, c.x + SNAP_W - 170), fy = fx === sp.x ? sp.y : snapFloorAt(map, fx, sp.y);
 				if(fy != null) drawSnapFighter(g, fx - c.x, fy - c.y, sd === 'left' ? '#5aa0ff' : '#ff5a6a');
 			}
 			drawFront(g);
@@ -2025,6 +2025,6 @@
 		MAPS, MAP_BY_ID, boot, tick, camera: camera_, drawBack, drawFront, drawOpponent: (ctx) => drawRemote(ctx, camera.x, camera.y), afterMove,
 		applyMap, state: () => A.state, A, NET, R, P, BAL, platforms: () => P.plats,
 		spawnFor: (side) => { const m = P.map || MAPS[0]; const s = m.spawns[side]; return { x: s.x - 19, y: s.y - 60 }; },
-		_test: { hostSelect, practiceStart, onEvent, icicleState, boltState, gustState, ventState, clock, renderSnap, floorAt, snapCamera, snapCache }
+		_test: { hostSelect, practiceStart, onEvent, icicleState, boltState, gustState, ventState, clock, renderSnap, snapFloorAt, floorAt, snapCamera, snapCache }
 	};
 })(typeof window !== 'undefined' ? window : globalThis);

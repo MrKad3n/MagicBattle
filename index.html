@@ -979,11 +979,11 @@
 				<div class="map-sub">Exploration</div>
 			</div>
 
-			<!-- EmberFall (Tutorial) — upper-center-left -->
+			<!-- EmberFall — upper-center-left -->
 			<div class="map-location" style="left:30%;top:39%;--loc-glow:rgba(255,170,50,0.4)" data-loc="emberfall">
 				<div class="map-icon" style="background:rgba(80,50,20,0.8);border-color:#cc8833">🏠</div>
 				<div class="map-name">EmberFall</div>
-				<div class="map-sub">Tutorial</div>
+				<div class="map-sub">City</div>
 			</div>
 
 			<!-- Sylvaris Wildes — below-left of EmberFall -->
@@ -1079,8 +1079,11 @@
 
 			<article class="mode-card" id="inventory-card">
 				<h2>Inventory</h2>
-				<p>Manage your gear, relics, and spell loadouts before heading into battle.</p>
-				<button id="inventoryBtn" type="button">Open Inventory</button>
+				<p>Manage your gear, relics, and spell loadouts before heading into battle — and learn every part of the game in the tutorials.</p>
+				<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
+					<button id="inventoryBtn" type="button">Open Inventory</button>
+					<button id="tutorialsBtn" type="button" onclick="if(requireAuth()) location.href='inventory.html?tab=tutorials'">🎓 Tutorials</button>
+				</div>
 			</article>
 
 			<article class="mode-card" id="dungeons-card">
@@ -1102,16 +1105,13 @@
 				<a href="raids.html">s</a>
 			</article>
 
-			<article class="mode-card" id="openworld-card">
-				<h2>Story Mode 1</h2>
-				<p>Mage Academy tutorial grounds — learn spells, complete quests, and explore the world from the map.</p>
-				<button id="openworldBtn" type="button">Story Mode 1</button>
-			</article>
-
 			<article class="mode-card" id="map-card">
 				<h2>Map</h2>
-				<p>World chart with grid coordinates at every intersection.</p>
-				<button id="coordMapBtn" type="button">Map</button>
+				<p>The world map of every place you can travel to, and the grid chart of EmberFall's roads.</p>
+				<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
+					<button id="worldMapBtn" type="button">World Map</button>
+					<button id="coordMapBtn" type="button">Grid Map</button>
+				</div>
 			</article>
 		</section>
 	</main>
@@ -1139,8 +1139,7 @@
 			sandbox: 'dungeon.html?mode=sandbox',
 			inventory: 'inventory.html',
 			dungeons: 'dungeons.html',
-			raids: 'raids.html',
-			openworld: 'dungeon.html?mode=openworld'
+			raids: 'raids.html'
 		};
 
 		function launchMode(mode) {
@@ -1158,10 +1157,9 @@
 		document.getElementById('dungeonsBtn').addEventListener('click', () => launchMode('dungeons'));
 		document.getElementById('pvpBtn').addEventListener('click', () => openPvP());
 		document.getElementById('raidsBtn').addEventListener('click', () => launchMode('raids'));
-		document.getElementById('openworldBtn').addEventListener('click', () => {
+		document.getElementById('worldMapBtn').addEventListener('click', () => {
 			if (!requireAuth()) return;
 			openWorldMap();
-			requestAnimationFrame(() => WorldMapVoronoi.setHover('emberfall'));
 		});
 
 		(function setupCoordinateMap(){
@@ -1732,10 +1730,9 @@
 			emberfall: {
 				name: 'EmberFall',
 				icon: '🏠',
-				desc: 'A quiet village on the frontier — academy grounds and a walled city where mages train and traders gather.',
+				desc: 'The walled frontier city where mages train and traders gather, with roads running west, north and into the frozen frontier.',
 				isDungeon: false,
 				subLocations: [
-					{ name: 'Story Mode 1 — Academy Grounds', icon: '📖', label: 'Learn the basics', url: 'dungeon.html?mode=openworld' },
 					{ name: 'EmberFall City', icon: '🏰', label: 'Explore the city', url: 'dungeon.html?mode=city' },
 				],
 			},

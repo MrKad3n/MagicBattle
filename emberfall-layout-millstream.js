@@ -1,4 +1,4 @@
-/* I6–I5 — The Upper Millstream (80000 – 102000; walking right = north).
+/* I6–I5 — The Upper Millstream (102000 – 124000; walking right = north). It runs straight on into the Pineward Rise.
    Riverside countryside north of the Western Approach: the farmland of Valedorn behind you at the start, the road
    following the Valedorn upriver past Splitwater Bridge, a backwater pool with ledges and a cave at the waterline,
    the Old Lockworks sluice, a tributary under a stone bridge, a wooded valley (bandits raiding an abandoned cart),
@@ -7,13 +7,13 @@
 	'use strict';
 	(global.EmberfallFrontierSegs = global.EmberfallFrontierSegs || []).push(function (k) {
 		const { E, W, A, B, M, bld, house, tree, bush, road, dress, plat, water, lamp, district, grove, scatter, F, talk } = k;
-		const X = 80000;
+		const X = 102000;
 		const x = (u) => X + u;
-		k.region('millstream', X, 'The Upper Millstream', 'I6 — I5');
+		k.region('millstream', X, 'The Upper Millstream', 'I6 — I5', { openEnd: true });
 
 		/* ------------------------------------------------------------ the land */
 		const G = (pts) => E.ground(pts.map(([u, y, m]) => m ? [x(u), B + y, m] : [x(u), B + y]));
-		k.ends(X, B - 120, B - 520);
+		k.ends(X, B - 120, B - 520, { openEnd: true });
 		G([
 			[620, -120], [1400, -134], [2200, -112], [2900, -146], [3600, -150], [4300, -124], [4950, -120],
 			// Splitwater: the south bank ramps down under the bridge, the river, the north bank climbs back
@@ -45,7 +45,7 @@
 		E.material(x(12460), x(12600), M.sand);
 		E.material(x(12860), x(13000), M.sand);
 		E.material(x(18900), x(19900), M.rock);
-		E.material(x(19900), x(21400), M.cold);
+		E.material(x(19900), x(22000), M.cold);
 		E.rockBody(x(7960), x(8060));
 		E.rockBody(x(10470), x(10730));
 		E.rockBody(x(18950), x(19850));
@@ -251,14 +251,12 @@
 
 		/* ------------------------------------------------------------ I5: the pine gate */
 		district(x(20000), 'The Pine Gate');
-		grove(x(19900), x(21300), 200, ['pine0', 'pine1', 'spruce0', 'pine2'], 460, 620, 570, { layer: 'back' });
+		grove(x(19900), x(21700), 200, ['pine0', 'pine1', 'spruce0', 'pine2'], 460, 620, 570, { layer: 'back' });
 		grove(x(20100), x(21300), 480, ['spruce1', 'pine1'], 480, 600, 571);
 		scatter(x(19900), x(21300), 220, ['rock-cold0', 'fern0', 'rock1', 'heather0'], 50, 110, 572);
 		bush('boulder0', x(21240), 190, { layer: 'back' });
-		k.junction(x(20100), [
-			{ label: 'The Pineward Rise', way: 'North', to: 'I5_pine', point: 1 },
-			{ label: 'The Frostline Causeway', way: 'East', to: 'I5_cause', point: 1 }
-		]);
+		// I5: the road runs straight on north into the Pineward Rise; only the turn east needs a fingerpost
+		k.junction(x(20100), [{ label: 'The Frostline Causeway', way: 'East', to: 'I5_cause', point: 1 }]);
 		road('shrine', x(21150), 200, { sink: 8 });
 		k.lore(x(21150), 'the wayside shrine', 'Wayside shrine', ['A worn stone shrine with three niches: a sheaf for the farms, a pine for the woods, a star for the north. Someone has left a fresh pinecone in the middle one.']);
 
