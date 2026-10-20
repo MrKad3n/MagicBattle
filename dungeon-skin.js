@@ -90,7 +90,15 @@
 		if (stripImg[t.strip]) return stripImg[t.strip];
 		return A().sprite(t.strip);
 	}
+	let readyFrame = -1, readyVal = false;
 	function ready() {
+		// asked many times a frame (every platform of every kit asks owns()): answer once per frame
+		const now = (typeof performance !== 'undefined') ? Math.floor(performance.now() / 8) : 0;
+		if (now === readyFrame) return readyVal;
+		readyFrame = now;
+		return (readyVal = readyNow());
+	}
+	function readyNow() {
 		const a = A(), t = th();
 		if (!a || !t || disabled) return false;
 		start();
@@ -300,14 +308,16 @@
 		g.globalCompositeOperation = 'destination-over';
 		drawLow(aoD);
 		g.globalCompositeOperation = 'source-over';
-		let glow = null;
+		// the glowing veins are baked into the chunk (a separate 'lighter' pass over every chunk every frame was one of
+		// the most expensive things on screen)
 		if (anyVein) {
-			glow = a.canvas(CH, CH);
-			const gg = glow.getContext('2d');
-			gg.imageSmoothingEnabled = true;
-			gg.drawImage(lowCanvas(n, n, veinD), -PAD - Q / 2, -PAD - Q / 2, n * Q, n * Q);
+			g.save();
+			g.globalCompositeOperation = 'lighter';
+			g.globalAlpha = vn.pulse ? 0.8 : 1;
+			g.drawImage(lowCanvas(n, n, veinD), -PAD - Q / 2, -PAD - Q / 2, n * Q, n * Q);
+			g.restore();
 		}
-		return { cv, glow, hash: chunkHash(cx, cy), used: frame };
+		return { cv, glow: null, hash: chunkHash(cx, cy), used: frame };
 	}
 	function getChunk(cx, cy, allowBuild) {
 		const key = cx + ',' + cy;
@@ -323,7 +333,12 @@
 		}
 		return ch;
 	}
-	function invalidate() { chunks.clear(); props = null; }
+	/* The tiles changed somewhere (a door, a breakable wall, a platform stamped or broken, lava rising …). This used to throw
+	   away every painted chunk, so all of the screen was repainted at once — in the fire dungeon, where tiles change often,
+	   that happened again and again. Now every chunk is only marked to be checked: the next time it is drawn its tile
+	   fingerprint is compared, and only chunks whose tiles really changed are repainted (a couple a frame). */
+	function invalidate() { for (const ch of chunks.values()) ch.check = true; }
+	function reset() { chunks.clear(); props = null; }
 
 	/* ---------------------------------------------------------------- props */
 	let props = null;     // Map bucketX -> [prop]
@@ -580,17 +595,30 @@
 		const vx = Math.round(c.x), vy = Math.round(c.y);
 		const x0 = Math.floor(vx / CH), x1 = Math.floor((vx + vw) / CH);
 		const y0 = Math.floor(vy / CH), y1 = Math.floor((vy + vh) / CH);
-		// rebuild chunks whose tiles changed (doors, breakable walls) — one visible chunk checked per frame
+		// chunks whose tiles changed (doors, breakable walls): one visible chunk is checked each frame anyway, and every chunk
+		// marked by invalidate() is checked when drawn; a changed chunk keeps being drawn until it has been repainted
 		const cols = x1 - x0 + 1, total = cols * (y1 - y0 + 1);
 		const pick = frame % Math.max(1, total);
-		const pcx = x0 + (pick % cols), pcy = y0 + Math.floor(pick / cols);
-		const pc = chunks.get(pcx + ',' + pcy);
-		if (pc && pc.hash !== chunkHash(pcx, pcy)) { chunks.delete(pcx + ',' + pcy); props = null; }
+		const pc = chunks.get((x0 + (pick % cols)) + ',' + (y0 + Math.floor(pick / cols)));
+		if (pc) pc.check = true;
+		let rebuilt = 0;
 		const t = th();
 		const pulse = t.veins && t.veins.pulse ? 0.72 + Math.sin(performance.now() / 700) * 0.2 : 1;
 		const glows = [];
 		for (let cy = y0; cy <= y1; cy++) for (let cx = x0; cx <= x1; cx++) {
-			const ch = getChunk(cx, cy, true);
+			let ch = getChunk(cx, cy, true);
+			if (ch.check) {
+				ch.check = false;
+				if (ch.hash !== chunkHash(cx, cy)) ch.stale = true;
+			}
+			if (ch.stale && rebuilt < 2) {
+				rebuilt++;
+				const nc = buildChunk(cx, cy);
+				nc.used = frame;
+				chunks.set(cx + ',' + cy, nc);
+				ch = nc;
+				props = null;
+			}
 			ctx.drawImage(ch.cv, cx * CH - vx, cy * CH - vy);
 			if (ch.glow) glows.push([ch.glow, cx * CH - vx, cy * CH - vy]);
 		}
@@ -614,6 +642,7 @@
 	global.DungeonSkin = {
 		drawBackdrop, drawTiles, invalidate, owns,
 		enabled: () => ready(),
-		setEnabled(on) { disabled = !on; try { localStorage.setItem('magicBattle_dungeonSkin', on ? 'on' : 'off'); } catch (e) {} invalidate(); }
+		setEnabled(on) { disabled = !on; try { localStorage.setItem('magicBattle_dungeonSkin', on ? 'on' : 'off'); } catch (e) {} reset(); },
+		reset
 	};
 })(typeof window !== 'undefined' ? window : globalThis);

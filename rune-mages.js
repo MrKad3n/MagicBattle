@@ -501,10 +501,10 @@
 		if(book[kind]) return book[kind];
 		const K = KINDS[kind], prof = profileFor(K), out = { profile: prof, spells: {}, errors: [] };
 		for(const key in K.spells){
-			const s = K.spells[key], def = build(s.name, s.tree), rep = ME.validate(def, prof);
+			const s = K.spells[key], def = s.def || build(s.name, s.tree), rep = ME.validate(def, prof);      // a kind may hand over ready, checked defs
 			if(!rep.ok) out.errors.push(key + ': ' + (rep.errors[0] ? rep.errors[0].text : 'invalid'));
 			out.spells[key] = { key, name: s.name, cd: s.cd, wind: s.wind != null ? s.wind : 0.2, def, ok: rep.ok, cost: rep.upfront != null ? rep.upfront : rep.cost,
-				trademark: !!s.trademark, runes: runes(s.tree), draws: hasRune(s.tree, 'drawOut'), reverse: hasReverse(s.tree) };
+				trademark: !!s.trademark, runes: s.tree ? runes(s.tree) : Object.keys(def.nodes).length, draws: s.tree ? hasRune(s.tree, 'drawOut') : Object.values(def.nodes).some(n => n.type === 'drawOut'), reverse: s.tree ? hasReverse(s.tree) : false };
 		}
 		book[kind] = out;
 		return out;
@@ -544,7 +544,8 @@
 		};
 		m.book = B;
 		mages.push(m);
-		if(K.boss){ m.maxHp = m.hp = BOSS.hp; m.lastHp = m.hp; bossInit(m); }
+		if(K.custom){ if(K.custom.init) K.custom.init(m, INTERNAL); }      // a kind that brings its own mind (grand-arcanist.js)
+		else if(K.boss){ m.maxHp = m.hp = BOSS.hp; m.lastHp = m.hp; bossInit(m); }
 		else if(K.planner) plannerInit(m);
 		return m;
 	}
@@ -1977,6 +1978,7 @@
 			if(m.hp <= 0){
 				m.dead = true; m.hp = 0; m.deathT = 0;
 				if(w) try { w.clearOwner(m.owner.id); } catch(e){}
+				if(m.K.custom && m.K.custom.onDeath) try { m.K.custom.onDeath(m); } catch(e){}
 				if(env.say) env.say(cx(m), m.y - 30, m.name + ' is defeated', m.K.color);
 				continue;
 			}
@@ -1998,6 +2000,7 @@
 			// the cursor: follows the plan of the last spell, otherwise rests on the player
 			if(p){ m.aim = (m.aimFn && m.aimLock > 0) ? (m.aimFn(m.aimT) || m.aim) : { x: S.x, y: S.y }; }
 			if(m.aimLock <= 0) m.aimFn = null;
+			if(m.K.custom && m.K.custom.pre) try { m.K.custom.pre(m); } catch(e){ m.lastErr = e.message; }      // e.g. a boss's poise against stun-lock
 			const stunned = m.stunTimer > 0;
 			if(stunned) m.stunTimer--;
 			// grappling: the tether pulls; let go once there
@@ -2009,7 +2012,12 @@
 				m._kbTimer--; const k = m._kbTimer / 20;
 				m.vx = (m._kbVx || 0) * k; m.vy = (m._kbVy || 0) * k;
 			} else {
-				if(m.boss){
+				if(m.K.custom){
+					let hover = false;
+					try { hover = m.K.custom.frame(m, p, ctx, 1 / 60); } catch(e){ m.lastErr = e.message; }
+					if(hover){ const ty = groundY() - m.h - 150; m.vy += ((ty - m.y) * 0.06 - m.vy) * 0.2; m.vy = clamp(m.vy, -6, 6); }
+					else m.vy = Math.min(18, m.vy + (env.gravity || 0.55));
+				} else if(m.boss){
 					const hover = bossFrame(m, p, ctx, 1 / 60);
 					if(stunned) m.vx *= 0.8;
 					if(hover){ const ty = groundY() - m.h - 150; m.vy += ((ty - m.y) * 0.06 - m.vy) * 0.2; m.vy = clamp(m.vy, -6, 6); }
@@ -2039,6 +2047,7 @@
 	/* ---------- drawing ---------- */
 	function draw(ctx, camX, camY){
 		for(const m of mages){
+			if(m.K.custom && m.K.custom.draw){ try { m.K.custom.draw(ctx, m, camX, camY); } catch(e){} continue; }
 			if(m.boss){ try { drawBoss(ctx, m, camX, camY); } catch(e){} continue; }
 			if(m.B && m.B.ghosts){
 				// after-images of a step through space / a blink
@@ -2404,6 +2413,8 @@
 		mages.splice(0); keepList.forEach(q => mages.push(q)); env = keep;
 		return { m, dealt, taken, w, bot };
 	}
-	const API = { damageScale: 0.3, selfTest, duel, castNow: (m, key, aim, lock) => cast(m, key, aim, lock), KINDS, TACTICS, init, spawn, clear, update, draw, targets, list: mages, bookFor, build, N, L };
+	/* what a kind with its own mind (K.custom) may use: the same casting, perception and helpers the mages use */
+	const INTERNAL = { env: () => env, world: W, player: P, cast, label, lead, perceive, ownBodies, cx, cy, clamp, rnd, sgn, gauss, groundY, worldW, noisy, spellOf };
+	const API = { damageScale: 0.3, INTERNAL, selfTest, duel, castNow: (m, key, aim, lock) => cast(m, key, aim, lock), KINDS, TACTICS, init, spawn, clear, update, draw, targets, list: mages, bookFor, build, N, L };
 	root.RuneMages = API;
 })(typeof window !== 'undefined' ? window : globalThis);

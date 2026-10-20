@@ -1,0 +1,113 @@
+Grand Arcanist campaign · measured telegraph radii {"nova":254,"ward":90,"signature":118,"lattice":140,"volley":90}
+
+A. Library and policy
+  ok   every attack tree passes the technique policy and validates — 13 / 13
+  ok   no attack uses a technique (engine report) — lance:0 volley:0 orb:0 snare:0 crossfire:0 stream:0 pursuit:0 nova:0 ward:0 lattice:0 apex:0 signature:0 minefall:0
+  ok   every attack fits his Max Output (960) — lance 177, volley 400, orb 713, snare 217, crossfire 474, stream 0, pursuit 395, nova 561, ward 336, lattice 635, apex 813, signature 947, minefall 568
+  ok   8–12 core attack patterns (plus sequences) — 13 attacks, 4 sequences
+  ok   the signature attack comes from the discovery catalog unchanged — RD-0099
+  ok   the policy refuses every forbidden tree (11 cases) — Technique rune (Thermal) → rune not allowed: technique | Reverse technique (negative power) → rune not allowed: technique | Legacy reverseTechnique rune → rune not allowed: reverseTechnique | Infinity → rune not allowed: technique | Construction parameter smuggled onto a raw rune → technique parameter: construction_facing | Targeting another caster's spell (could steal a technique) → target kind not allowed: spell | Draw Out from the environment (could pull foreign energy) → rune not allowed: zone | Anchor-state target of Infinity → anchor-state target must be this spell and not Infinity | Domain → rune not allowed: zone | Technique filter on a target → technique filter on a target | Over Max Output → peak output 4277 > Max Output 960
+
+B. Individual attacks
+   lance      still 100%/35  strafe 88%/30  jumper 50%/17  reverse 100%/35  wall 88%/30  casting 88%/30  threatened 63%/22  platform 13%/4  · first hit 0.65 s · fail 0
+   volley     still 100%/44  strafe 75%/23  jumper 63%/12  reverse 100%/27  wall 100%/31  casting 75%/23  threatened 25%/6  platform 25%/3  · first hit 0.93 s · fail 0
+   orb        still 75%/127  strafe 25%/43  jumper 25%/44  reverse 100%/175  wall 75%/126  casting 25%/43  threatened 0%/0  platform 0%/0  · first hit 1.52 s · fail 0
+   snare      still 0%/0  strafe 0%/0  jumper 0%/0  reverse 0%/0  wall 0%/0  casting 38%/16  threatened 0%/0  platform 0%/0  · first hit 0.92 s · fail 0
+   crossfire  still 100%/61  strafe 75%/23  jumper 0%/0  reverse 100%/35  wall 75%/23  casting 75%/23  threatened 50%/15  platform 100%/46  · first hit 0.97 s · fail 0
+   stream     still 100%/78  strafe 100%/57  jumper 100%/38  reverse 100%/78  wall 100%/78  casting 100%/57  threatened 67%/12  platform 0%/0  · first hit 0.75 s · fail 0
+   pursuit    still 100%/38  strafe 50%/19  jumper 0%/0  reverse 75%/29  wall 100%/72  casting 50%/19  threatened 0%/0  platform 13%/5  · first hit 0.97 s · fail 0
+   nova       still 100%/44  strafe 0%/0  jumper 0%/0  reverse 100%/49  wall 0%/0  casting 0%/0  threatened 0%/0  platform 50%/19  · first hit 0.88 s · fail 0
+   ward       still 0%/0  strafe 0%/0  jumper 0%/0  reverse 100%/39  wall 0%/0  casting 0%/0  threatened 0%/0  platform 0%/0  · first hit 2.37 s · fail 0
+   lattice    still 100%/126  strafe 100%/90  jumper 100%/61  reverse 100%/127  wall 100%/117  casting 100%/90  threatened 100%/40  platform 0%/0  · first hit 0.60 s · fail 0
+   apex       still 100%/110  strafe 38%/16  jumper 75%/57  reverse 50%/20  wall 88%/51  casting 38%/16  threatened 13%/9  platform 13%/9  · first hit 2.28 s · fail 0
+   signature  still 100%/16  strafe 100%/40  jumper 100%/21  reverse 100%/17  wall 100%/16  casting 100%/40  threatened 67%/17  platform 100%/33  · first hit 0.48 s · fail 0
+   minefall   still 100%/111  strafe 63%/73  jumper 75%/92  reverse 100%/111  wall 88%/97  casting 63%/73  threatened 75%/88  platform 0%/0  · first hit 0.73 s · fail 0
+  ok   every attack fires through the engine in its range (no cast failures) — none failed
+  ok   no attack can hit sooner than 0.2 s after its telegraph starts — earliest: 0.48 s
+  ok   every attack threatens a still player (none is a mere visual) — snare, ward
+  ok   the Watching Shard only strikes a player who attacks or casts — still 0 · casting 0.38
+
+C. Counterplay (an attack needs at least one response that takes no damage)
+   lance      best counter: away (100% clean) · stay 0 away 100 toward 0 jumpFire 50 jumpLate 0 reverse 0 awayJump 100 sidestep 83
+   volley     best counter: away (100% clean) · stay 0 away 100 toward 0 jumpFire 100 jumpLate 0 reverse 0 awayJump 100 sidestep 67
+   orb        best counter: away (100% clean) · stay 0 away 100 toward 50 jumpFire 0 jumpLate 0 reverse 0 awayJump 100 sidestep 50
+   snare      best counter: stay (100% clean) · stay 100 away 100 toward 100 jumpFire 100 jumpLate 100 reverse 100 awayJump 100 sidestep 100
+   crossfire  best counter: away (100% clean) · stay 0 away 100 toward 0 jumpFire 100 jumpLate 0 reverse 0 awayJump 100 sidestep 67
+   stream     best counter: away (100% clean) · stay 0 away 100 toward 0 jumpFire 0 jumpLate 0 reverse 0 awayJump 100 sidestep 50
+   pursuit    best counter: away (100% clean) · stay 0 away 100 toward 33 jumpFire 100 jumpLate 0 reverse 17 awayJump 100 sidestep 67
+   nova       best counter: away (100% clean) · stay 0 away 100 toward 0 jumpFire 0 jumpLate 0 reverse 0 awayJump 100 sidestep 50
+   ward       best counter: stay (100% clean) · stay 100 away 100 toward 0 jumpFire 100 jumpLate 100 reverse 0 awayJump 100 sidestep 33
+   lattice    best counter: away (100% clean) · stay 0 away 100 toward 0 jumpFire 0 jumpLate 0 reverse 0 awayJump 100 sidestep 33
+   apex       best counter: away (100% clean) · stay 0 away 100 toward 100 jumpFire 0 jumpLate 0 reverse 83 awayJump 100 sidestep 100
+   signature  best counter: away (50% clean) · stay 0 away 50 toward 0 jumpFire 0 jumpLate 0 reverse 0 awayJump 50 sidestep 0
+   minefall   best counter: away (100% clean) · stay 0 away 100 toward 0 jumpFire 0 jumpLate 0 reverse 0 awayJump 100 sidestep 67
+  FAIL every attack has a response that avoids it completely — signature best away 50%
+  ok   no attack is trivially avoided by almost everything — none
+
+D. Full encounters
+   still      dps 46.7 · deaths/90s 7.00 · worst 1 s 267 · phase 333 · max bodies 21 · ms99 0.3
+   strafe     dps 24.8 · deaths/90s 4.00 · worst 1 s 255 · phase 333 · max bodies 36 · ms99 0.41
+   jumper     dps 23.9 · deaths/90s 3.67 · worst 1 s 236 · phase 333 · max bodies 36 · ms99 0.39
+   aggressive dps 43.3 · deaths/90s 7.00 · worst 1 s 335 · phase 333 · max bodies 31 · ms99 0.27
+   kiter      dps 12.9 · deaths/90s 1.67 · worst 1 s 233 · phase 333 · max bodies 51 · ms99 0.33
+   reactive   dps 7.1 · deaths/90s 1.00 · worst 1 s 125 · phase 333 · max bodies 45 · ms99 0.5
+   random     dps 28.1 · deaths/90s 4.67 · worst 1 s 287 · phase 333 · max bodies 35 · ms99 0.34
+   baseline   dps 19.0 · deaths/90s 3.00 · worst 1 s 218 · phase 333 · max bodies 44 · ms99 0.36
+   skilled    dps 6.8 · deaths/90s 1.00 · worst 1 s 151 · phase 333 · max bodies 51 · ms99 0.42
+   natural skilled   seed 401: 3782 hp left after 300 s · phase 1 · player deaths 3 · his dps 6.6
+   natural skilled   seed 402: 3257 hp left after 300 s · phase 2 · player deaths 3 · his dps 6.9
+   natural skilled   seed 403: 5600 hp left after 300 s · phase 1 · player deaths 4 · his dps 6.9
+   natural skilled   seed 404: 4843 hp left after 300 s · phase 1 · player deaths 4 · his dps 7
+   natural skilled   seed 405: 5396 hp left after 300 s · phase 1 · player deaths 4 · his dps 7.1
+   natural skilled   seed 406: 4461 hp left after 300 s · phase 1 · player deaths 4 · his dps 7.7
+   natural reactive  seed 401: 3749 hp left after 300 s · phase 1 · player deaths 3 · his dps 5.9
+   natural reactive  seed 402: 3338 hp left after 300 s · phase 2 · player deaths 3 · his dps 6.3
+   natural reactive  seed 403: 3255 hp left after 300 s · phase 2 · player deaths 3 · his dps 7.1
+   natural reactive  seed 404: 5101 hp left after 300 s · phase 1 · player deaths 4 · his dps 7.4
+   natural reactive  seed 405: 4153 hp left after 300 s · phase 1 · player deaths 3 · his dps 5.7
+   natural reactive  seed 406: 3639 hp left after 300 s · phase 2 · player deaths 3 · his dps 6.3
+   natural baseline  seed 401: 3633 hp left after 300 s · phase 2 · player deaths 6 · his dps 12.4
+   natural baseline  seed 402: 3978 hp left after 300 s · phase 1 · player deaths 7 · his dps 13.3
+   natural baseline  seed 403: 5191 hp left after 300 s · phase 1 · player deaths 8 · his dps 14.7
+   natural baseline  seed 404: 5014 hp left after 300 s · phase 1 · player deaths 7 · his dps 13.8
+   natural baseline  seed 405: 4986 hp left after 300 s · phase 1 · player deaths 7 · his dps 12.2
+   natural baseline  seed 406: 5600 hp left after 300 s · phase 1 · player deaths 8 · his dps 14.4
+   natural strafe    seed 401: 4549 hp left after 300 s · phase 1 · player deaths 10 · his dps 19.4
+   natural strafe    seed 402: 4549 hp left after 300 s · phase 1 · player deaths 10 · his dps 18.9
+   natural strafe    seed 403: 5395 hp left after 300 s · phase 1 · player deaths 11 · his dps 19.4
+   natural strafe    seed 404: 4838 hp left after 300 s · phase 1 · player deaths 10 · his dps 18.9
+   natural strafe    seed 405: 5396 hp left after 300 s · phase 1 · player deaths 11 · his dps 18.8
+   natural strafe    seed 406: 4988 hp left after 300 s · phase 1 · player deaths 8 · his dps 15.9
+  ok   all three phases are reached and change his behaviour (phase sweep) — every sweep reached phase III
+  ok   he uses his whole library across the encounters — lance, volley, orb, snare, ward, seq:crossAndVolley, crossfire, stream, pursuit, seq:pinAndLance, lattice, minefall, signature, seq:pressure, apex, seq:bloomChase, nova
+  ok   he punishes standing still far more than good dodging — still 46.7 dps vs reactive 7.1
+  FAIL no trap: never more than 60% of the player's health inside one second — worst 407
+  ok   a good dodger survives a long time (reactive: ≤ 1 death per 90 s on average) — 1.00 deaths / 90 s
+  ok   he is dangerous (still / strafing players die) — still 7.00 · strafe 4.00
+  FAIL a skilled player can defeat him (natural fights, real energy) — skilled wins 0% · reactive 0% · baseline 0% · strafe 0% · kill times  s
+  ok   he is an endgame threat: a player who only strafes never beats him — strafe deaths per minute 2.00
+  ok   decisions adapt to the player: each behaviour draws a different favourite (lift over his average mix) — still→lance ×1.75 · aggressive→nova ×6.88 · kiter→stream ×1.50 · jumper→volley ×1.56 · reactive→stream ×1.67
+  ok   encounters are reproducible: the same seed gives the same fight — 242/2868 vs 242/2868
+
+E. Technique-free verification
+  ok   no body he owned ever carried a technique (5221781 body-frames inspected) — none
+  ok   no cast was refused by the policy during fights — 0 refusals
+  ok   a technique forced onto his energy from outside is stripped at once and logged as external — {"injected":1,"stripped":1,"own":0,"techFrames":0}
+  ok   the audit detects technique energy that appears from his own side (control case) — {"own":1}
+
+F. Stability
+  ok   many bodies at once stay under his cap and fast — {"maxOwn":21,"cap":90,"refusedBusy":0,"ms99":0.36,"msMax":1.24,"errors":0,"lastErr":""}
+  ok   a stun during the telegraph interrupts the attack (counterplay) — {"interrupts":1,"castsApex":0}
+  ok   a phase change clears his live spells and nothing lands during the shift — {"before":4,"after":0,"hitsDuringShift":0,"phase":2,"instancesLeft":0}
+  ok   his death mid attack leaves nothing behind — {"liveBefore":6,"left":0,"hitsAfterDeath":0,"dead":true,"removed":true}
+  ok   player death: he clears his spells, deals nothing while you are down, fights again after — {"leftAfterDeath":0,"hitsWhileDown":0,"respawned":true,"castsAfter":12}
+  ok   scene exit (RuneMages.clear) removes him and all his energy — {"left":0,"instances":0,"mages":0}
+  ok   a 600 s fight: live energy and instances stay bounded, no errors — {"seconds":600,"maxBodiesArray":23,"maxInst":13,"ms99":0.26,"errors":0,"lastErr":"","dead":false}
+  ok   a confined arena (2200 px, walls, platforms) works: no errors, no trap — {"phase":3,"dealt":1033,"worst1s":173,"errors":0,"lastErr":"","maxOwn":19}
+  ok   his drawing never throws or draws with a non-finite number (every attack, a phase change, his death) — {"frames":1700,"drawCalls":213972,"errors":[]}
+
+G. Regression
+  ok   engine checks (MagicEngine.devTests.run) — 194 / 194
+  ok   rune mage and Aster Vael self-tests: identical to before, seed for seed — seed 1: 25/26 (before 25/26) · seed 2: 24/26 (before 24/26) · seed 3: 24/26 (before 24/26) · seed 4: 24/26 (before 24/26)
+
+34 / 37 checks passed in 57 s

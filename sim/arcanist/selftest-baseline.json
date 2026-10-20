@@ -1,0 +1,9 @@
+{"note":"RuneMages.selfTest() of the code BEFORE the Grand Arcanist (c59), seeded; the self-tests are random and fail some checks on some seeds by themselves","seeds":[
+{"seed":1,"pass":25,"total":26,"failing":["vesk fights like a player (varied tactics, not just shots)"]}
+,
+{"seed":2,"pass":24,"total":26,"failing":["brannoc fights up close with its weapon (the player's melee attacks) and planned combos","sythe fights up close with its weapon (the player's melee attacks) and planned combos"]}
+,
+{"seed":3,"pass":24,"total":26,"failing":["kael fights up close with its weapon (the player's melee attacks) and planned combos","vesk casts its trademark in a duel and it lands"]}
+,
+{"seed":4,"pass":24,"total":26,"failing":["morrow casts its trademark in a duel and it lands","morrow fights like a player (varied tactics, not just shots)"]}
+]}

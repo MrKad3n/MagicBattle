@@ -351,7 +351,7 @@
 	}
 
 	function generateFireInfernalDepths(){
-		const R = rngFromSeed((Date.now() ^ (Math.random() * 0xFFFFFF | 0)) & 0x7FFFFFFF);
+		const R = rngFromSeed(global.DUNGEON_SEED_OVERRIDE != null ? global.DUNGEON_SEED_OVERRIDE : ((Date.now() ^ (Math.random() * 0xFFFFFF | 0)) & 0x7FFFFFFF));      // shared in co-op (dungeon.html DUNGEON_SEED)
 		const recipe = RECIPES[R.ri(0, RECIPES.length - 1)];
 		const hotRun = R.chance(0.26);
 		const heatBias = hotRun ? 36 : 0;

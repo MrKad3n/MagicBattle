@@ -347,8 +347,8 @@ body.ai-chat-open #hud{pointer-events:none;opacity:0.45}
 <script src="conversational-npc.js"></script>
 <script src="emberfall-props.js?v=10"></script>
 <script src="emberfall-art.js?v=4"></script>
-<script src="emberfall-world.js?v=2"></script>
-<script src="emberfall-layout.js?v=2"></script>
+<script src="emberfall-world.js?v=4"></script>
+<script src="emberfall-layout.js?v=3"></script>
 <script src="emberfall-layout-city.js?v=1"></script>
 <script src="emberfall-layout-north.js?v=3"></script>
 <script src="emberfall-frontier-art.js?v=1"></script>
@@ -361,26 +361,28 @@ body.ai-chat-open #hud{pointer-events:none;opacity:0.45}
 <script src="emberfall-foes.js?v=1"></script>
 <script src="emberfall-interiors.js?v=2"></script>
 <script src="emberfall-keep.js?v=1"></script>
-<script src="emberfall-life.js?v=2"></script>
-<script src="emberfall-city.js?v=43"></script>
+<script src="emberfall-life.js?v=4"></script>
+<script src="emberfall-city.js?v=44"></script>
 <script src="npc-profiles.js"></script>
 <script src="scrolls.js?v=2"></script>
 <script src="spell-cost.js?v=14"></script>
 <script src="magic-engine.js?v=61"></script>
 <script src="magic-techniques.js?v=43"></script>
-<script src="rune-mages.js?v=12"></script>
-<script src="pvp-arena.js?v=4"></script>
+<script src="rune-mages.js?v=13"></script>
+<script src="grand-arcanist-discovered.js?v=1"></script>
+<script src="grand-arcanist.js?v=2"></script>
+<script src="pvp-arena.js?v=5"></script>
 <script src="gear-data.js?v=5"></script>
 <script src="gear-system.js?v=10"></script>
 <script src="nightmare-system.js?v=1"></script>
 <script src="fire-dungeon-templates.js?v=33"></script>
-<script src="fire-dungeon-world.js?v=55"></script>
+<script src="fire-dungeon-world.js?v=56"></script>
 <script src="fire-art.js?v=16"></script>
 <script src="ice-dungeon-templates.js?v=11"></script>
-<script src="ice-dungeon-world.js?v=16"></script>
+<script src="ice-dungeon-world.js?v=17"></script>
 <script src="ice-art.js?v=7"></script>
 <script src="jungle-dungeon-templates.js?v=28"></script>
-<script src="jungle-dungeon-world.js?v=36"></script>
+<script src="jungle-dungeon-world.js?v=37"></script>
 <script src="jungle-art.js?v=3"></script>
 <script>
 /* =========================================================
@@ -409,6 +411,8 @@ const DIFFICULTY = (function(){
 // PvP colosseum params
 const PVP_MATCH = new URLSearchParams(location.search).get('match') || null;
 const PVP_SIDE = (new URLSearchParams(location.search).get('side') === 'right') ? 'right' : 'left';
+/* PvP slot 0–3 (up to 4 fighters: 1v1, free-for-all, 2v2); older links only carry side=left|right */
+const PVP_SLOT = (function(){ const v = new URLSearchParams(location.search).get('slot'); return v != null && /^[0-3]$/.test(v) ? +v : (PVP_SIDE === 'right' ? 1 : 0); })();
 const COOP_MATCH = new URLSearchParams(location.search).get('coop') === '1' ? (new URLSearchParams(location.search).get('match') || null) : null;
 const COOP_SIDE = (new URLSearchParams(location.search).get('side') === 'right') ? 'right' : 'left';
 // Co-op supports up to 4 players; slot 0 is the host and owns enemy/boss simulation.
@@ -418,6 +422,19 @@ const COOP_SLOT = (function(){
 	if(raw >= 0 && raw < COOP_MAX_PLAYERS) return raw;
 	return COOP_SIDE === 'right' ? 1 : 0; // legacy 2-player links
 })();
+/* One layout for the whole party: every procedural dungeon generator takes its seed from here when it is set —
+   ?seed= if given, otherwise (in co-op) a hash of the match id, so the host and every guest build the same dungeon.
+   Solo play keeps a fresh random layout each time (null). */
+const DUNGEON_SEED = (function(){
+	const q = new URLSearchParams(location.search);
+	const v = parseInt(q.get('seed'), 10);
+	if(Number.isFinite(v)) return (Math.abs(v) & 0x7FFFFFFF) || 1;
+	if(!COOP_MATCH) return null;
+	let h = 2166136261;
+	for(let i = 0; i < COOP_MATCH.length; i++){ h ^= COOP_MATCH.charCodeAt(i); h = Math.imul(h, 16777619); }
+	return ((h >>> 0) & 0x7FFFFFFF) || 1;
+})();
+window.DUNGEON_SEED_OVERRIDE = DUNGEON_SEED;
 // Difficulty multipliers: easy / normal / hard / nightmare
 const DIFF_HP_MULT = DIFFICULTY === 'nightmare' ? 5 : DIFFICULTY === 'hard' ? 2 : DIFFICULTY === 'easy' ? 0.6 : 1;
 const DIFF_SIZE_MULT = 1.4; // always use hard-mode size for all difficulties
@@ -714,7 +731,7 @@ const FALLING_SPRITE_COLS = 6, FALLING_SPRITE_ROWS = 4;
    every player sees the same colours; solo play is always blue.
    Derived straight from the URL because IS_COOP/IS_COLOSSEUM are declared later. */
 const MY_COLOR_IDX = (GAME_MODE === 'colosseum' && PVP_MATCH)
-	? (PVP_SIDE === 'right' ? 2 : 0)
+	? [0, 2, 1, 3][PVP_SLOT]      // blue, red, green, yellow (pvp-arena.js COLOR_OF_SLOT)
 	: COOP_MATCH ? (COOP_SLOT % PLAYER_COLORS.length)
 	: 0;
 
@@ -1693,7 +1710,7 @@ const TILE = 40;
    ============================================================= */
 function generateFireDungeon(){
 	// Seeded LCG RNG — changes each page load for fresh layouts
-	let _seed = (Date.now() ^ (Math.random()*0xFFFFFF|0)) & 0x7FFFFFFF;
+	let _seed = DUNGEON_SEED != null ? DUNGEON_SEED : ((Date.now() ^ (Math.random()*0xFFFFFF|0)) & 0x7FFFFFFF);      // shared in co-op
 	function rnd(){ _seed=(_seed*1664525+1013904223)&0x7FFFFFFF; return _seed/0x7FFFFFFF; }
 	function ri(lo,hi){ return lo+Math.floor(rnd()*(hi-lo+1)); }
 	function rf(lo,hi){ return lo+rnd()*(hi-lo); }
@@ -2479,6 +2496,9 @@ const SANDBOX_CONFIG = {
 
 /* Mage Arena (sandbox?arena=mages): a giant open floor where the rune mages are summoned in the middle */
 const IS_MAGE_ARENA = GAME_MODE === 'sandbox' && new URLSearchParams(location.search).get('arena') === 'mages';
+/* The Grand Arcanist's trial (…&arena=mages&boss=arcanist): the Mage Arena with your REAL energy reserve and
+   regeneration (the sandbox's infinite energy is off), and the boss summoned at the start */
+const ARCANIST_TRIAL = IS_MAGE_ARENA && new URLSearchParams(location.search).get('boss') === 'arcanist';
 if(IS_MAGE_ARENA){
 	Object.assign(SANDBOX_CONFIG, {
 		name: 'Mage Arena', worldW: 9000, worldH: 2640, groundY: 2340, groundThick: 300,      // a deep floor so the fight happens above the hotbar
@@ -2508,7 +2528,7 @@ const COLOSSEUM_CONFIG = {
 	bgColor2: '#8a6f3e',
 	groundY: 2400,
 	groundThick: 60,
-	playerStart: (window.PvpArena ? PvpArena.spawnFor(PVP_SIDE === 'right' ? 'right' : 'left') : ((PVP_SIDE === 'right') ? { x: 2320, y: 1820 } : { x: 1680, y: 1820 })),
+	playerStart: (window.PvpArena ? PvpArena.spawnFor(PVP_SLOT) : ((PVP_SIDE === 'right') ? { x: 2320, y: 1820 } : { x: 1680, y: 1820 })),
 	infiniteMana: false,
 	platforms: [],
 };
@@ -4250,6 +4270,97 @@ function spellUsesControl(spell){
 
 /* Co-op raid/dungeon bosses: +50% HP and +20% damage per player above 1. */
 let _coopBossDmg = false;
+/* ---------- co-op aggro (the host runs every enemy): each enemy chooses whom to go after ----------
+   Threat-based: damage dealt to an enemy builds that player's threat on it (it fades over time); nearness counts
+   too, the current target gets a little stickiness, and bosses turn to someone else every ~7 s. While an enemy acts
+   against an ally, the host's "player" is briefly stood in for by that ally (position, motion), so the enemy's own
+   AI — movement, aim, spells, contact — goes after them; anything that would hurt "you" in that moment is sent to
+   that ally's client instead (CoopSync event 'hit'). Enemy projectiles still fly for everyone. */
+let _coopAimAlly = null, _coopAimEn = null;
+const _coopFwdAt = Object.create(null);      // ally id -> last forwarded hit (ms)
+const COOP_AIM_FIELDS = ['x', 'y', 'vx', 'vy', 'w', 'h', 'onGround', 'facing', 'iFrames', 'stunTimer', 'slowTimer', 'blindTimer', '_knockbackVx', '_knockbackVy', '_knockbackTimer', 'launchVx', 'ultCharging'];
+function coopCandidates(){
+	const list = [];
+	if(typeof health === 'number' && health > 0) list.push({ id: 'host', x: player.x, y: player.y, w: player.w, h: player.h, ally: null });
+	const allies = window.__coopAllies || {}, t = performance.now();
+	for(const id in allies){
+		const a = allies[id];
+		if(!a || !a.active || !(a.hp > 0) || !a.snap || t - a.snap.t > 3000) continue;
+		list.push({ id, x: a.renderX != null ? a.renderX : a.x, y: a.renderY != null ? a.renderY : a.y, w: 38, h: 56, ally: a });
+	}
+	return list;
+}
+function coopThreat(en, id, dmg){
+	if(!en || !(dmg > 0)) return;
+	en._thr = en._thr || {};
+	en._thr[id] = (en._thr[id] || 0) + dmg;
+	if(id !== 'host') en._gdmg = (en._gdmg || 0) + dmg;
+}
+function coopPickTarget(en){
+	const C = coopCandidates();
+	if(C.length < 2) return C[0] || null;
+	en._thr = en._thr || {};
+	// the host's own damage: whatever this enemy lost since last frame that guests did not report
+	if(en._phpPrev != null){ const d = en._phpPrev - en.hp - (en._gdmg || 0); if(d > 0) en._thr.host = (en._thr.host || 0) + d; }
+	en._phpPrev = en.hp; en._gdmg = 0;
+	for(const k in en._thr) en._thr[k] *= 0.996;
+	const isBoss = !!(en.typeDef && en.typeDef.isBoss) || en === (typeof raidBoss !== 'undefined' ? raidBoss : null) || en === (typeof chronoBoss !== 'undefined' ? chronoBoss : null);
+	if(isBoss){
+		en._rotT = (en._rotT || 0) + 1;
+		if(en._rotT > 420){
+			en._rotT = 0;
+			const others = C.filter(c => c.id !== en._tgtId);
+			if(others.length){ en._rotFocus = others[Math.floor(Math.random() * others.length)].id; en._rotUntil = 240; }
+		}
+		if(en._rotUntil > 0) en._rotUntil--; else en._rotFocus = null;
+	}
+	en._tgtT = (en._tgtT || 0) - 1;
+	if(en._tgtT > 0 && C.some(c => c.id === en._tgtId)) return C.find(c => c.id === en._tgtId);
+	en._tgtT = 20;
+	const ex = en.x + en.w / 2, ey = en.y + en.h / 2;
+	const range = (typeof enemyDetectRange === 'function' && en.typeDef) ? Math.max(300, enemyDetectRange(en)) : 900;
+	let maxT = 1; for(const c of C) maxT = Math.max(maxT, en._thr[c.id] || 0);
+	let best = null, bs = -1e9;
+	for(const c of C){
+		const d = Math.hypot(c.x + c.w / 2 - ex, c.y + c.h / 2 - ey);
+		let sc = 0.9 * ((en._thr[c.id] || 0) / maxT) + 0.8 * Math.max(0, 1 - d / range);
+		if(c.id === en._tgtId) sc += 0.3;
+		if(en._rotFocus === c.id) sc += 1.0;
+		if(d > range * 1.6) sc -= 1;
+		if(sc > bs){ bs = sc; best = c; }
+	}
+	en._tgtId = best ? best.id : 'host';
+	return best;
+}
+function coopAimBegin(en){
+	if(typeof IS_COOP === 'undefined' || !IS_COOP || !COOP_HOST || !en || en.dead) return null;
+	const t = coopPickTarget(en);
+	if(!t || !t.ally) return null;
+	const snap = {};
+	for(const k of COOP_AIM_FIELDS) snap[k] = player[k];
+	snap._dots = player.dots;
+	player.x = t.x; player.y = t.y; player.vx = t.ally.vx || 0; player.vy = t.ally.vy || 0; player.onGround = !!t.ally.onGround; player.facing = t.ally.facing || 1;
+	player.iFrames = 0; player.dots = [];
+	_coopAimAlly = t.id; _coopAimEn = en;
+	return snap;
+}
+function coopAimEnd(snap){
+	if(!snap) return;
+	for(const k of COOP_AIM_FIELDS) player[k] = snap[k];
+	player.dots = snap._dots;
+	_coopAimAlly = null; _coopAimEn = null;
+}
+function coopForwardHit(id, amount, effects){
+	if(!(amount > 0) || typeof CoopSync === 'undefined') return;
+	// touch damage of these enemies is already worked out on each guest's own screen (COOP_CONTACT_DMG)
+	if(_coopAimEn && typeof COOP_CONTACT_DMG !== 'undefined' && COOP_CONTACT_DMG[_coopAimEn.type]) return;
+	// at most one blow per ally every 0.25 s (their client applies its own i-frames too)
+	const tnow = performance.now();
+	if(_coopFwdAt[id] && tnow - _coopFwdAt[id] < 250) return;
+	_coopFwdAt[id] = tnow;
+	const eff = Array.isArray(effects) ? effects.filter(e => typeof e === 'string' || (e && typeof e === 'object' && !Array.isArray(e))).slice(0, 6) : [];
+	CoopSync.queueEvent('hit', { to: id, d: Math.round(amount * 10) / 10, e: eff, b: _coopBossDmg ? 1 : 0 });
+}
 function coopPartySize(){
 	if(!IS_COOP) return 1;
 	let n = 1;
@@ -4443,7 +4554,9 @@ if(IS_SANDBOX){
 	document.getElementById('dungeonName').style.display = 'none'; // Title lives on the canvas boss HP bar
 	document.getElementById('backBtn').href = 'raids.html';
 } else if(IS_COLOSSEUM){
-	document.getElementById('dungeonName').innerHTML = 'Colosseum <span style="font-size:12px;color:#e0b85a;">(PvP Duel)</span>';
+	{ const _q = new URLSearchParams(location.search), _pm = _q.get('pm'), _n = +_q.get('n') || 2;
+	  const _lbl = !PVP_MATCH ? 'PvP Practice' : _pm === 'teams' ? 'PvP 2v2' : (_pm === 'ffa' || _n > 2) ? 'PvP Free-for-all' : 'PvP Duel';
+	  document.getElementById('dungeonName').innerHTML = 'Colosseum <span style="font-size:12px;color:#e0b85a;">(' + _lbl + ')</span>'; }
 	document.getElementById('backBtn').href = 'index.html';
 } else {
 	document.getElementById('dungeonName').innerHTML = dungeon.name + ' <span style="font-size:12px;color:' + diffColors[DIFFICULTY] + ';">(' + diffLabel + ')</span>';
@@ -10754,11 +10867,11 @@ computeTileEdges();
 /* =============================================================
    MANA
    ============================================================= */
-const maxMana = (IS_SANDBOX) ? Infinity : Math.max(100, Math.round((1500 - vowManaPenalty) * ((typeof GearRuntime !== 'undefined' && GearRuntime.maxManaMult) ? GearRuntime.maxManaMult() : 1)));
-let mana = (IS_SANDBOX) ? Infinity : maxMana;
+const maxMana = (IS_SANDBOX && !ARCANIST_TRIAL) ? Infinity : Math.max(100, Math.round((1500 - vowManaPenalty) * ((typeof GearRuntime !== 'undefined' && GearRuntime.maxManaMult) ? GearRuntime.maxManaMult() : 1)));
+let mana = (IS_SANDBOX && !ARCANIST_TRIAL) ? Infinity : maxMana;
 const baseManaRegen = 0.45 + (stats.manaRegen||0) * 0.009;
 function updateManaHUD(){
-	if(IS_SANDBOX){
+	if(IS_SANDBOX && !ARCANIST_TRIAL){
 		document.getElementById('manaBarFill').style.width = '100%';
 		document.getElementById('manaText').textContent = '∞ / ∞';
 		return;
@@ -14439,7 +14552,7 @@ function spawnWarriorMelee(spell, shape, behavior, facing, castId, sourceSlot, o
 function buildCastPayload(spell, slot, ox, oy, facing, color, isUlt){
 	return {
 		slot: slot,
-		pslot: typeof COOP_SLOT !== 'undefined' ? COOP_SLOT : (PVP_SIDE === 'right' ? 1 : 0),
+		pslot: (typeof IS_COOP !== 'undefined' && IS_COOP && typeof COOP_SLOT !== 'undefined') ? COOP_SLOT : PVP_SLOT,
 		spell: cloneSpellForNet(spell),
 		cls: playerData.mageClass || 'none',
 		cls2: playerData.mageClass2 || 'none',
@@ -14449,7 +14562,7 @@ function buildCastPayload(spell, slot, ox, oy, facing, color, isUlt){
 		aimY: mouseScreenY + camera.y,
 		color: color,
 		ult: !!isUlt,
-		cid: (IS_COOP ? ('c' + (typeof COOP_SLOT !== 'undefined' ? COOP_SLOT : 'x')) : (PVP_SIDE || 'L')) + '-' + (_netCastSeq++) + '-' + ((Math.random() * 1e9) | 0).toString(36),
+		cid: (IS_COOP ? ('c' + (typeof COOP_SLOT !== 'undefined' ? COOP_SLOT : 'x')) : ('p' + PVP_SLOT)) + '-' + (_netCastSeq++) + '-' + ((Math.random() * 1e9) | 0).toString(36),
 		seed: (Math.random() * 0x7fffffff) | 0,
 	};
 }
@@ -14949,6 +15062,12 @@ if((IS_SANDBOX || (IS_COLOSSEUM && !PVP_MATCH)) && window.RuneMages && MAGIC_WOR
 			};
 			stop(b); panel.appendChild(b);
 		}
+		const trial = document.createElement('a');
+		trial.href = ARCANIST_TRIAL ? 'dungeon.html?mode=sandbox&arena=mages' : 'dungeon.html?mode=sandbox&arena=mages&boss=arcanist';
+		trial.textContent = ARCANIST_TRIAL ? 'Leave the trial (infinite energy again)' : '⚜ The Grand Arcanist — Trial (your real energy)';
+		trial.title = 'An endgame boss who uses no techniques. In the trial your energy reserve and regeneration are real, as in a dungeon.';
+		trial.style.cssText = 'display:block;margin:6px 0 4px;padding:7px 8px;border-radius:6px;text-align:center;text-decoration:none;color:#ffe7b0;background:linear-gradient(90deg,#2a2113,#1a1530);border:1px solid #e9c46a;font:bold 12px Arial,sans-serif;';
+		stop(trial); panel.appendChild(trial);
 		const c = document.createElement('button');
 		c.textContent = 'Clear mages';
 		c.style.cssText = 'margin-top:4px;padding:5px 10px;border-radius:6px;background:#2a2238;color:#ccc;border:1px solid #554;cursor:pointer;font:12px Arial,sans-serif;';
@@ -14959,6 +15078,12 @@ if((IS_SANDBOX || (IS_COLOSSEUM && !PVP_MATCH)) && window.RuneMages && MAGIC_WOR
 		tip.textContent = 'They cast real rune spells with their own energy — tethers, portals, constructs and a domain. Your Anti-Magic, gravity and portals work on their magic too.';
 		panel.appendChild(tip);
 		document.body.appendChild(panel);
+		if(ARCANIST_TRIAL && K.arcanist) setTimeout(() => {
+			const cx = SANDBOX_CONFIG.arenaCenter || WORLD_W / 2;
+			RuneMages.clear();
+			RuneMages.spawn('arcanist', cx + 520, SANDBOX_CONFIG.groundY - 4);
+			dmgNumbers.push({ x: cx + 520, y: SANDBOX_CONFIG.groundY - 160, text: 'The Grand Arcanist awaits', age: 0, color: '#ffd98a' });
+		}, 900);
 	})();
 }
 /* ---------- PASSIVE SPELLS: cast once to switch on; they keep running on a constant energy drain ---------- */
@@ -22186,6 +22311,8 @@ function updateEnemyProjectiles(){
    DAMAGE PLAYER
    ============================================================= */
 function damagePlayer(amount,effects,fxPower){
+	// co-op host: an enemy acting against an ally right now — the blow is theirs, sent to their client
+	if(_coopAimAlly){ coopForwardHit(_coopAimAlly, amount, effects); return; }
 	if(typeof MeleeMode !== 'undefined' && MeleeMode.isInvulnerable()) return;
 	if(typeof MeleeMode !== 'undefined' && MeleeMode.tryParry(amount)) return;
 	if(player.iFrames>0)return;
@@ -22261,7 +22388,7 @@ function respawnPlayer(){
 			notify('The duel has been interrupted. Speak with Captain Dorn to try again.');
 		}
 		health=maxHealth;
-		mana=(IS_SANDBOX)?Infinity:maxMana;
+		mana=(IS_SANDBOX && !ARCANIST_TRIAL)?Infinity:maxMana;
 		player.x=playerSpawn.x;
 		player.y=playerSpawn.y;
 		if(IS_RAID) snapPlayerToRaidPlatform();
@@ -23935,11 +24062,11 @@ function updateNpcs(){
 		if(door === 'exit') doorPrompt = 'Press <b>E</b> to return to the street';
 		else if(door && door.locked) doorPrompt = door.lockText || ((door.label || 'This door') + ' is sealed');
 		else if(door && door.label) doorPrompt = 'Press <b>E</b> to ' + (door.verb || 'enter') + ' ' + door.label;
-		if((!door || door === 'exit') && EmberfallCity.nearPrompt){ const _np = EmberfallCity.nearPrompt(player); if(_np) doorPrompt = _np; }
+		if(!door && EmberfallCity.nearPrompt){ const _np = EmberfallCity.nearPrompt(player); if(_np) doorPrompt = _np; }
 	}
 	if((nearbyNpc || envPrompt || doorPrompt) && !dialogueActive && !aiChatActive && !scrollShopOpen){
 		prompt.style.display = 'block';
-		if(doorPrompt && !nearbyNpc) prompt.innerHTML = doorPrompt;
+		if(doorPrompt) prompt.innerHTML = doorPrompt; // doors and exits win, matching what E does
 		else if(envPrompt && !nearbyNpc) prompt.innerHTML = envPrompt.replace('Press E — ', 'Press <b>E</b> to ').replace('E — ', 'Press <b>E</b> to ');
 		else if(nearbyNpc) prompt.innerHTML = (IS_CITY && nearbyNpc.name) ? 'Press <b>E</b> to talk to ' + nearbyNpc.name : 'Press <b>E</b> to interact';
 	} else {
@@ -27741,7 +27868,10 @@ function updateEnemies(){
 	// no AI of their own, so both screens show the same fight.
 	if(COOP_GUEST){ updateCoopRemoteEnemies(); return; }
 	const _cityInside = IS_CITY && typeof EmberfallCity !== 'undefined' && EmberfallCity.isInside && EmberfallCity.isInside();
+	let _aimSnap = null;      // co-op: while this enemy goes after an ally, it sees (and hits) that ally, not you
+	try {
 	for(const en of enemies){
+		if(_aimSnap){ coopAimEnd(_aimSnap); _aimSnap = null; }
 		// the open world: everything holds still while you are indoors (the terrain is switched off) or far away
 		if(en._worldFoe && !en.dead && (_cityInside || Math.abs(en.x - player.x) > 2600)) continue;
 		_coopBossDmg = !!(IS_COOP && en.typeDef && en.typeDef.isBoss);
@@ -27768,6 +27898,7 @@ function updateEnemies(){
 			}
 			continue;
 		}
+		_aimSnap = coopAimBegin(en);
 
 		if(!en._nmRolled && typeof NightmareSystem !== 'undefined'){
 			en._nmRolled = true;
@@ -28594,6 +28725,7 @@ function updateEnemies(){
 			if(en.spellCooldowns[si]>0&&!canSee) en.spellCooldowns[si]--;
 		}
 	}
+	} finally { if(_aimSnap){ coopAimEnd(_aimSnap); _aimSnap = null; } }
 }
 
 /* =============================================================
@@ -30039,7 +30171,7 @@ function update(){
 	}
 
 	/* Mana regen */
-	if(IS_SANDBOX){
+	if(IS_SANDBOX && !ARCANIST_TRIAL){
 		// Infinite mana in sandbox mode
 		mana = maxMana;
 		totalMana = 999999;
@@ -30406,8 +30538,8 @@ function update(){
 	updateQuestTracker();
 	refreshCoopBossHp();
 	_coopBossDmg = IS_COOP;
-	updateRaidBoss();
-	updateChronoBoss();
+	{ const _s = (typeof raidBoss !== 'undefined' && raidBoss && !raidBoss.dead) ? coopAimBegin(raidBoss) : null; try { updateRaidBoss(); } finally { if(_s) coopAimEnd(_s); } }
+	{ const _s = (typeof chronoBoss !== 'undefined' && chronoBoss && !chronoBoss.dead) ? coopAimBegin(chronoBoss) : null; try { updateChronoBoss(); } finally { if(_s) coopAimEnd(_s); } }
 	updateZenithBoss();
 	if(typeof updateChallengerBoss === 'function') updateChallengerBoss();
 	_coopBossDmg = false;
@@ -42808,14 +42940,14 @@ function updateDebugPanel(){
 <script src="jungle-setpiece.js?v=2"></script>
 <script src="dungeon-interact-art.js?v=7"></script>
 <script src="chest-loot.js?v=4"></script>
-<script src="dungeon-fluid.js?v=22"></script>
+<script src="dungeon-fluid.js?v=23"></script>
 <script src="fire-puzzle-kit.js?v=5"></script>
 <script src="ice-puzzle-kit.js?v=4"></script>
 <script src="fire-setpiece.js?v=4"></script>
 <script src="special-rooms.js?v=6"></script>
 <script src="dungeon-env.js?v=55"></script>
-<script src="dungeon-vision.js?v=10"></script>
-<script src="dungeon-skin.js?v=1"></script>
+<script src="dungeon-vision.js?v=11"></script>
+<script src="dungeon-skin.js?v=2"></script>
 <script src="where-map.js?v=2"></script>
 <script src="tutorial-coach.js?v=1"></script>
 <script src="challenger-raid.js?v=34"></script>
@@ -43152,8 +43284,8 @@ loop();
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase-config.js?v=3"></script>
 <script src="cloud-save.js?v=6"></script>
-<script src="pvp-net.js?v=9"></script>
-<script src="coop-net.js?v=3"></script>
+<script src="pvp-net.js?v=10"></script>
+<script src="coop-net.js?v=4"></script>
 <script>
 /* ===== Colosseum PvP: maps, rune spells, melee and netcode live in pvp-arena.js ===== */
 if(typeof IS_COLOSSEUM !== 'undefined' && IS_COLOSSEUM && window.PvpArena) PvpArena.boot();
@@ -43357,6 +43489,10 @@ if(typeof IS_COLOSSEUM !== 'undefined' && IS_COLOSSEUM && window.PvpArena) PvpAr
 				var ev = list[i], d = ev.data || {};
 				if(ev.type === 'warn') showRaidWarning(d.text, d.duration);
 				else if(ev.type === 'ind') addRaidIndicator(d.x, d.y, d.w, d.h, d.d, d.c, d.t);
+				else if(ev.type === 'hit'){
+					// an enemy the host runs went after YOU: the damage is applied here, with your own defences and i-frames
+					if(net && d.to === net.id){ CoopSync.applying = false; const _b = _coopBossDmg; _coopBossDmg = !!d.b; try { damagePlayer(d.d, d.e || []); } finally { _coopBossDmg = _b; CoopSync.applying = true; } }
+				}
 				else if(ev.type === 'knockup'){
 					if(typeof knockUpChallengerPlayers === 'function') knockUpChallengerPlayers(d.m || 1, true);
 				}
@@ -43366,9 +43502,10 @@ if(typeof IS_COLOSSEUM !== 'undefined' && IS_COLOSSEUM && window.PvpArena) PvpAr
 
 	function connect(){
 		if(net || connecting) return;
-		if(!window.CoopNet || !CoopNet.enabled()){ coopStatus = 'Online co-op not configured'; return; }
+		var localTest = /[?&]local=1/.test(location.search);      // tabs of one browser, no server (testing)
+		if(!window.CoopNet || (!localTest && !CoopNet.enabled())){ coopStatus = 'Online co-op not configured'; return; }
 		var client = window.CloudSave && CloudSave.client && CloudSave.client();
-		if(!client){ setTimeout(connect, 400); return; }
+		if(!client && !localTest){ setTimeout(connect, 400); return; }
 		connecting = true;
 		net = CoopNet.connectCoop(COOP_MATCH, {
 			onConnected: function(){ coopStatus = 'Waiting for your party…'; },
@@ -43397,6 +43534,7 @@ if(typeof IS_COLOSSEUM !== 'undefined' && IS_COLOSSEUM && window.PvpArena) PvpAr
 				if(!target || target.dead) return;
 				target.hp -= (d.dmg || 0);
 				target.flash = 8;
+				coopThreat(target, d.from || 'guest', d.dmg || 0);      // their damage draws the enemy's attention
 				if(target.hp <= 0 && !isCoopBoss(target)){ target.hp = 0; target.dead = true; target.deathTimer = 0; }
 			},
 			onWorld: applyWorld,

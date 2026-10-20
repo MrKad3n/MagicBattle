@@ -2463,9 +2463,197 @@ A gust used to add speed every frame, so a jump carried you much too far. Now:
   - **Tests:** two new engine checks (194 / 194 passing).
 - **Cache-busters:** magic-engine v61, magic-techniques v43, magic-forge v22, tutorials v2, tutorial-coach v1, and pvp-arena v4 is now referenced from dungeon.html.
 
+## c59 — Liquid lag in dungeons, a raging river at the River Mill, doors win over props, seamless backdrops
+
+**Dungeon liquids no longer lag the game.**
+- **Fluid drawing (dungeon-fluid.js)**
+  - Liquid is painted into cached 512 px world tiles (up to 40). A tile only repaints when the depths inside it change, at most 3 per frame. Falling streams are still drawn live on top.
+  - `Fluid.clearDrawCache()` was added.
+- **Fluid simulation**
+  - Settled pools go to sleep after 60 calm ticks: flow runs every 4th tick and levelling every 16th. Any change to a pool wakes it.
+  - Levelling uses column objects instead of string ids. Column keys only refresh when columns are added.
+  - Pruning runs every 180 ticks, and only when needed.
+  - Measured cost is about 0.45 ms tick and 0.5 ms draw per frame on a large lava level.
+- **Lava lights (dungeon-vision.js)**
+  - Lava adds one light per ~200 px instead of one per 48 px.
+  - Lights of the same colour that are close together are merged once there are more than 24. The total is capped at 64.
+  - Each light is stamped from a cached radial sprite instead of building a new gradient every frame.
+- **Rock skin (dungeon-skin.js)**
+  - The vein glow is baked into the rock chunks, so there is no per-frame glow pass.
+  - Tile changes only mark chunks for checking: one visible chunk is re-checked per frame, and at most 2 stale chunks are rebuilt per frame.
+  - This was a big stall in the fire dungeon. `reset()` now does a full clear.
+
+**River Mill (West Approach).**
+- **Water wheel removed:** the wheel, the mill race and its plank walk are gone, and the ground there is level.
+- **Millwright Osric:** his lines now say the spring flood tore the wheel off and threw it at the bridge. He walks east of the mill door (9830–10080).
+- **The river is a raging river** (`rapids: true, flow 4`). The Valedorn under the stone bridge is drawn by a new `drawRapids`:
+  - a choppy surface;
+  - current streaks sliding toward the viewer and fanning outward;
+  - white foam boils at the rocks and bridge piers;
+  - broken crests.
+- **New `riverFar` back structure:** through the arches you see the river running in from the distance and widening toward the screen, with rapids rows and haze.
+- **Spray:** spray particles fly up off the rapids.
+
+**Doors win over interactables.**
+- **The bug:** standing at a door or room exit with a prop, loot or person nearby, the prompt and the E key could pick the prop, which stopped you leaving.
+- **The fix:** an unlocked door or exit now always takes E (`EmberfallCity.tryLoot` steps aside), and its prompt is always the one shown.
+
+**Seamless backdrops.**
+- **The painted bands tile with no visible cut.** All nine bg-far/mid/near bands were re-cut with `tools/ef_seamless.py`:
+  - the strip's two ends are overlapped by 22%;
+  - a minimum-error seam is found through the overlap and feathered across it.
+  - The bands are now ~1000 px wide (were 1280). The originals are kept outside the game.
+- **The far-city skyline** is painted wrapped, so roofs that cross its ends continue on the next copy.
+- **Image cache-buster:** bg images v2.
+
+Cache-busters: dungeon-fluid v23, dungeon-vision v11, dungeon-skin v2, emberfall-world / layout / life v3, emberfall-city v44, bg band images v2.
+
+## c60 — The Grand Arcanist (a technique-free endgame boss), a raw-energy discovery sweep, sparser clouds, no green block
+
+**Backdrop.**
+- **Clouds:** the sky draws single clouds cut from bg-clouds.png. There is one slot every 430 px of drift and about two
+  thirds of the slots are filled. It used to tile the whole strip twice.
+- **Green block:** the flat green rectangle under the painted bands is gone. In its place is a procedural
+  countryside strip (fields, hedgerows, copses, grass). It is cached, wraps seamlessly and has a snowy variant.
+- **Far river:** the riverFar banks use the same painted fields instead of a flat green wedge.
+- New export `EmberfallWorld.meadow(cold)`.
+
+**The Grand Arcanist** (`grand-arcanist.js`). An endgame boss who uses **no technique**: every attack is a rune tree
+cast through the engine with his own reserve.
+- **Library:** 13 attacks plus 4 sequences. 11 are initial authored spells. Two come unchanged from the new
+  discovery catalog:
+  - the signature *Blooming Line* (RD-0099): discs that expand and burst only as they reach you;
+  - *Waiting Mines* (RD-0234).
+- **Policy (enforced in code):**
+  - A static check runs on registration and again before every cast. It allows only raw runes, refuses technique
+    parameters and other casters' energy, allows Draw Out only from himself, and enforces Max Output 960.
+  - A per-frame scan covers every body, reinforcement, construct and domain he owns. Outside techniques are stripped
+    and logged.
+- **Mind:**
+  - He perceives the player 0.2 s late.
+  - A model tracks jump rhythm, close/far time, stillness, casts and dodge direction.
+  - A utility score per attack feeds a softmax over the top 3.
+  - Three phases (66 % / 33 %). Phase changes are a 1.8 s shift that clears his spells.
+  - Telegraphs use engine-measured burst radii.
+  - A stun interrupts his telegraph, followed by 3 s of poise.
+  - No teleport.
+  - He resets on the player's death.
+- **Balance:** HP 5600, dmgScale 0.33, reserve 7000 with 150 / s regen (a documented allowance). His Draw Out pays
+  per unit (`owner.drain`).
+- **Trial:** `dungeon.html?mode=sandbox&arena=mages&boss=arcanist` is the Mage Arena with the player's real energy and
+  regeneration (`ARCANIST_TRIAL`). There is a link in the summon panel.
+- **RuneMages hooks:**
+  - a kind may set `custom: { init, frame, draw, onDeath, pre }`;
+  - `bookFor` accepts prebuilt defs;
+  - `RuneMages.INTERNAL` exposes cast / perception / helpers.
+
+**Tools** (Node, seeded and reproducible):
+- `tools/sim-core.js`: the shared harness. It has the Mage Arena geometry and player policies (still, strafe, jumper,
+  aggressive, kiter, reactive with a 0.22 s reaction, random, baseline, skilled).
+- `tools/raw-discovery.js`: the discovery sweep. It writes `sim/raw-discovery/*`.
+- `tools/arcanist-campaign.js`, which covers:
+  - library and policy cases
+  - individual attacks
+  - counterplay
+  - full and natural encounters
+  - technique audit
+  - stability (including a draw smoke test)
+  - regression
+
+  It writes `sim/arcanist/*`, `data/arcanist-spell-library.json`, `grand-arcanist-discovered.js` and
+  `docs/grand-arcanist-report.md` (37 / 37 checks pass).
+- `tools/selftest-seeded.js`: runs `RuneMages.selfTest` seeded, for before/after comparison. The results are identical
+  to the pre-boss code.
+
+Cache-busters: emberfall-world / life v4, rune-mages v13, grand-arcanist v1, grand-arcanist-discovered v1.
+
+## c61 — The Grand Arcanist: more energy, faster attacks, no warnings
+
+**Energy.** His reserve went from 7000 to 30000, and regeneration from 150 to 900 per second.
+
+**Speed:**
+- **Wind-ups:** 30 % of each attack's listed telegraph (`telegraphMul`), never under 0.1 s.
+- **Cooldowns:** 40 % of the listed values (`cooldownMul`).
+- **Recovery:** 45 / 38 / 30 % per phase.
+- **Rest between decisions:** 0.12–0.4 s (it was 0.4–1.05 s).
+- **Caps:** up to 90 bodies and 18 spell instances of his own.
+
+**Warnings removed** (`CONFIG.showTelegraphs = false`):
+- the aim lines, target marks, burst rings, mine and bloom circles, fuse rings and the watching line;
+- the Absolute Output screen vignette;
+- the hand gather and the brighter aura while gathering;
+- the « attack name » label.
+
+What you see now is only his energy itself. Set `showTelegraphs` back to `true` to restore all of it.
+
+**Campaign** (34 / 37):
+- **No longer met:**
+  - "a clean counter for every attack" (Blooming Line: 50 % at best);
+  - "no more than 60 % of your health in one second" (worst 407 of 500);
+  - "a skilled player can win" (0 / 6 natural fights; before: 4 / 6).
+- **Why those checks are kept:** they are fairness measurements and now document what the change cost.
+- **Pressure** has roughly doubled: a still player takes 46.7 dps (before 25.3), strafing 24.8 (before 9.2).
+
+Cache-buster: grand-arcanist v2.
+
+## c62 — Four players in PvP and co-op
+
+**PvP — up to 4 fighters: 1v1, free-for-all and 2v2.**
+- **Net layer (`pvp-net.js`):**
+  - Casual queues for 1v1, free-for-all and 2v2.
+  - A free-for-all starts at 4 players, or at 2 or more once the oldest player has waited 25 s.
+  - Private rooms hold up to 4 (`openRoom`; the host starts with a mode).
+  - Each pair of players gets its own direct link (WebRTC mesh), falling back to the relay.
+  - Every message carries its sender's slot.
+  - Match URL: `matchUrl()` builds `…&slot=&n=&pm=` (it keeps `side=` for old links).
+- **Arena (`pvp-arena.js`):** the single opponent (`R` / `ENT` / `OWNER_R`) became one remote fighter per slot (`REM`, `remote(slot)`).
+  - **Each remote fighter** has its own ghost body, rig drawing, engine caster (`pvp-remote-<slot>`), cast table and rtt.
+  - **Colours:** slots 0–3 are blue, red, green and yellow.
+  - **Teams:** in 2v2, slots 0 and 2 (Team Azure) face 1 and 3 (Team Crimson).
+  - **Friendly fire is off.** An ally's spells never hurt you, and allies are never in your targets (engine enemies, melee targets, old projectile hits).
+  - **Referee:** the host, slot 0.
+    - Every client reports its own knock-out.
+    - The host keeps the list of who is still standing and broadcasts `dn` (down).
+    - The round ends when one fighter (1v1, FFA) or one team (2v2) is left. A round can also end in a draw.
+    - Scores are kept per slot (`s0`…) or per team (`t0` / `t1`); first to 2 wins.
+  - **Knocked-out players watch until the round ends:** they cannot move, cast or swing, and the camera follows a fighter still standing.
+  - **Leaving:** a player who leaves mid-round counts as down. Someone joining mid-round watches until the next round.
+  - **Spawns:**
+    - Even slots start on the left and odd slots on the right.
+    - Slots 2 and 3 stand 240 px further in, on solid ground (checked on all five maps).
+  - **HUD:**
+    - The 1v1 versus bar is kept.
+    - With 3–4 fighters there is a standings panel (name, health, round pips, team headers).
+    - Allies show a team-colour ring and "(ally)" over their head.
+    - The title shows PvP Duel, Free-for-all or 2v2.
+  - **Pings:** each fighter's rtt is measured separately; the clock is synced to the host.
+  - **Legacy:** `window.__pvpOpp` now points at the nearest opponent; `window.__pvpOpps` lists them all.
+- **`dungeon.html`:** new `PVP_SLOT`; your colour and spawn now come from your slot.
+- **Menu (`index.html`):**
+  - Casual 1v1, Casual Free-for-all and Casual 2v2.
+  - Private Room (up to 4): a 4-seat roster with team labels. The host picks 1v1, FFA or 2v2 (each enabled only for the right player count) and starts.
+  - The `onMatched(matchId, info)` → `side=[object Object]` URL bug is fixed: the menu uses `PvPNet.matchUrl`.
+
+**Co-op — four players for real.**
+- **One layout for the party:** `DUNGEON_SEED` comes from `?seed=`, or in co-op from a hash of the match id. Every procedural generator (the inline fire generator and fire/ice/jungle `-world.js`) uses it, so host and guests build the same dungeon. Before this, each client generated its own random layout.
+- **Threat-based aggro** (the host runs every enemy):
+  - **Choosing a target:** each enemy picks among the living players. It weighs threat (damage dealt to it, which fades over time) against nearness, with some stickiness toward its current target. Bosses switch to someone else about every 7 s.
+  - **Going after an ally:** while an enemy acts against an ally, the host's `player` is briefly stood in for by that ally (`coopAimBegin` / `coopAimEnd`). The enemy's own AI (movement, aim, spells, kits) then goes after that ally.
+  - **Instant hits on an ally:** any instant damage is forwarded to that ally's client as a `hit` event. The ally's own i-frames and defences apply; there is a 0.25 s rate limit; enemies whose contact damage guests already compute locally are skipped.
+  - **Raids:** the raid and chrono bosses are wrapped the same way.
+  - **Threat from guests:** comes from their `enemyDmg` reports.
+- **Testing:** `coop-net.js` gains a `?local=1` BroadcastChannel transport, so four tabs of one browser can run co-op with no server.
+
+Tested headless with four local clients:
+- **PvP:** FFA and 2v2 rounds to a result and the next round; friendly fire off in 2v2 and on in FFA; 1v1 and practice unchanged.
+- **Co-op dungeon:** identical layout on all four; enemies chase and hurt guests.
+- **Raid and chrono raid:** the bosses scale to 4 and target guests.
+
+Cache-busters: pvp-arena v5, pvp-net v10, coop-net v4, fire-dungeon-world v56, ice-dungeon-world v17, jungle-dungeon-world v37.
+
 # Current state (summary of everything above, up to date)
 
-Cache-busters: **magic-engine v61, magic-techniques v43, rune-mages v12, magic-forge v22 (css v9), shape-editor v3, pvp-arena v4, pvp-net v9, gear-data v5, gear-system v10, melee-combat v42, player-rig v4, slot-chooser js v4 / css v3, dungeon-vision v10, emberfall-art v4, emberfall-city v43, fire-art v16, ice-art v7, jungle-art v3, ice-world v15, dungeon-skin v1, where-map v1, emberfall world/layout/interiors/life v2, frontier files v1.**
+Cache-busters: **magic-engine v61, magic-techniques v43, magic-forge v22 (css v9), shape-editor v3, pvp-arena v5, pvp-net v10, coop-net v4, fire/ice/jungle-dungeon-world v56/v17/v37, gear-data v5, gear-system v10, melee-combat v42, player-rig v4, slot-chooser js v4 / css v3, dungeon-vision v11, dungeon-fluid v23, emberfall-art v4, emberfall-city v44, fire-art v16, ice-art v7, jungle-art v3, ice-world v15, dungeon-skin v2, where-map v1, emberfall world/life v4, layout v3, interiors v2, rune-mages v13, grand-arcanist v2 (+ discovered v1), bg band images v2, frontier files v1.**
 
 ## Controls
 

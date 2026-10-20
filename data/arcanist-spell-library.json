@@ -1,0 +1,4222 @@
+{
+ "boss": "The Grand Arcanist",
+ "generated": "2026-10-20T14:34:02.517Z",
+ "engine": "magic-engine.js (maxRunes 100, rawMaxSpeed 9, maxBodiesGlobal 640)",
+ "profile": {
+  "stats": {
+   "magicControl": 30,
+   "magicPower": 150
+  },
+  "maxOutput": 960,
+  "runeCapacity": 100,
+  "reserve": 30000,
+  "regen": 900
+ },
+ "spells": [
+  {
+   "id": "GA-lance",
+   "name": "Precision Lance",
+   "role": "A",
+   "source": "authored",
+   "phases": {
+    "I": 1,
+    "II": 1,
+    "III": 0.8
+   },
+   "castingConditions": {
+    "range": [
+     200,
+     1300
+    ],
+    "cooldown": 1.6
+   },
+   "telegraph": 0.15,
+   "prep": 0.1,
+   "recovery": 0.35,
+   "cost": 81,
+   "peakOutput": 177,
+   "runes": 5,
+   "intendedResponse": "Keep moving: it is aimed where you are going, so change direction or jump as the line locks.",
+   "countersAndWeaknesses": "One narrow projectile; a change of direction after the line locks makes it miss. Punishes standing still and slow recovery.",
+   "techniqueFree": true,
+   "simulation": {
+    "byScenario": {
+     "still": {
+      "hitRate": 1,
+      "dmg": 35,
+      "tImpact": 1.22,
+      "runs": 8
+     },
+     "strafe": {
+      "hitRate": 0.88,
+      "dmg": 30,
+      "tImpact": 1.25,
+      "runs": 8
+     },
+     "jumper": {
+      "hitRate": 0.5,
+      "dmg": 17,
+      "tImpact": 0.75,
+      "runs": 8
+     },
+     "reverse": {
+      "hitRate": 1,
+      "dmg": 35,
+      "tImpact": 1.06,
+      "runs": 8
+     },
+     "wall": {
+      "hitRate": 0.88,
+      "dmg": 30,
+      "tImpact": 1.31,
+      "runs": 8
+     },
+     "casting": {
+      "hitRate": 0.88,
+      "dmg": 30,
+      "tImpact": 1.25,
+      "runs": 8
+     },
+     "threatened": {
+      "hitRate": 0.63,
+      "dmg": 22,
+      "tImpact": 1.47,
+      "runs": 8
+     },
+     "platform": {
+      "hitRate": 0.13,
+      "dmg": 4,
+      "tImpact": 1.12,
+      "runs": 8
+     }
+    },
+    "earliestHit": 0.6500000000000015,
+    "failRate": 0,
+    "runs": 64
+   },
+   "counterplay": {
+    "best": "away",
+    "cleanRate": 1,
+    "all": {
+     "stay": {
+      "clean": 0,
+      "dmg": 35
+     },
+     "away": {
+      "clean": 1,
+      "dmg": 0
+     },
+     "toward": {
+      "clean": 0,
+      "dmg": 35
+     },
+     "jumpFire": {
+      "clean": 0.5,
+      "dmg": 17
+     },
+     "jumpLate": {
+      "clean": 0,
+      "dmg": 35
+     },
+     "reverse": {
+      "clean": 0,
+      "dmg": 35
+     },
+     "awayJump": {
+      "clean": 1,
+      "dmg": 0
+     },
+     "sidestep": {
+      "clean": 0.83,
+      "dmg": 6
+     }
+    }
+   },
+   "knownLimitations": "A single raw projectile is capped at the engine's raw speed (9 px/frame): long range gives time to react by design.",
+   "engine": "magic-engine.js (maxRunes 100, rawMaxSpeed 9, maxBodiesGlobal 640)",
+   "generated": "2026-10-20T14:34:02.517Z",
+   "tree": {
+    "kind": "magic",
+    "v": 1,
+    "name": "Precision Lance",
+    "rootId": "r9b6m1yr",
+    "seq": 5,
+    "nodes": {
+     "r9b6m1yr": {
+      "id": "r9b6m1yr",
+      "type": "target",
+      "params": {
+       "kind": "enemy",
+       "astate": "anchored",
+       "select": "nearCaster",
+       "zoneUse": "zone",
+       "techFilter": "any",
+       "techSign": "any",
+       "radius": 220,
+       "range": 1600
+      },
+      "parent": null,
+      "dir": null,
+      "gx": 0,
+      "gy": 0,
+      "order": 0,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6n25m": {
+      "id": "r9b6n25m",
+      "type": "generate",
+      "params": {
+       "amount": 70,
+       "spawn": "caster",
+       "inherit": "yes"
+      },
+      "parent": "r9b6m1yr",
+      "dir": "s",
+      "gx": 0,
+      "gy": 1,
+      "order": 1,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6n38a": {
+      "id": "r9b6n38a",
+      "type": "color",
+      "params": {
+       "color": "gold"
+      },
+      "parent": "r9b6n25m",
+      "dir": "s",
+      "gx": 0,
+      "gy": 2,
+      "order": 2,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6n41p": {
+      "id": "r9b6n41p",
+      "type": "compress",
+      "params": {
+       "power": 9,
+       "shape": "lance",
+       "poly": null,
+       "shapeDoc": null
+      },
+      "parent": "r9b6n38a",
+      "dir": "s",
+      "gx": 0,
+      "gy": 3,
+      "order": 3,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6n5q5": {
+      "id": "r9b6n5q5",
+      "type": "redirect",
+      "params": {
+       "toward": "mouse",
+       "angle": 0,
+       "arrive": "pass",
+       "speedPct": 100
+      },
+      "parent": "r9b6n41p",
+      "dir": "s",
+      "gx": 0,
+      "gy": 4,
+      "order": 4,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     }
+    },
+    "phases": []
+   }
+  },
+  {
+   "id": "GA-volley",
+   "name": "Converging Volley",
+   "role": "B",
+   "source": "authored",
+   "phases": {
+    "I": 1,
+    "II": 1,
+    "III": 1
+   },
+   "castingConditions": {
+    "range": [
+     300,
+     1100
+    ],
+    "cooldown": 4.5
+   },
+   "telegraph": 0.12,
+   "prep": 0.1,
+   "recovery": 0.5,
+   "cost": 250,
+   "peakOutput": 400,
+   "runes": 7,
+   "intendedResponse": "They all meet at the marked point: leave it — sideways, or jump over the meeting point.",
+   "countersAndWeaknesses": "All six converge on one point chosen when they launch; anywhere outside the mark is safe.",
+   "techniqueFree": true,
+   "simulation": {
+    "byScenario": {
+     "still": {
+      "hitRate": 1,
+      "dmg": 44,
+      "tImpact": 1.43,
+      "runs": 8
+     },
+     "strafe": {
+      "hitRate": 0.75,
+      "dmg": 23,
+      "tImpact": 1.71,
+      "runs": 8
+     },
+     "jumper": {
+      "hitRate": 0.63,
+      "dmg": 12,
+      "tImpact": 1.72,
+      "runs": 8
+     },
+     "reverse": {
+      "hitRate": 1,
+      "dmg": 27,
+      "tImpact": 1.28,
+      "runs": 8
+     },
+     "wall": {
+      "hitRate": 1,
+      "dmg": 31,
+      "tImpact": 1.62,
+      "runs": 8
+     },
+     "casting": {
+      "hitRate": 0.75,
+      "dmg": 23,
+      "tImpact": 1.71,
+      "runs": 8
+     },
+     "threatened": {
+      "hitRate": 0.25,
+      "dmg": 6,
+      "tImpact": 3.03,
+      "runs": 8
+     },
+     "platform": {
+      "hitRate": 0.25,
+      "dmg": 3,
+      "tImpact": 1.29,
+      "runs": 8
+     }
+    },
+    "earliestHit": 0.9333333333333338,
+    "failRate": 0,
+    "runs": 64
+   },
+   "counterplay": {
+    "best": "away",
+    "cleanRate": 1,
+    "all": {
+     "stay": {
+      "clean": 0,
+      "dmg": 50
+     },
+     "away": {
+      "clean": 1,
+      "dmg": 0
+     },
+     "toward": {
+      "clean": 0,
+      "dmg": 35
+     },
+     "jumpFire": {
+      "clean": 1,
+      "dmg": 0
+     },
+     "jumpLate": {
+      "clean": 0,
+      "dmg": 50
+     },
+     "reverse": {
+      "clean": 0,
+      "dmg": 32
+     },
+     "awayJump": {
+      "clean": 1,
+      "dmg": 0
+     },
+     "sidestep": {
+      "clean": 0.67,
+      "dmg": 11
+     }
+    }
+   },
+   "knownLimitations": "The six arrows only converge on the point chosen at launch; a player already outside the mark is safe.",
+   "engine": "magic-engine.js (maxRunes 100, rawMaxSpeed 9, maxBodiesGlobal 640)",
+   "generated": "2026-10-20T14:34:02.517Z",
+   "tree": {
+    "kind": "magic",
+    "v": 1,
+    "name": "Converging Volley",
+    "rootId": "r9b6q696",
+    "seq": 7,
+    "nodes": {
+     "r9b6q696": {
+      "id": "r9b6q696",
+      "type": "target",
+      "params": {
+       "kind": "enemy",
+       "astate": "anchored",
+       "select": "nearCaster",
+       "zoneUse": "zone",
+       "techFilter": "any",
+       "techSign": "any",
+       "radius": 220,
+       "range": 1600
+      },
+      "parent": null,
+      "dir": null,
+      "gx": 0,
+      "gy": 0,
+      "order": 0,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6q7e5": {
+      "id": "r9b6q7e5",
+      "type": "generate",
+      "params": {
+       "amount": 220,
+       "spawn": "caster",
+       "inherit": "yes"
+      },
+      "parent": "r9b6q696",
+      "dir": "s",
+      "gx": 0,
+      "gy": 1,
+      "order": 1,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6q8fz": {
+      "id": "r9b6q8fz",
+      "type": "color",
+      "params": {
+       "color": "gold"
+      },
+      "parent": "r9b6q7e5",
+      "dir": "s",
+      "gx": 0,
+      "gy": 2,
+      "order": 2,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6q9m5": {
+      "id": "r9b6q9m5",
+      "type": "compress",
+      "params": {
+       "power": 4,
+       "shape": "arrow",
+       "poly": null,
+       "shapeDoc": null
+      },
+      "parent": "r9b6q8fz",
+      "dir": "s",
+      "gx": 0,
+      "gy": 3,
+      "order": 3,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6qak2": {
+      "id": "r9b6qak2",
+      "type": "divide",
+      "params": {
+       "count": 6,
+       "dist": "even",
+       "formation": "circle",
+       "spacing": 150,
+       "motion": "still"
+      },
+      "parent": "r9b6q9m5",
+      "dir": "s",
+      "gx": 0,
+      "gy": 4,
+      "order": 4,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6qbv9": {
+      "id": "r9b6qbv9",
+      "type": "redirect",
+      "params": {
+       "toward": "mouse",
+       "angle": 0,
+       "arrive": "pass",
+       "speedPct": 100
+      },
+      "parent": "r9b6qak2",
+      "dir": "s",
+      "gx": 0,
+      "gy": 5,
+      "order": 5,
+      "link": {
+       "mode": "delay",
+       "delay": 0.5,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6qcg5": {
+      "id": "r9b6qcg5",
+      "type": "discharge",
+      "params": {
+       "radius": 1.2
+      },
+      "parent": "r9b6qbv9",
+      "dir": "s",
+      "gx": 0,
+      "gy": 6,
+      "order": 6,
+      "link": {
+       "mode": "condition",
+       "delay": 1,
+       "cond": {
+        "type": "targetNear",
+        "params": {
+         "range": 60
+        },
+        "timeout": 3
+       }
+      }
+     }
+    },
+    "phases": []
+   }
+  },
+  {
+   "id": "GA-orb",
+   "name": "Heavy Orb",
+   "role": "F",
+   "source": "authored",
+   "phases": {
+    "I": 0.9,
+    "II": 0.8,
+    "III": 0.6
+   },
+   "castingConditions": {
+    "range": [
+     250,
+     1200
+    ],
+    "cooldown": 9
+   },
+   "telegraph": 0.27,
+   "prep": 0.2,
+   "recovery": 0.6,
+   "cost": 490,
+   "peakOutput": 713,
+   "runes": 6,
+   "intendedResponse": "Slow and huge: keep the drawn burst circle off you — walk away from it, or get past it.",
+   "countersAndWeaknesses": "It moves at a third of your speed; it bursts only when within 90 px of you.",
+   "techniqueFree": true,
+   "simulation": {
+    "byScenario": {
+     "still": {
+      "hitRate": 0.75,
+      "dmg": 127,
+      "tImpact": 3.03,
+      "runs": 8
+     },
+     "strafe": {
+      "hitRate": 0.25,
+      "dmg": 43,
+      "tImpact": 1.92,
+      "runs": 8
+     },
+     "jumper": {
+      "hitRate": 0.25,
+      "dmg": 44,
+      "tImpact": 2.02,
+      "runs": 8
+     },
+     "reverse": {
+      "hitRate": 1,
+      "dmg": 175,
+      "tImpact": 1.97,
+      "runs": 8
+     },
+     "wall": {
+      "hitRate": 0.75,
+      "dmg": 126,
+      "tImpact": 3.13,
+      "runs": 8
+     },
+     "casting": {
+      "hitRate": 0.25,
+      "dmg": 43,
+      "tImpact": 1.92,
+      "runs": 8
+     },
+     "threatened": {
+      "hitRate": 0,
+      "dmg": 0,
+      "tImpact": null,
+      "runs": 8
+     },
+     "platform": {
+      "hitRate": 0,
+      "dmg": 0,
+      "tImpact": null,
+      "runs": 8
+     }
+    },
+    "earliestHit": 1.516666666666665,
+    "failRate": 0,
+    "runs": 64
+   },
+   "counterplay": {
+    "best": "away",
+    "cleanRate": 1,
+    "all": {
+     "stay": {
+      "clean": 0,
+      "dmg": 169
+     },
+     "away": {
+      "clean": 1,
+      "dmg": 0
+     },
+     "toward": {
+      "clean": 0.5,
+      "dmg": 87
+     },
+     "jumpFire": {
+      "clean": 0,
+      "dmg": 169
+     },
+     "jumpLate": {
+      "clean": 0,
+      "dmg": 169
+     },
+     "reverse": {
+      "clean": 0,
+      "dmg": 173
+     },
+     "awayJump": {
+      "clean": 1,
+      "dmg": 0
+     },
+     "sidestep": {
+      "clean": 0.5,
+      "dmg": 87
+     }
+    }
+   },
+   "knownLimitations": "Slow by design; in a confined room it can corner a player who does not move early.",
+   "engine": "magic-engine.js (maxRunes 100, rawMaxSpeed 9, maxBodiesGlobal 640)",
+   "generated": "2026-10-20T14:34:02.517Z",
+   "tree": {
+    "kind": "magic",
+    "v": 1,
+    "name": "Heavy Orb",
+    "rootId": "r9b6rd2m",
+    "seq": 6,
+    "nodes": {
+     "r9b6rd2m": {
+      "id": "r9b6rd2m",
+      "type": "target",
+      "params": {
+       "kind": "enemy",
+       "astate": "anchored",
+       "select": "nearCaster",
+       "zoneUse": "zone",
+       "techFilter": "any",
+       "techSign": "any",
+       "radius": 220,
+       "range": 1600
+      },
+      "parent": null,
+      "dir": null,
+      "gx": 0,
+      "gy": 0,
+      "order": 0,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6reir": {
+      "id": "r9b6reir",
+      "type": "generate",
+      "params": {
+       "amount": 480,
+       "spawn": "caster",
+       "inherit": "yes"
+      },
+      "parent": "r9b6rd2m",
+      "dir": "s",
+      "gx": 0,
+      "gy": 1,
+      "order": 1,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6rfi8": {
+      "id": "r9b6rfi8",
+      "type": "color",
+      "params": {
+       "color": "gold"
+      },
+      "parent": "r9b6reir",
+      "dir": "s",
+      "gx": 0,
+      "gy": 2,
+      "order": 2,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6rgwj": {
+      "id": "r9b6rgwj",
+      "type": "compress",
+      "params": {
+       "power": 2,
+       "shape": "sphere",
+       "poly": null,
+       "shapeDoc": null
+      },
+      "parent": "r9b6rfi8",
+      "dir": "s",
+      "gx": 0,
+      "gy": 3,
+      "order": 3,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6rh2p": {
+      "id": "r9b6rh2p",
+      "type": "redirect",
+      "params": {
+       "toward": "mouse",
+       "angle": 0,
+       "arrive": "pass",
+       "speedPct": 28
+      },
+      "parent": "r9b6rgwj",
+      "dir": "s",
+      "gx": 0,
+      "gy": 4,
+      "order": 4,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6riz9": {
+      "id": "r9b6riz9",
+      "type": "discharge",
+      "params": {
+       "radius": 1.6
+      },
+      "parent": "r9b6rh2p",
+      "dir": "s",
+      "gx": 0,
+      "gy": 5,
+      "order": 5,
+      "link": {
+       "mode": "condition",
+       "delay": 1,
+       "cond": {
+        "type": "targetNear",
+        "params": {
+         "range": 90
+        },
+        "timeout": 6
+       }
+      }
+     }
+    },
+    "phases": []
+   }
+  },
+  {
+   "id": "GA-snare",
+   "name": "Watching Shard",
+   "role": "H",
+   "source": "authored",
+   "phases": {
+    "I": 0.5,
+    "II": 1,
+    "III": 1
+   },
+   "castingConditions": {
+    "range": [
+     250,
+     1100
+    ],
+    "cooldown": 11
+   },
+   "telegraph": 0.135,
+   "prep": 0.1,
+   "recovery": 0.3,
+   "cost": 101,
+   "peakOutput": 217,
+   "runes": 6,
+   "intendedResponse": "While the shard watches, attacking or casting releases it at you — wait it out (5 s), or attack and dodge at once.",
+   "countersAndWeaknesses": "It only reacts to you attacking or casting (the same thing a forge spell can see), and it flies straight at where you are then.",
+   "techniqueFree": true,
+   "simulation": {
+    "byScenario": {
+     "still": {
+      "hitRate": 0,
+      "dmg": 0,
+      "tImpact": null,
+      "runs": 8
+     },
+     "strafe": {
+      "hitRate": 0,
+      "dmg": 0,
+      "tImpact": null,
+      "runs": 8
+     },
+     "jumper": {
+      "hitRate": 0,
+      "dmg": 0,
+      "tImpact": null,
+      "runs": 8
+     },
+     "reverse": {
+      "hitRate": 0,
+      "dmg": 0,
+      "tImpact": null,
+      "runs": 8
+     },
+     "wall": {
+      "hitRate": 0,
+      "dmg": 0,
+      "tImpact": null,
+      "runs": 8
+     },
+     "casting": {
+      "hitRate": 0.38,
+      "dmg": 16,
+      "tImpact": 1.13,
+      "runs": 8
+     },
+     "threatened": {
+      "hitRate": 0,
+      "dmg": 0,
+      "tImpact": null,
+      "runs": 8
+     },
+     "platform": {
+      "hitRate": 0,
+      "dmg": 0,
+      "tImpact": null,
+      "runs": 8
+     }
+    },
+    "earliestHit": 0.9166666666666672,
+    "failRate": 0,
+    "runs": 64
+   },
+   "counterplay": {
+    "best": "stay",
+    "cleanRate": 1,
+    "all": {
+     "stay": {
+      "clean": 1,
+      "dmg": 0
+     },
+     "away": {
+      "clean": 1,
+      "dmg": 0
+     },
+     "toward": {
+      "clean": 1,
+      "dmg": 0
+     },
+     "jumpFire": {
+      "clean": 1,
+      "dmg": 0
+     },
+     "jumpLate": {
+      "clean": 1,
+      "dmg": 0
+     },
+     "reverse": {
+      "clean": 1,
+      "dmg": 0
+     },
+     "awayJump": {
+      "clean": 1,
+      "dmg": 0
+     },
+     "sidestep": {
+      "clean": 1,
+      "dmg": 0
+     }
+    }
+   },
+   "knownLimitations": "Reacts only to \"target attacks or casts\" (castTimer / melee attack in the game); a player who never attacks is never struck.",
+   "engine": "magic-engine.js (maxRunes 100, rawMaxSpeed 9, maxBodiesGlobal 640)",
+   "generated": "2026-10-20T14:34:02.517Z",
+   "tree": {
+    "kind": "magic",
+    "v": 1,
+    "name": "Watching Shard",
+    "rootId": "r9b6sj38",
+    "seq": 6,
+    "nodes": {
+     "r9b6sj38": {
+      "id": "r9b6sj38",
+      "type": "target",
+      "params": {
+       "kind": "enemy",
+       "astate": "anchored",
+       "select": "nearCaster",
+       "zoneUse": "zone",
+       "techFilter": "any",
+       "techSign": "any",
+       "radius": 220,
+       "range": 1600
+      },
+      "parent": null,
+      "dir": null,
+      "gx": 0,
+      "gy": 0,
+      "order": 0,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6skb3": {
+      "id": "r9b6skb3",
+      "type": "generate",
+      "params": {
+       "amount": 90,
+       "spawn": "caster",
+       "inherit": "yes"
+      },
+      "parent": "r9b6sj38",
+      "dir": "s",
+      "gx": 0,
+      "gy": 1,
+      "order": 1,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6slz2": {
+      "id": "r9b6slz2",
+      "type": "color",
+      "params": {
+       "color": "gold"
+      },
+      "parent": "r9b6skb3",
+      "dir": "s",
+      "gx": 0,
+      "gy": 2,
+      "order": 2,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6sm8k": {
+      "id": "r9b6sm8k",
+      "type": "compress",
+      "params": {
+       "power": 8,
+       "shape": "lance",
+       "poly": null,
+       "shapeDoc": null
+      },
+      "parent": "r9b6slz2",
+      "dir": "s",
+      "gx": 0,
+      "gy": 3,
+      "order": 3,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6snnm": {
+      "id": "r9b6snnm",
+      "type": "redirect",
+      "params": {
+       "toward": "up",
+       "angle": 0,
+       "arrive": "stop",
+       "speedPct": 50
+      },
+      "parent": "r9b6sm8k",
+      "dir": "s",
+      "gx": 0,
+      "gy": 4,
+      "order": 4,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6so5h": {
+      "id": "r9b6so5h",
+      "type": "redirect",
+      "params": {
+       "toward": "target",
+       "angle": 0,
+       "arrive": "pass",
+       "speedPct": 100
+      },
+      "parent": "r9b6snnm",
+      "dir": "s",
+      "gx": 0,
+      "gy": 5,
+      "order": 5,
+      "link": {
+       "mode": "condition",
+       "delay": 1,
+       "cond": {
+        "type": "targetAttacks",
+        "params": {},
+        "timeout": 5
+       }
+      }
+     }
+    },
+    "phases": []
+   }
+  },
+  {
+   "id": "GA-crossfire",
+   "name": "Delayed Crossfire",
+   "role": "C",
+   "source": "authored",
+   "phases": {
+    "I": 0,
+    "II": 1,
+    "III": 1
+   },
+   "castingConditions": {
+    "range": [
+     300,
+     1100
+    ],
+    "cooldown": 6
+   },
+   "telegraph": 0.12,
+   "prep": 0.1,
+   "recovery": 0.5,
+   "cost": 257,
+   "peakOutput": 474,
+   "runes": 11,
+   "intendedResponse": "Three shots on three fuses: dodge each as its fuse runs out — dodging only the first is not enough.",
+   "countersAndWeaknesses": "Each spike is aimed when its own fuse ends; a change of direction between fuses beats the next one.",
+   "techniqueFree": true,
+   "simulation": {
+    "byScenario": {
+     "still": {
+      "hitRate": 1,
+      "dmg": 61,
+      "tImpact": 1.53,
+      "runs": 8
+     },
+     "strafe": {
+      "hitRate": 0.75,
+      "dmg": 23,
+      "tImpact": 1.99,
+      "runs": 8
+     },
+     "jumper": {
+      "hitRate": 0,
+      "dmg": 0,
+      "tImpact": null,
+      "runs": 8
+     },
+     "reverse": {
+      "hitRate": 1,
+      "dmg": 35,
+      "tImpact": 1.57,
+      "runs": 8
+     },
+     "wall": {
+      "hitRate": 0.75,
+      "dmg": 23,
+      "tImpact": 1.55,
+      "runs": 8
+     },
+     "casting": {
+      "hitRate": 0.75,
+      "dmg": 23,
+      "tImpact": 1.99,
+      "runs": 8
+     },
+     "threatened": {
+      "hitRate": 0.5,
+      "dmg": 15,
+      "tImpact": 2.45,
+      "runs": 8
+     },
+     "platform": {
+      "hitRate": 1,
+      "dmg": 46,
+      "tImpact": 2.21,
+      "runs": 8
+     }
+    },
+    "earliestHit": 0.966666666666667,
+    "failRate": 0,
+    "runs": 64
+   },
+   "counterplay": {
+    "best": "away",
+    "cleanRate": 1,
+    "all": {
+     "stay": {
+      "clean": 0,
+      "dmg": 61
+     },
+     "away": {
+      "clean": 1,
+      "dmg": 0
+     },
+     "toward": {
+      "clean": 0,
+      "dmg": 31
+     },
+     "jumpFire": {
+      "clean": 1,
+      "dmg": 0
+     },
+     "jumpLate": {
+      "clean": 0,
+      "dmg": 61
+     },
+     "reverse": {
+      "clean": 0,
+      "dmg": 36
+     },
+     "awayJump": {
+      "clean": 1,
+      "dmg": 0
+     },
+     "sidestep": {
+      "clean": 0.67,
+      "dmg": 10
+     }
+    }
+   },
+   "knownLimitations": "Aimed at the lagged perception of the player, three times; wall-hugging shortens the dodge room.",
+   "engine": "magic-engine.js (maxRunes 100, rawMaxSpeed 9, maxBodiesGlobal 640)",
+   "generated": "2026-10-20T14:34:02.517Z",
+   "tree": {
+    "kind": "magic",
+    "v": 1,
+    "name": "Delayed Crossfire",
+    "rootId": "r9b6up6l",
+    "seq": 11,
+    "nodes": {
+     "r9b6up6l": {
+      "id": "r9b6up6l",
+      "type": "target",
+      "params": {
+       "kind": "enemy",
+       "astate": "anchored",
+       "select": "nearCaster",
+       "zoneUse": "zone",
+       "techFilter": "any",
+       "techSign": "any",
+       "radius": 220,
+       "range": 1600
+      },
+      "parent": null,
+      "dir": null,
+      "gx": 0,
+      "gy": 0,
+      "order": 0,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6uqv4": {
+      "id": "r9b6uqv4",
+      "type": "generate",
+      "params": {
+       "amount": 240,
+       "spawn": "caster",
+       "inherit": "yes"
+      },
+      "parent": "r9b6up6l",
+      "dir": "s",
+      "gx": 0,
+      "gy": 1,
+      "order": 1,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6urmt": {
+      "id": "r9b6urmt",
+      "type": "color",
+      "params": {
+       "color": "gold"
+      },
+      "parent": "r9b6uqv4",
+      "dir": "s",
+      "gx": 0,
+      "gy": 2,
+      "order": 2,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6usv3": {
+      "id": "r9b6usv3",
+      "type": "compress",
+      "params": {
+       "power": 5,
+       "shape": "spike",
+       "poly": null,
+       "shapeDoc": null
+      },
+      "parent": "r9b6urmt",
+      "dir": "s",
+      "gx": 0,
+      "gy": 3,
+      "order": 3,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6uton": {
+      "id": "r9b6uton",
+      "type": "split",
+      "params": {
+       "share": 0,
+       "spread": 30
+      },
+      "parent": "r9b6usv3",
+      "dir": "s",
+      "gx": 0,
+      "gy": 4,
+      "order": 4,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6uuwa": {
+      "id": "r9b6uuwa",
+      "type": "redirect",
+      "params": {
+       "toward": "up",
+       "angle": 0,
+       "arrive": "stop",
+       "speedPct": 40
+      },
+      "parent": "r9b6uton",
+      "dir": "s",
+      "gx": 0,
+      "gy": 5,
+      "order": 5,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6uvc4": {
+      "id": "r9b6uvc4",
+      "type": "redirect",
+      "params": {
+       "toward": "mouse",
+       "angle": 0,
+       "arrive": "pass",
+       "speedPct": 100
+      },
+      "parent": "r9b6uuwa",
+      "dir": "s",
+      "gx": 0,
+      "gy": 6,
+      "order": 6,
+      "link": {
+       "mode": "delay",
+       "delay": 0.35,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6uwef": {
+      "id": "r9b6uwef",
+      "type": "redirect",
+      "params": {
+       "toward": "up",
+       "angle": 0,
+       "arrive": "stop",
+       "speedPct": 70
+      },
+      "parent": "r9b6uton",
+      "dir": "s",
+      "gx": 1,
+      "gy": 5,
+      "order": 7,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6uxz5": {
+      "id": "r9b6uxz5",
+      "type": "redirect",
+      "params": {
+       "toward": "mouse",
+       "angle": 0,
+       "arrive": "pass",
+       "speedPct": 100
+      },
+      "parent": "r9b6uwef",
+      "dir": "s",
+      "gx": 1,
+      "gy": 6,
+      "order": 8,
+      "link": {
+       "mode": "delay",
+       "delay": 0.8,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6uyib": {
+      "id": "r9b6uyib",
+      "type": "redirect",
+      "params": {
+       "toward": "up",
+       "angle": 0,
+       "arrive": "stop",
+       "speedPct": 100
+      },
+      "parent": "r9b6uton",
+      "dir": "s",
+      "gx": 2,
+      "gy": 5,
+      "order": 9,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6uzcj": {
+      "id": "r9b6uzcj",
+      "type": "redirect",
+      "params": {
+       "toward": "mouse",
+       "angle": 0,
+       "arrive": "pass",
+       "speedPct": 100
+      },
+      "parent": "r9b6uyib",
+      "dir": "s",
+      "gx": 2,
+      "gy": 6,
+      "order": 10,
+      "link": {
+       "mode": "delay",
+       "delay": 1.25,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     }
+    },
+    "phases": []
+   }
+  },
+  {
+   "id": "GA-stream",
+   "name": "Saturation Stream",
+   "role": "E",
+   "source": "authored",
+   "phases": {
+    "I": 0,
+    "II": 1,
+    "III": 1
+   },
+   "castingConditions": {
+    "range": [
+     450,
+     1600
+    ],
+    "cooldown": 10
+   },
+   "telegraph": 0.15,
+   "prep": 0.15,
+   "recovery": 0.6,
+   "cost": 249,
+   "peakOutput": 0,
+   "runes": 5,
+   "intendedResponse": "The stream follows you slowly: keep running one way, or cut back through behind it.",
+   "countersAndWeaknesses": "Its aim lags (it sweeps toward you); a steady run outpaces it. Long range only.",
+   "techniqueFree": true,
+   "simulation": {
+    "byScenario": {
+     "still": {
+      "hitRate": 1,
+      "dmg": 78,
+      "tImpact": 1.55,
+      "runs": 6
+     },
+     "strafe": {
+      "hitRate": 1,
+      "dmg": 57,
+      "tImpact": 1.6,
+      "runs": 6
+     },
+     "jumper": {
+      "hitRate": 1,
+      "dmg": 38,
+      "tImpact": 1.41,
+      "runs": 6
+     },
+     "reverse": {
+      "hitRate": 1,
+      "dmg": 78,
+      "tImpact": 1.28,
+      "runs": 6
+     },
+     "wall": {
+      "hitRate": 1,
+      "dmg": 78,
+      "tImpact": 1.37,
+      "runs": 6
+     },
+     "casting": {
+      "hitRate": 1,
+      "dmg": 57,
+      "tImpact": 1.6,
+      "runs": 6
+     },
+     "threatened": {
+      "hitRate": 0.67,
+      "dmg": 12,
+      "tImpact": 1.74,
+      "runs": 6
+     },
+     "platform": {
+      "hitRate": 0,
+      "dmg": 0,
+      "tImpact": null,
+      "runs": 6
+     }
+    },
+    "earliestHit": 0.7500000000000011,
+    "failRate": 0,
+    "runs": 48
+   },
+   "counterplay": {
+    "best": "away",
+    "cleanRate": 1,
+    "all": {
+     "stay": {
+      "clean": 0,
+      "dmg": 78
+     },
+     "away": {
+      "clean": 1,
+      "dmg": 0
+     },
+     "toward": {
+      "clean": 0,
+      "dmg": 79
+     },
+     "jumpFire": {
+      "clean": 0,
+      "dmg": 8
+     },
+     "jumpLate": {
+      "clean": 0,
+      "dmg": 78
+     },
+     "reverse": {
+      "clean": 0,
+      "dmg": 78
+     },
+     "awayJump": {
+      "clean": 1,
+      "dmg": 0
+     },
+     "sidestep": {
+      "clean": 0.5,
+      "dmg": 39
+     }
+    }
+   },
+   "knownLimitations": "Paid from his reserve through owner.drain (240 E per cast); the cursor lags on purpose so a steady run outpaces it.",
+   "engine": "magic-engine.js (maxRunes 100, rawMaxSpeed 9, maxBodiesGlobal 640)",
+   "generated": "2026-10-20T14:34:02.517Z",
+   "tree": {
+    "kind": "magic",
+    "v": 1,
+    "name": "Saturation Stream",
+    "rootId": "r9b6v10t",
+    "seq": 5,
+    "nodes": {
+     "r9b6v10t": {
+      "id": "r9b6v10t",
+      "type": "target",
+      "params": {
+       "kind": "self",
+       "astate": "anchored",
+       "select": "nearEnergy",
+       "zoneUse": "zone",
+       "techFilter": "any",
+       "techSign": "any",
+       "radius": 220,
+       "range": 600
+      },
+      "parent": null,
+      "dir": null,
+      "gx": 0,
+      "gy": 0,
+      "order": 0,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6v11m8": {
+      "id": "r9b6v11m8",
+      "type": "drawOut",
+      "params": {
+       "duration": 2.4,
+       "from": "target",
+       "flow": "flow",
+       "flowRate": 10,
+       "infAmount": 240
+      },
+      "parent": "r9b6v10t",
+      "dir": "s",
+      "gx": 0,
+      "gy": 1,
+      "order": 1,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6v127m": {
+      "id": "r9b6v127m",
+      "type": "color",
+      "params": {
+       "color": "gold"
+      },
+      "parent": "r9b6v11m8",
+      "dir": "s",
+      "gx": 0,
+      "gy": 2,
+      "order": 2,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6v13fx": {
+      "id": "r9b6v13fx",
+      "type": "compress",
+      "params": {
+       "power": 3,
+       "shape": "arrow",
+       "poly": null,
+       "shapeDoc": null
+      },
+      "parent": "r9b6v127m",
+      "dir": "s",
+      "gx": 0,
+      "gy": 3,
+      "order": 3,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6v148m": {
+      "id": "r9b6v148m",
+      "type": "redirect",
+      "params": {
+       "toward": "mouse",
+       "angle": 0,
+       "arrive": "pass",
+       "speedPct": 100
+      },
+      "parent": "r9b6v13fx",
+      "dir": "s",
+      "gx": 0,
+      "gy": 4,
+      "order": 4,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     }
+    },
+    "phases": []
+   }
+  },
+  {
+   "id": "GA-pursuit",
+   "name": "Branching Pursuit",
+   "role": "G",
+   "source": "authored",
+   "phases": {
+    "I": 0,
+    "II": 1,
+    "III": 1
+   },
+   "castingConditions": {
+    "range": [
+     280,
+     1000
+    ],
+    "cooldown": 7
+   },
+   "telegraph": 0.135,
+   "prep": 0.1,
+   "recovery": 0.45,
+   "cost": 212,
+   "peakOutput": 395,
+   "runes": 7,
+   "intendedResponse": "Two arrows covering two escapes: the first where you are heading, the second where you tend to dodge to. Break your habit.",
+   "countersAndWeaknesses": "The second branch reads your usual dodge (toward / away / up). Do something else, or stand your ground between them.",
+   "techniqueFree": true,
+   "simulation": {
+    "byScenario": {
+     "still": {
+      "hitRate": 1,
+      "dmg": 38,
+      "tImpact": 1.6,
+      "runs": 8
+     },
+     "strafe": {
+      "hitRate": 0.5,
+      "dmg": 19,
+      "tImpact": 1.8,
+      "runs": 8
+     },
+     "jumper": {
+      "hitRate": 0,
+      "dmg": 0,
+      "tImpact": null,
+      "runs": 8
+     },
+     "reverse": {
+      "hitRate": 0.75,
+      "dmg": 29,
+      "tImpact": 1.15,
+      "runs": 8
+     },
+     "wall": {
+      "hitRate": 1,
+      "dmg": 72,
+      "tImpact": 1.48,
+      "runs": 8
+     },
+     "casting": {
+      "hitRate": 0.5,
+      "dmg": 19,
+      "tImpact": 1.8,
+      "runs": 8
+     },
+     "threatened": {
+      "hitRate": 0,
+      "dmg": 0,
+      "tImpact": null,
+      "runs": 8
+     },
+     "platform": {
+      "hitRate": 0.13,
+      "dmg": 5,
+      "tImpact": 1.48,
+      "runs": 8
+     }
+    },
+    "earliestHit": 0.966666666666667,
+    "failRate": 0,
+    "runs": 64
+   },
+   "counterplay": {
+    "best": "away",
+    "cleanRate": 1,
+    "all": {
+     "stay": {
+      "clean": 0,
+      "dmg": 38
+     },
+     "away": {
+      "clean": 1,
+      "dmg": 0
+     },
+     "toward": {
+      "clean": 0.33,
+      "dmg": 45
+     },
+     "jumpFire": {
+      "clean": 1,
+      "dmg": 0
+     },
+     "jumpLate": {
+      "clean": 0,
+      "dmg": 38
+     },
+     "reverse": {
+      "clean": 0.17,
+      "dmg": 32
+     },
+     "awayJump": {
+      "clean": 1,
+      "dmg": 0
+     },
+     "sidestep": {
+      "clean": 0.67,
+      "dmg": 13
+     }
+    }
+   },
+   "knownLimitations": "The second branch reads the player's observed habit (EMA of dodge direction); a player with no habit gets a guess.",
+   "engine": "magic-engine.js (maxRunes 100, rawMaxSpeed 9, maxBodiesGlobal 640)",
+   "generated": "2026-10-20T14:34:02.517Z",
+   "tree": {
+    "kind": "magic",
+    "v": 1,
+    "name": "Branching Pursuit",
+    "rootId": "r9b6v15j3",
+    "seq": 7,
+    "nodes": {
+     "r9b6v15j3": {
+      "id": "r9b6v15j3",
+      "type": "target",
+      "params": {
+       "kind": "enemy",
+       "astate": "anchored",
+       "select": "nearCaster",
+       "zoneUse": "zone",
+       "techFilter": "any",
+       "techSign": "any",
+       "radius": 220,
+       "range": 1600
+      },
+      "parent": null,
+      "dir": null,
+      "gx": 0,
+      "gy": 0,
+      "order": 0,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6v161r": {
+      "id": "r9b6v161r",
+      "type": "generate",
+      "params": {
+       "amount": 200,
+       "spawn": "caster",
+       "inherit": "yes"
+      },
+      "parent": "r9b6v15j3",
+      "dir": "s",
+      "gx": 0,
+      "gy": 1,
+      "order": 1,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6v171k": {
+      "id": "r9b6v171k",
+      "type": "color",
+      "params": {
+       "color": "gold"
+      },
+      "parent": "r9b6v161r",
+      "dir": "s",
+      "gx": 0,
+      "gy": 2,
+      "order": 2,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6v18pk": {
+      "id": "r9b6v18pk",
+      "type": "compress",
+      "params": {
+       "power": 5,
+       "shape": "arrow",
+       "poly": null,
+       "shapeDoc": null
+      },
+      "parent": "r9b6v171k",
+      "dir": "s",
+      "gx": 0,
+      "gy": 3,
+      "order": 3,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6v1964": {
+      "id": "r9b6v1964",
+      "type": "split",
+      "params": {
+       "share": 0,
+       "spread": 40
+      },
+      "parent": "r9b6v18pk",
+      "dir": "s",
+      "gx": 0,
+      "gy": 4,
+      "order": 4,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6v1acu": {
+      "id": "r9b6v1acu",
+      "type": "redirect",
+      "params": {
+       "toward": "mouse",
+       "angle": 0,
+       "arrive": "pass",
+       "speedPct": 100
+      },
+      "parent": "r9b6v1964",
+      "dir": "s",
+      "gx": 0,
+      "gy": 5,
+      "order": 5,
+      "link": {
+       "mode": "delay",
+       "delay": 0.45,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6v1bra": {
+      "id": "r9b6v1bra",
+      "type": "redirect",
+      "params": {
+       "toward": "mouse",
+       "angle": 0,
+       "arrive": "pass",
+       "speedPct": 100
+      },
+      "parent": "r9b6v1964",
+      "dir": "s",
+      "gx": 1,
+      "gy": 5,
+      "order": 6,
+      "link": {
+       "mode": "delay",
+       "delay": 0.9,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     }
+    },
+    "phases": []
+   }
+  },
+  {
+   "id": "GA-nova",
+   "name": "Expanding Burst",
+   "role": "D",
+   "source": "authored",
+   "phases": {
+    "I": 0.6,
+    "II": 1,
+    "III": 1
+   },
+   "castingConditions": {
+    "range": [
+     0,
+     320
+    ],
+    "cooldown": 7
+   },
+   "telegraph": 0.135,
+   "prep": 0.05,
+   "recovery": 0.55,
+   "cost": 274,
+   "peakOutput": 561,
+   "runes": 7,
+   "intendedResponse": "Get out of the drawn ring before it fills (about 1.1 s from the first glow).",
+   "countersAndWeaknesses": "Only reaches the ring; he is rooted while it builds, so it is also an opening from outside the ring.",
+   "techniqueFree": true,
+   "simulation": {
+    "byScenario": {
+     "still": {
+      "hitRate": 1,
+      "dmg": 44,
+      "tImpact": 0.88,
+      "runs": 2
+     },
+     "strafe": {
+      "hitRate": 0,
+      "dmg": 0,
+      "tImpact": null,
+      "runs": 2
+     },
+     "jumper": {
+      "hitRate": 0,
+      "dmg": 0,
+      "tImpact": null,
+      "runs": 2
+     },
+     "reverse": {
+      "hitRate": 1,
+      "dmg": 49,
+      "tImpact": 0.88,
+      "runs": 2
+     },
+     "wall": {
+      "hitRate": 0,
+      "dmg": 0,
+      "tImpact": null,
+      "runs": 2
+     },
+     "casting": {
+      "hitRate": 0,
+      "dmg": 0,
+      "tImpact": null,
+      "runs": 2
+     },
+     "threatened": {
+      "hitRate": 0,
+      "dmg": 0,
+      "tImpact": null,
+      "runs": 2
+     },
+     "platform": {
+      "hitRate": 0.5,
+      "dmg": 19,
+      "tImpact": 0.88,
+      "runs": 2
+     }
+    },
+    "earliestHit": 0.883333333333334,
+    "failRate": 0,
+    "runs": 16
+   },
+   "counterplay": {
+    "best": "away",
+    "cleanRate": 1,
+    "all": {
+     "stay": {
+      "clean": 0,
+      "dmg": 46
+     },
+     "away": {
+      "clean": 1,
+      "dmg": 0
+     },
+     "toward": {
+      "clean": 0,
+      "dmg": 110
+     },
+     "jumpFire": {
+      "clean": 0,
+      "dmg": 43
+     },
+     "jumpLate": {
+      "clean": 0,
+      "dmg": 46
+     },
+     "reverse": {
+      "clean": 0,
+      "dmg": 51
+     },
+     "awayJump": {
+      "clean": 1,
+      "dmg": 0
+     },
+     "sidestep": {
+      "clean": 0.5,
+      "dmg": 55
+     }
+    }
+   },
+   "knownLimitations": "Short range only (≤ 320 px); the ring drawn is the measured burst radius.",
+   "engine": "magic-engine.js (maxRunes 100, rawMaxSpeed 9, maxBodiesGlobal 640)",
+   "generated": "2026-10-20T14:34:02.517Z",
+   "tree": {
+    "kind": "magic",
+    "v": 1,
+    "name": "Expanding Burst",
+    "rootId": "r9b6v1cs1",
+    "seq": 7,
+    "nodes": {
+     "r9b6v1cs1": {
+      "id": "r9b6v1cs1",
+      "type": "target",
+      "params": {
+       "kind": "enemy",
+       "astate": "anchored",
+       "select": "nearCaster",
+       "zoneUse": "zone",
+       "techFilter": "any",
+       "techSign": "any",
+       "radius": 220,
+       "range": 1600
+      },
+      "parent": null,
+      "dir": null,
+      "gx": 0,
+      "gy": 0,
+      "order": 0,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6v1dnf": {
+      "id": "r9b6v1dnf",
+      "type": "generate",
+      "params": {
+       "amount": 260,
+       "spawn": "caster",
+       "inherit": "yes"
+      },
+      "parent": "r9b6v1cs1",
+      "dir": "s",
+      "gx": 0,
+      "gy": 1,
+      "order": 1,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6v1eqd": {
+      "id": "r9b6v1eqd",
+      "type": "color",
+      "params": {
+       "color": "gold"
+      },
+      "parent": "r9b6v1dnf",
+      "dir": "s",
+      "gx": 0,
+      "gy": 2,
+      "order": 2,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6v1f7n": {
+      "id": "r9b6v1f7n",
+      "type": "compress",
+      "params": {
+       "power": 6,
+       "shape": "sphere",
+       "poly": null,
+       "shapeDoc": null
+      },
+      "parent": "r9b6v1eqd",
+      "dir": "s",
+      "gx": 0,
+      "gy": 3,
+      "order": 3,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6v1guf": {
+      "id": "r9b6v1guf",
+      "type": "anchor",
+      "params": {
+       "state": "anchored",
+       "where": "here",
+       "offset": "keep",
+       "len": 60,
+       "bindTo": "target",
+       "selfMode": "follow",
+       "strength": 5,
+       "count": 1
+      },
+      "parent": "r9b6v1f7n",
+      "dir": "s",
+      "gx": 0,
+      "gy": 4,
+      "order": 4,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6v1hrz": {
+      "id": "r9b6v1hrz",
+      "type": "compress",
+      "params": {
+       "power": -5,
+       "shape": "keep",
+       "poly": null,
+       "shapeDoc": null
+      },
+      "parent": "r9b6v1guf",
+      "dir": "s",
+      "gx": 0,
+      "gy": 5,
+      "order": 5,
+      "link": {
+       "mode": "delay",
+       "delay": 0.7,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6w1ij2": {
+      "id": "r9b6w1ij2",
+      "type": "discharge",
+      "params": {
+       "radius": 2.2
+      },
+      "parent": "r9b6v1hrz",
+      "dir": "s",
+      "gx": 0,
+      "gy": 6,
+      "order": 6,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     }
+    },
+    "phases": []
+   }
+  },
+  {
+   "id": "GA-ward",
+   "name": "Gilded Ward",
+   "role": "I",
+   "source": "authored",
+   "phases": {
+    "I": 0.5,
+    "II": 0.8,
+    "III": 0.8
+   },
+   "castingConditions": {
+    "range": [
+     0,
+     700
+    ],
+    "cooldown": 18
+   },
+   "telegraph": 0.105,
+   "prep": 0.05,
+   "recovery": 0.4,
+   "cost": 373,
+   "peakOutput": 336,
+   "runes": 8,
+   "intendedResponse": "Back off from the ring of motes before it bursts; his guard only blunts damage, so keep attacking from range.",
+   "countersAndWeaknesses": "The motes burst at 3.5 s around him; the reinforcement lowers damage, it does not stop it.",
+   "techniqueFree": true,
+   "simulation": {
+    "byScenario": {
+     "still": {
+      "hitRate": 0,
+      "dmg": 0,
+      "tImpact": null,
+      "runs": 6
+     },
+     "strafe": {
+      "hitRate": 0,
+      "dmg": 0,
+      "tImpact": null,
+      "runs": 6
+     },
+     "jumper": {
+      "hitRate": 0,
+      "dmg": 0,
+      "tImpact": null,
+      "runs": 6
+     },
+     "reverse": {
+      "hitRate": 1,
+      "dmg": 39,
+      "tImpact": 2.7,
+      "runs": 6
+     },
+     "wall": {
+      "hitRate": 0,
+      "dmg": 0,
+      "tImpact": null,
+      "runs": 6
+     },
+     "casting": {
+      "hitRate": 0,
+      "dmg": 0,
+      "tImpact": null,
+      "runs": 6
+     },
+     "threatened": {
+      "hitRate": 0,
+      "dmg": 0,
+      "tImpact": null,
+      "runs": 6
+     },
+     "platform": {
+      "hitRate": 0,
+      "dmg": 0,
+      "tImpact": null,
+      "runs": 6
+     }
+    },
+    "earliestHit": 2.366666666666662,
+    "failRate": 0,
+    "runs": 48
+   },
+   "counterplay": {
+    "best": "stay",
+    "cleanRate": 1,
+    "all": {
+     "stay": {
+      "clean": 1,
+      "dmg": 0
+     },
+     "away": {
+      "clean": 1,
+      "dmg": 0
+     },
+     "toward": {
+      "clean": 0,
+      "dmg": 42
+     },
+     "jumpFire": {
+      "clean": 1,
+      "dmg": 0
+     },
+     "jumpLate": {
+      "clean": 1,
+      "dmg": 0
+     },
+     "reverse": {
+      "clean": 0,
+      "dmg": 39
+     },
+     "awayJump": {
+      "clean": 1,
+      "dmg": 0
+     },
+     "sidestep": {
+      "clean": 0.33,
+      "dmg": 27
+     }
+    }
+   },
+   "knownLimitations": "Raw reinforcement: the engine gives ≈ 25–30 % damage resistance; not immunity.",
+   "engine": "magic-engine.js (maxRunes 100, rawMaxSpeed 9, maxBodiesGlobal 640)",
+   "generated": "2026-10-20T14:34:02.517Z",
+   "tree": {
+    "kind": "magic",
+    "v": 1,
+    "name": "Gilded Ward",
+    "rootId": "r9b6w1jpb",
+    "seq": 8,
+    "nodes": {
+     "r9b6w1jpb": {
+      "id": "r9b6w1jpb",
+      "type": "target",
+      "params": {
+       "kind": "self",
+       "astate": "anchored",
+       "select": "nearEnergy",
+       "zoneUse": "zone",
+       "techFilter": "any",
+       "techSign": "any",
+       "radius": 220,
+       "range": 600
+      },
+      "parent": null,
+      "dir": null,
+      "gx": 0,
+      "gy": 0,
+      "order": 0,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6w1ks9": {
+      "id": "r9b6w1ks9",
+      "type": "generate",
+      "params": {
+       "amount": 120,
+       "spawn": "caster",
+       "inherit": "yes"
+      },
+      "parent": "r9b6w1jpb",
+      "dir": "s",
+      "gx": 0,
+      "gy": 1,
+      "order": 1,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6w1lzi": {
+      "id": "r9b6w1lzi",
+      "type": "reinforce",
+      "params": {
+       "portion": 100
+      },
+      "parent": "r9b6w1ks9",
+      "dir": "s",
+      "gx": 0,
+      "gy": 2,
+      "order": 2,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6w1mmy": {
+      "id": "r9b6w1mmy",
+      "type": "generate",
+      "params": {
+       "amount": 220,
+       "spawn": "caster",
+       "inherit": "yes"
+      },
+      "parent": "r9b6w1jpb",
+      "dir": "s",
+      "gx": 1,
+      "gy": 1,
+      "order": 3,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6w1nn3": {
+      "id": "r9b6w1nn3",
+      "type": "color",
+      "params": {
+       "color": "gold"
+      },
+      "parent": "r9b6w1mmy",
+      "dir": "s",
+      "gx": 1,
+      "gy": 2,
+      "order": 4,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6w1opg": {
+      "id": "r9b6w1opg",
+      "type": "divide",
+      "params": {
+       "count": 6,
+       "dist": "even",
+       "formation": "circle",
+       "spacing": 100,
+       "motion": "still"
+      },
+      "parent": "r9b6w1nn3",
+      "dir": "s",
+      "gx": 1,
+      "gy": 3,
+      "order": 5,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6w1p8t": {
+      "id": "r9b6w1p8t",
+      "type": "attach",
+      "params": {
+       "offset": "keep"
+      },
+      "parent": "r9b6w1opg",
+      "dir": "s",
+      "gx": 1,
+      "gy": 4,
+      "order": 6,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6w1qz7": {
+      "id": "r9b6w1qz7",
+      "type": "discharge",
+      "params": {
+       "radius": 1
+      },
+      "parent": "r9b6w1p8t",
+      "dir": "s",
+      "gx": 1,
+      "gy": 5,
+      "order": 7,
+      "link": {
+       "mode": "condition",
+       "delay": 1,
+       "cond": {
+        "type": "spellAge",
+        "params": {
+         "time": 3.5
+        },
+        "timeout": 5
+       }
+      }
+     }
+    },
+    "phases": []
+   }
+  },
+  {
+   "id": "GA-lattice",
+   "name": "Lattice of Mines",
+   "role": "K",
+   "source": "authored",
+   "phases": {
+    "I": 0,
+    "II": 0.8,
+    "III": 1
+   },
+   "castingConditions": {
+    "range": [
+     300,
+     1300
+    ],
+    "cooldown": 14
+   },
+   "telegraph": 0.135,
+   "prep": 0.1,
+   "recovery": 0.5,
+   "cost": 333,
+   "peakOutput": 635,
+   "runes": 9,
+   "intendedResponse": "Mines settle in a line: stay in the lanes between them; do not walk into the drawn circles.",
+   "countersAndWeaknesses": "They only burst when you come within 110 px; lanes of ≈ 100 px between bursts are always safe.",
+   "techniqueFree": true,
+   "simulation": {
+    "byScenario": {
+     "still": {
+      "hitRate": 1,
+      "dmg": 126,
+      "tImpact": 1.48,
+      "runs": 8
+     },
+     "strafe": {
+      "hitRate": 1,
+      "dmg": 90,
+      "tImpact": 1.13,
+      "runs": 8
+     },
+     "jumper": {
+      "hitRate": 1,
+      "dmg": 61,
+      "tImpact": 1.39,
+      "runs": 8
+     },
+     "reverse": {
+      "hitRate": 1,
+      "dmg": 127,
+      "tImpact": 1.16,
+      "runs": 8
+     },
+     "wall": {
+      "hitRate": 1,
+      "dmg": 117,
+      "tImpact": 1.3,
+      "runs": 8
+     },
+     "casting": {
+      "hitRate": 1,
+      "dmg": 90,
+      "tImpact": 1.13,
+      "runs": 8
+     },
+     "threatened": {
+      "hitRate": 1,
+      "dmg": 40,
+      "tImpact": 2.24,
+      "runs": 8
+     },
+     "platform": {
+      "hitRate": 0,
+      "dmg": 0,
+      "tImpact": null,
+      "runs": 8
+     }
+    },
+    "earliestHit": 0.6000000000000012,
+    "failRate": 0,
+    "runs": 64
+   },
+   "counterplay": {
+    "best": "away",
+    "cleanRate": 1,
+    "all": {
+     "stay": {
+      "clean": 0,
+      "dmg": 126
+     },
+     "away": {
+      "clean": 1,
+      "dmg": 0
+     },
+     "toward": {
+      "clean": 0,
+      "dmg": 117
+     },
+     "jumpFire": {
+      "clean": 0,
+      "dmg": 126
+     },
+     "jumpLate": {
+      "clean": 0,
+      "dmg": 126
+     },
+     "reverse": {
+      "clean": 0,
+      "dmg": 127
+     },
+     "awayJump": {
+      "clean": 1,
+      "dmg": 0
+     },
+     "sidestep": {
+      "clean": 0.33,
+      "dmg": 51
+     }
+    }
+   },
+   "knownLimitations": "Mines are anchored for up to 11 s (his tidy rule) and only burst within 110 px.",
+   "engine": "magic-engine.js (maxRunes 100, rawMaxSpeed 9, maxBodiesGlobal 640)",
+   "generated": "2026-10-20T14:34:02.517Z",
+   "tree": {
+    "kind": "magic",
+    "v": 1,
+    "name": "Lattice of Mines",
+    "rootId": "r9b6x1r21",
+    "seq": 9,
+    "nodes": {
+     "r9b6x1r21": {
+      "id": "r9b6x1r21",
+      "type": "target",
+      "params": {
+       "kind": "enemy",
+       "astate": "anchored",
+       "select": "nearCaster",
+       "zoneUse": "zone",
+       "techFilter": "any",
+       "techSign": "any",
+       "radius": 220,
+       "range": 1600
+      },
+      "parent": null,
+      "dir": null,
+      "gx": 0,
+      "gy": 0,
+      "order": 0,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6x1sf0": {
+      "id": "r9b6x1sf0",
+      "type": "generate",
+      "params": {
+       "amount": 300,
+       "spawn": "caster",
+       "inherit": "yes"
+      },
+      "parent": "r9b6x1r21",
+      "dir": "s",
+      "gx": 0,
+      "gy": 1,
+      "order": 1,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6x1trt": {
+      "id": "r9b6x1trt",
+      "type": "color",
+      "params": {
+       "color": "gold"
+      },
+      "parent": "r9b6x1sf0",
+      "dir": "s",
+      "gx": 0,
+      "gy": 2,
+      "order": 2,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6x1u3v": {
+      "id": "r9b6x1u3v",
+      "type": "compress",
+      "params": {
+       "power": 6,
+       "shape": "sphere",
+       "poly": null,
+       "shapeDoc": null
+      },
+      "parent": "r9b6x1trt",
+      "dir": "s",
+      "gx": 0,
+      "gy": 3,
+      "order": 3,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6x1v3n": {
+      "id": "r9b6x1v3n",
+      "type": "redirect",
+      "params": {
+       "toward": "mouse",
+       "angle": 0,
+       "arrive": "stop",
+       "speedPct": 80
+      },
+      "parent": "r9b6x1u3v",
+      "dir": "s",
+      "gx": 0,
+      "gy": 4,
+      "order": 4,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6x1wam": {
+      "id": "r9b6x1wam",
+      "type": "divide",
+      "params": {
+       "count": 5,
+       "dist": "even",
+       "formation": "horizontal",
+       "spacing": 260,
+       "motion": "still"
+      },
+      "parent": "r9b6x1v3n",
+      "dir": "s",
+      "gx": 0,
+      "gy": 5,
+      "order": 5,
+      "link": {
+       "mode": "condition",
+       "delay": 1,
+       "cond": {
+        "type": "arrived",
+        "params": {},
+        "timeout": 3
+       }
+      }
+     },
+     "r9b6x1xyu": {
+      "id": "r9b6x1xyu",
+      "type": "anchor",
+      "params": {
+       "state": "anchored",
+       "where": "here",
+       "offset": "keep",
+       "len": 60,
+       "bindTo": "target",
+       "selfMode": "follow",
+       "strength": 5,
+       "count": 1
+      },
+      "parent": "r9b6x1wam",
+      "dir": "s",
+      "gx": 0,
+      "gy": 6,
+      "order": 6,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6x1y3g": {
+      "id": "r9b6x1y3g",
+      "type": "lock",
+      "params": {
+       "prop": "direction"
+      },
+      "parent": "r9b6x1xyu",
+      "dir": "s",
+      "gx": 0,
+      "gy": 7,
+      "order": 7,
+      "link": {
+       "mode": "delay",
+       "delay": 0.35,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6x1zfr": {
+      "id": "r9b6x1zfr",
+      "type": "discharge",
+      "params": {
+       "radius": 1.4
+      },
+      "parent": "r9b6x1y3g",
+      "dir": "s",
+      "gx": 0,
+      "gy": 8,
+      "order": 8,
+      "link": {
+       "mode": "condition",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 110
+        },
+        "timeout": 9
+       }
+      }
+     }
+    },
+    "phases": []
+   }
+  },
+  {
+   "id": "GA-apex",
+   "name": "Absolute Output",
+   "role": "J",
+   "source": "authored",
+   "phases": {
+    "I": 0,
+    "II": 0,
+    "III": 1
+   },
+   "castingConditions": {
+    "range": [
+     250,
+     1300
+    ],
+    "cooldown": 16
+   },
+   "telegraph": 0.3,
+   "prep": 0.3,
+   "recovery": 0.9,
+   "cost": 324,
+   "peakOutput": 813,
+   "runes": 11,
+   "intendedResponse": "A long, loud wind-up: when the sphere splits, sidestep the lance, slip between the ring shards and outrun the slow core.",
+   "countersAndWeaknesses": "Everything leaves from one point over his head after a 1.4 s hold; he is rooted for all of it — the best opening to punish.",
+   "techniqueFree": true,
+   "simulation": {
+    "byScenario": {
+     "still": {
+      "hitRate": 1,
+      "dmg": 110,
+      "tImpact": 3.12,
+      "runs": 8
+     },
+     "strafe": {
+      "hitRate": 0.38,
+      "dmg": 16,
+      "tImpact": 3.57,
+      "runs": 8
+     },
+     "jumper": {
+      "hitRate": 0.75,
+      "dmg": 57,
+      "tImpact": 2.99,
+      "runs": 8
+     },
+     "reverse": {
+      "hitRate": 0.5,
+      "dmg": 20,
+      "tImpact": 2.9,
+      "runs": 8
+     },
+     "wall": {
+      "hitRate": 0.88,
+      "dmg": 51,
+      "tImpact": 3.69,
+      "runs": 8
+     },
+     "casting": {
+      "hitRate": 0.38,
+      "dmg": 16,
+      "tImpact": 3.57,
+      "runs": 8
+     },
+     "threatened": {
+      "hitRate": 0.13,
+      "dmg": 9,
+      "tImpact": 2.87,
+      "runs": 8
+     },
+     "platform": {
+      "hitRate": 0.13,
+      "dmg": 9,
+      "tImpact": 3.62,
+      "runs": 8
+     }
+    },
+    "earliestHit": 2.2833333333333288,
+    "failRate": 0,
+    "runs": 64
+   },
+   "counterplay": {
+    "best": "away",
+    "cleanRate": 1,
+    "all": {
+     "stay": {
+      "clean": 0,
+      "dmg": 123
+     },
+     "away": {
+      "clean": 1,
+      "dmg": 0
+     },
+     "toward": {
+      "clean": 1,
+      "dmg": 0
+     },
+     "jumpFire": {
+      "clean": 0,
+      "dmg": 123
+     },
+     "jumpLate": {
+      "clean": 0,
+      "dmg": 123
+     },
+     "reverse": {
+      "clean": 0.83,
+      "dmg": 13
+     },
+     "awayJump": {
+      "clean": 1,
+      "dmg": 0
+     },
+     "sidestep": {
+      "clean": 1,
+      "dmg": 0
+     }
+    }
+   },
+   "knownLimitations": "Phase III only; peak output 813 within his 960 Max Output.",
+   "engine": "magic-engine.js (maxRunes 100, rawMaxSpeed 9, maxBodiesGlobal 640)",
+   "generated": "2026-10-20T14:34:02.517Z",
+   "tree": {
+    "kind": "magic",
+    "v": 1,
+    "name": "Absolute Output",
+    "rootId": "r9b6x20at",
+    "seq": 11,
+    "nodes": {
+     "r9b6x20at": {
+      "id": "r9b6x20at",
+      "type": "target",
+      "params": {
+       "kind": "enemy",
+       "astate": "anchored",
+       "select": "nearCaster",
+       "zoneUse": "zone",
+       "techFilter": "any",
+       "techSign": "any",
+       "radius": 220,
+       "range": 1600
+      },
+      "parent": null,
+      "dir": null,
+      "gx": 0,
+      "gy": 0,
+      "order": 0,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6x213o": {
+      "id": "r9b6x213o",
+      "type": "generate",
+      "params": {
+       "amount": 300,
+       "spawn": "caster",
+       "inherit": "yes"
+      },
+      "parent": "r9b6x20at",
+      "dir": "s",
+      "gx": 0,
+      "gy": 1,
+      "order": 1,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6x22c5": {
+      "id": "r9b6x22c5",
+      "type": "color",
+      "params": {
+       "color": "gold"
+      },
+      "parent": "r9b6x213o",
+      "dir": "s",
+      "gx": 0,
+      "gy": 2,
+      "order": 2,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6x23bk": {
+      "id": "r9b6x23bk",
+      "type": "compress",
+      "params": {
+       "power": 6,
+       "shape": "sphere",
+       "poly": null,
+       "shapeDoc": null
+      },
+      "parent": "r9b6x22c5",
+      "dir": "s",
+      "gx": 0,
+      "gy": 3,
+      "order": 3,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6x24h1": {
+      "id": "r9b6x24h1",
+      "type": "redirect",
+      "params": {
+       "toward": "up",
+       "angle": 0,
+       "arrive": "stop",
+       "speedPct": 40
+      },
+      "parent": "r9b6x23bk",
+      "dir": "s",
+      "gx": 0,
+      "gy": 4,
+      "order": 4,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6x25v7": {
+      "id": "r9b6x25v7",
+      "type": "split",
+      "params": {
+       "share": 0,
+       "spread": 0
+      },
+      "parent": "r9b6x24h1",
+      "dir": "s",
+      "gx": 0,
+      "gy": 5,
+      "order": 5,
+      "link": {
+       "mode": "delay",
+       "delay": 1.4,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6x26nt": {
+      "id": "r9b6x26nt",
+      "type": "compress",
+      "params": {
+       "power": 6,
+       "shape": "lance",
+       "poly": null,
+       "shapeDoc": null
+      },
+      "parent": "r9b6x25v7",
+      "dir": "s",
+      "gx": 0,
+      "gy": 6,
+      "order": 6,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6x274w": {
+      "id": "r9b6x274w",
+      "type": "redirect",
+      "params": {
+       "toward": "mouse",
+       "angle": 0,
+       "arrive": "pass",
+       "speedPct": 100
+      },
+      "parent": "r9b6x26nt",
+      "dir": "s",
+      "gx": 0,
+      "gy": 7,
+      "order": 7,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6x2833": {
+      "id": "r9b6x2833",
+      "type": "divide",
+      "params": {
+       "count": 8,
+       "dist": "even",
+       "formation": "circle",
+       "spacing": 60,
+       "motion": "outward"
+      },
+      "parent": "r9b6x25v7",
+      "dir": "s",
+      "gx": 1,
+      "gy": 6,
+      "order": 8,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6x29vt": {
+      "id": "r9b6x29vt",
+      "type": "redirect",
+      "params": {
+       "toward": "mouse",
+       "angle": 0,
+       "arrive": "pass",
+       "speedPct": 35
+      },
+      "parent": "r9b6x25v7",
+      "dir": "s",
+      "gx": 2,
+      "gy": 6,
+      "order": 9,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9b6x2a20": {
+      "id": "r9b6x2a20",
+      "type": "discharge",
+      "params": {
+       "radius": 2
+      },
+      "parent": "r9b6x29vt",
+      "dir": "s",
+      "gx": 2,
+      "gy": 7,
+      "order": 10,
+      "link": {
+       "mode": "condition",
+       "delay": 1,
+       "cond": {
+        "type": "targetNear",
+        "params": {
+         "range": 100
+        },
+        "timeout": 5
+       }
+      }
+     }
+    },
+    "phases": []
+   }
+  },
+  {
+   "id": "GA-signature",
+   "name": "Blooming Line",
+   "role": "L",
+   "source": "RD-0099",
+   "phases": {
+    "I": 0,
+    "II": 0.6,
+    "III": 1.2
+   },
+   "castingConditions": {
+    "range": [
+     380,
+     1200
+    ],
+    "cooldown": 12
+   },
+   "telegraph": 0.21,
+   "prep": 0.2,
+   "recovery": 0.7,
+   "cost": 444,
+   "peakOutput": 947,
+   "runes": 7,
+   "intendedResponse": "Five small discs in a line that swell into wide bursts when they reach you: get out of the drawn bloom circles — sideways, or over the line.",
+   "countersAndWeaknesses": "Each disc only blooms within 110 px of you; the circles drawn round each disc are the real burst size.",
+   "techniqueFree": true,
+   "simulation": {
+    "byScenario": {
+     "still": {
+      "hitRate": 1,
+      "dmg": 16,
+      "tImpact": 0.9,
+      "runs": 6
+     },
+     "strafe": {
+      "hitRate": 1,
+      "dmg": 40,
+      "tImpact": 0.8,
+      "runs": 6
+     },
+     "jumper": {
+      "hitRate": 1,
+      "dmg": 21,
+      "tImpact": 0.65,
+      "runs": 6
+     },
+     "reverse": {
+      "hitRate": 1,
+      "dmg": 17,
+      "tImpact": 1.03,
+      "runs": 6
+     },
+     "wall": {
+      "hitRate": 1,
+      "dmg": 16,
+      "tImpact": 0.9,
+      "runs": 6
+     },
+     "casting": {
+      "hitRate": 1,
+      "dmg": 40,
+      "tImpact": 0.8,
+      "runs": 6
+     },
+     "threatened": {
+      "hitRate": 0.67,
+      "dmg": 17,
+      "tImpact": 1.2,
+      "runs": 6
+     },
+     "platform": {
+      "hitRate": 1,
+      "dmg": 33,
+      "tImpact": 1.59,
+      "runs": 6
+     }
+    },
+    "earliestHit": 0.4833333333333342,
+    "failRate": 0,
+    "runs": 48
+   },
+   "counterplay": {
+    "best": "away",
+    "cleanRate": 0.5,
+    "all": {
+     "stay": {
+      "clean": 0,
+      "dmg": 16
+     },
+     "away": {
+      "clean": 0.5,
+      "dmg": 7
+     },
+     "toward": {
+      "clean": 0,
+      "dmg": 54
+     },
+     "jumpFire": {
+      "clean": 0,
+      "dmg": 35
+     },
+     "jumpLate": {
+      "clean": 0,
+      "dmg": 23
+     },
+     "reverse": {
+      "clean": 0,
+      "dmg": 16
+     },
+     "awayJump": {
+      "clean": 0.5,
+      "dmg": 7
+     },
+     "sidestep": {
+      "clean": 0,
+      "dmg": 15
+     }
+    }
+   },
+   "knownLimitations": "From discovery RD-0099. The bloom happens only within 110 px of the player.",
+   "engine": "magic-engine.js (maxRunes 100, rawMaxSpeed 9, maxBodiesGlobal 640)",
+   "generated": "2026-10-20T14:34:02.517Z",
+   "tree": {
+    "kind": "magic",
+    "v": 1,
+    "name": "Blooming Line",
+    "rootId": "r9cnaja1",
+    "seq": 7,
+    "nodes": {
+     "r9cnaja1": {
+      "id": "r9cnaja1",
+      "type": "target",
+      "params": {
+       "kind": "enemy",
+       "astate": "anchored",
+       "select": "nearCaster",
+       "zoneUse": "zone",
+       "techFilter": "any",
+       "techSign": "any",
+       "radius": 220,
+       "range": 1600
+      },
+      "parent": null,
+      "dir": null,
+      "gx": 0,
+      "gy": 0,
+      "order": 0,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9cnajb68": {
+      "id": "r9cnajb68",
+      "type": "generate",
+      "params": {
+       "amount": 400,
+       "spawn": "caster",
+       "inherit": "yes"
+      },
+      "parent": "r9cnaja1",
+      "dir": "s",
+      "gx": 0,
+      "gy": 1,
+      "order": 1,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9cnajci9": {
+      "id": "r9cnajci9",
+      "type": "compress",
+      "params": {
+       "power": 8,
+       "shape": "disc",
+       "poly": null,
+       "shapeDoc": null
+      },
+      "parent": "r9cnajb68",
+      "dir": "s",
+      "gx": 0,
+      "gy": 2,
+      "order": 2,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9cnajdpl": {
+      "id": "r9cnajdpl",
+      "type": "divide",
+      "params": {
+       "count": 5,
+       "dist": "even",
+       "formation": "horizontal",
+       "spacing": 160,
+       "motion": "keep"
+      },
+      "parent": "r9cnajci9",
+      "dir": "s",
+      "gx": 0,
+      "gy": 3,
+      "order": 3,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9cnajeev": {
+      "id": "r9cnajeev",
+      "type": "redirect",
+      "params": {
+       "toward": "mouse",
+       "angle": 0,
+       "arrive": "pass",
+       "speedPct": 100
+      },
+      "parent": "r9cnajdpl",
+      "dir": "s",
+      "gx": 0,
+      "gy": 4,
+      "order": 4,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9cnajfms": {
+      "id": "r9cnajfms",
+      "type": "compress",
+      "params": {
+       "power": -6,
+       "shape": "keep",
+       "poly": null,
+       "shapeDoc": null
+      },
+      "parent": "r9cnajeev",
+      "dir": "s",
+      "gx": 0,
+      "gy": 5,
+      "order": 5,
+      "link": {
+       "mode": "condition",
+       "delay": 1,
+       "cond": {
+        "type": "targetNear",
+        "params": {
+         "range": 110
+        },
+        "timeout": 4
+       }
+      }
+     },
+     "r9cnajgk1": {
+      "id": "r9cnajgk1",
+      "type": "discharge",
+      "params": {
+       "radius": 1.4
+      },
+      "parent": "r9cnajfms",
+      "dir": "s",
+      "gx": 0,
+      "gy": 6,
+      "order": 6,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     }
+    },
+    "phases": []
+   }
+  },
+  {
+   "id": "GA-minefall",
+   "name": "Waiting Mines",
+   "role": "H",
+   "source": "RD-0234",
+   "phases": {
+    "I": 0,
+    "II": 0.7,
+    "III": 0.7
+   },
+   "castingConditions": {
+    "range": [
+     300,
+     1000
+    ],
+    "cooldown": 12
+   },
+   "telegraph": 0.135,
+   "prep": 0.1,
+   "recovery": 0.45,
+   "cost": 263,
+   "peakOutput": 568,
+   "runes": 7,
+   "intendedResponse": "Three mines settle where you were heading and wait: change course, and never run back through them.",
+   "countersAndWeaknesses": "They only burst within 120 px; a change of direction before they land leaves them behind you.",
+   "techniqueFree": true,
+   "simulation": {
+    "byScenario": {
+     "still": {
+      "hitRate": 1,
+      "dmg": 111,
+      "tImpact": 1.54,
+      "runs": 8
+     },
+     "strafe": {
+      "hitRate": 0.63,
+      "dmg": 73,
+      "tImpact": 1.75,
+      "runs": 8
+     },
+     "jumper": {
+      "hitRate": 0.75,
+      "dmg": 92,
+      "tImpact": 1.62,
+      "runs": 8
+     },
+     "reverse": {
+      "hitRate": 1,
+      "dmg": 111,
+      "tImpact": 1.17,
+      "runs": 8
+     },
+     "wall": {
+      "hitRate": 0.88,
+      "dmg": 97,
+      "tImpact": 1.45,
+      "runs": 8
+     },
+     "casting": {
+      "hitRate": 0.63,
+      "dmg": 73,
+      "tImpact": 1.75,
+      "runs": 8
+     },
+     "threatened": {
+      "hitRate": 0.75,
+      "dmg": 88,
+      "tImpact": 3.01,
+      "runs": 8
+     },
+     "platform": {
+      "hitRate": 0,
+      "dmg": 0,
+      "tImpact": null,
+      "runs": 8
+     }
+    },
+    "earliestHit": 0.7333333333333345,
+    "failRate": 0,
+    "runs": 64
+   },
+   "counterplay": {
+    "best": "away",
+    "cleanRate": 1,
+    "all": {
+     "stay": {
+      "clean": 0,
+      "dmg": 111
+     },
+     "away": {
+      "clean": 1,
+      "dmg": 0
+     },
+     "toward": {
+      "clean": 0,
+      "dmg": 131
+     },
+     "jumpFire": {
+      "clean": 0,
+      "dmg": 111
+     },
+     "jumpLate": {
+      "clean": 0,
+      "dmg": 111
+     },
+     "reverse": {
+      "clean": 0,
+      "dmg": 111
+     },
+     "awayJump": {
+      "clean": 1,
+      "dmg": 0
+     },
+     "sidestep": {
+      "clean": 0.67,
+      "dmg": 37
+     }
+    }
+   },
+   "knownLimitations": "From discovery RD-0234. Anchored mines; in a confined room they deny a lot of floor for their lifetime.",
+   "engine": "magic-engine.js (maxRunes 100, rawMaxSpeed 9, maxBodiesGlobal 640)",
+   "generated": "2026-10-20T14:34:02.517Z",
+   "tree": {
+    "kind": "magic",
+    "v": 1,
+    "name": "Waiting Mines",
+    "rootId": "r9gxh19w7g",
+    "seq": 7,
+    "nodes": {
+     "r9gxh19w7g": {
+      "id": "r9gxh19w7g",
+      "type": "target",
+      "params": {
+       "kind": "enemy",
+       "astate": "anchored",
+       "select": "nearCaster",
+       "zoneUse": "zone",
+       "techFilter": "any",
+       "techSign": "any",
+       "radius": 220,
+       "range": 1600
+      },
+      "parent": null,
+      "dir": null,
+      "gx": 0,
+      "gy": 0,
+      "order": 0,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9gxh19x9j": {
+      "id": "r9gxh19x9j",
+      "type": "generate",
+      "params": {
+       "amount": 240,
+       "spawn": "caster",
+       "inherit": "yes"
+      },
+      "parent": "r9gxh19w7g",
+      "dir": "s",
+      "gx": 0,
+      "gy": 1,
+      "order": 1,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9gxh19ypu": {
+      "id": "r9gxh19ypu",
+      "type": "compress",
+      "params": {
+       "power": 8,
+       "shape": "sphere",
+       "poly": null,
+       "shapeDoc": null
+      },
+      "parent": "r9gxh19x9j",
+      "dir": "s",
+      "gx": 0,
+      "gy": 2,
+      "order": 2,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9gxh19z1i": {
+      "id": "r9gxh19z1i",
+      "type": "divide",
+      "params": {
+       "count": 3,
+       "dist": "even",
+       "formation": "cluster",
+       "spacing": 40,
+       "motion": "keep"
+      },
+      "parent": "r9gxh19ypu",
+      "dir": "s",
+      "gx": 0,
+      "gy": 3,
+      "order": 3,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9gxh1a0mm": {
+      "id": "r9gxh1a0mm",
+      "type": "redirect",
+      "params": {
+       "toward": "mouse",
+       "angle": 0,
+       "arrive": "stop",
+       "speedPct": 80
+      },
+      "parent": "r9gxh19z1i",
+      "dir": "s",
+      "gx": 0,
+      "gy": 4,
+      "order": 4,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r9gxh1a1d3": {
+      "id": "r9gxh1a1d3",
+      "type": "anchor",
+      "params": {
+       "state": "anchored",
+       "where": "here",
+       "offset": "keep",
+       "len": 60,
+       "bindTo": "target",
+       "selfMode": "follow",
+       "strength": 5,
+       "count": 1
+      },
+      "parent": "r9gxh1a0mm",
+      "dir": "s",
+      "gx": 0,
+      "gy": 5,
+      "order": 5,
+      "link": {
+       "mode": "condition",
+       "delay": 1,
+       "cond": {
+        "type": "arrived",
+        "params": {},
+        "timeout": 3
+       }
+      }
+     },
+     "r9gxh1a2wl": {
+      "id": "r9gxh1a2wl",
+      "type": "discharge",
+      "params": {
+       "radius": 1.8
+      },
+      "parent": "r9gxh1a1d3",
+      "dir": "s",
+      "gx": 0,
+      "gy": 6,
+      "order": 6,
+      "link": {
+       "mode": "condition",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 120
+        },
+        "timeout": 4
+       }
+      }
+     }
+    },
+    "phases": []
+   }
+  }
+ ]
+}

@@ -1517,7 +1517,7 @@
 	   ENTRY POINT
 	   ========================================================= */
 	function generateIceGlacialReach(){
-		const base = (Date.now() ^ (Math.random() * 0xFFFFFF | 0)) & 0x7FFFFFFF;
+		const base = global.DUNGEON_SEED_OVERRIDE != null ? global.DUNGEON_SEED_OVERRIDE : ((Date.now() ^ (Math.random() * 0xFFFFFF | 0)) & 0x7FFFFFFF);      // shared in co-op
 		let best = null, bestReason = 'none';
 		for(let attempt = 0; attempt < 24; attempt++){
 			let world = null;

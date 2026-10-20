@@ -751,10 +751,10 @@
 		g.fillStyle = 'rgba(2,4,9,0.74)'; g.fillRect(0, 0, vw, vh);
 		g.globalCompositeOperation = 'destination-out';
 		const hole = (x, y, rad, a) => { if(x < -rad || x > vw + rad || y < -rad || y > vh + rad) return; const gr = g.createRadialGradient(x, y, rad * 0.15, x, y, rad); gr.addColorStop(0, 'rgba(0,0,0,' + a + ')'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(x - rad, y - rad, rad * 2, rad * 2); };
-		if(P.snap){ for(const sd of [ 'left', 'right' ]){ const sp = P.map.spawns[sd]; hole(sp.x - cam.x, sp.y - 40 - cam.y, 320, 1); } }      // a preview: the two fighters at their spawns
+		if(P.snap){ for(const sd of [ 'left', 'right' ]){ const sp = P.map.spawns[sd]; hole(sp.x - cam.x, sp.y - 40 - cam.y, 320, 1); } }      // a preview: the fighters at their spawns
 		else {
 			hole(player.x + player.w / 2 - cam.x, player.y + player.h / 2 - cam.y, 330, 1);
-			if(R.active && !R.ko) hole(R.x + R.w / 2 - cam.x, R.y + R.h / 2 - cam.y, 300, 0.95);
+			for(const R of remotes()) if(R.active && !R.ko && !R.left) hole(R.x + R.w / 2 - cam.x, R.y + R.h / 2 - cam.y, 300, 0.95);
 		}
 		for(const l of P.map.ledges){ if(l.mat === 'mushroom' || l.mat === 'bracket') hole(l.x + l.w / 2 - cam.x, l.y - 10 - cam.y, 230, 0.85); }
 		for(const [cx] of [[420], [1500], [2960], [3990], [1300]]) hole(cx - cam.x, 1960 - cam.y, 220, 0.8);
@@ -958,58 +958,84 @@
 	}
 
 	/* ==================================================================
-	   NET — clock sync, compact state, events
+	   NET — clock sync, compact state, events (up to 4 fighters)
+	   Every client is one slot (0..n-1); slot 0 is the host and referee. Modes: 'duel' (1v1), 'ffa' (everyone
+	   for themselves) and 'teams' (2v2: slots 0 and 2 against 1 and 3).
 	   ================================================================== */
 	const NET = {
-		link: null, ready: false, peer: false, side: 'left', host: true, offset: 0, rtt: 120, rttMin: 1e9,
+		link: null, ready: false, slot: 0, n: 2, mode: 'duel', side: 'left', host: true, offset: 0, rtt: 120, rttMin: 1e9,
 		seq: 0, lastSend: 0, lastBeat: 0, last: null, pingT: 0, defSent: new Set(), defCache: Object.create(null), castSeq: 0,
-		bytes: 0, msgs: 0, rate0: 0, kbps: 0, mps: 0, peerName: 'Opponent'
+		bytes: 0, msgs: 0, rate0: 0, kbps: 0, mps: 0, transport: 'relay', lobbyT: 0
 	};
 	const now = () => performance.now();
 	const hostNow = () => NET.host ? now() : now() + NET.offset;
-	function send(k, d){
+	function send(k, d, to){
 		if(!NET.link) return;
-		try { NET.link.send(k, d); } catch(e){}
+		try { NET.link.send(k, d, to); } catch(e){}
 		NET.msgs++;
 	}
+	/* colours by slot: blue, red, green, yellow (slots 0 and 1 keep the old duel colours); teams are Azure (0, 2) and Crimson (1, 3) */
+	const COLOR_OF_SLOT = [ 0, 2, 1, 3 ];
+	const FALLBACK_HEX = [ '#4488ff', '#44dd66', '#ff4455', '#ffcc33' ];
+	const TEAM = [ { name: 'Team Azure', col: '#5b9cff' }, { name: 'Team Crimson', col: '#ff5b6a' } ];
+	const hexOfIdx = (i) => (typeof PLAYER_COLOR_HEX !== 'undefined' ? PLAYER_COLOR_HEX : FALLBACK_HEX)[i % 4];
+	const slotHex = (s) => hexOfIdx(COLOR_OF_SLOT[s % 4]);
+	const teamOf = (s) => NET.mode === 'teams' ? s % 2 : s;
+	const hostile = (a, b) => a !== b && teamOf(a) !== teamOf(b);
+	const multi = () => NET.n > 2;
+	const scoreKey = (s) => NET.mode === 'teams' ? 't' + (s % 2) : 's' + s;
 
 	/* ==================================================================
-	   THE OPPONENT — a networked body, a caster in your rune world, a figure on your rig
+	   THE OTHER FIGHTERS — each a networked body, a caster in your rune world, a figure on your rig
 	   ================================================================== */
-	const R = {
-		active: false, name: 'Opponent', tint: null, colorIdx: 2,
-		x: 0, y: 0, w: 38, h: 56, vx: 0, vy: 0, facing: -1, ground: true, hp: 1, maxHp: 1,
-		aimX: 0, aimY: 0, triggers: 0, castT: 0, weapon: null, armed: false, dash: false, stun: false, parry: false, ko: false,
-		atk: null, walk: 0, t: 0, flash: 0, trail: [], profile: null,
-		ghost: null, err: { x: 0, y: 0 }, lastRecv: 0, seq: -1
-	};
-	const ENT = {
-		x: 0, y: 0, w: 38, h: 56, hp: 1, maxHp: 1, dead: false, flash: 0, dots: [], stunTimer: 0, slowTimer: 0, facing: -1, vx: 0, vy: 0,
-		_pvpProxy: true, name: 'Opponent',
-		weaponSegment: () => R._seg || null
-	};
-	R.ent = ENT;
-	const remoteInst = Object.create(null);
-	const OWNER_R = {
-		id: 'pvp-remote', entity: ENT,
-		alive: () => R.active && !R.ko,
-		facing: () => R.facing < 0 ? -1 : 1,
-		foes: () => (A.state === 'fight' && typeof player !== 'undefined') ? [ player ] : [],
-		allies: () => [],
-		hurt: (e, dmg, info) => { if(typeof player !== 'undefined' && e === player) hurtMe(dmg * BAL.spell * casterPm(info), info); },
-		hurtSelf: () => {},
-		aim: () => ({ x: R.aimX, y: R.aimY }),
-		triggers: 0,
-		drain: (a) => a,      // their reserve is spent on their side
-		hostOverrides: {
-			getWeapon: () => R.weapon ? { id: R.weapon, name: R.weapon } : null,
-			heal: (ent, amt) => {},      // their healing happens on their client (their hp arrives with their state)
-			isAttacking: (e) => e === ENT ? (R.castT > 0 || !!R.atk) : (typeof MAGIC_HOST !== 'undefined' ? MAGIC_HOST.isAttacking(e) : false),
-			portalStrike: () => null,
-			storeMagicItem: () => 'Not yours to keep',
-			casterHealth: () => R.hp / Math.max(1, R.maxHp)
-		}
-	};
+	const REM = new Map();      // slot -> remote fighter
+	function remote(slot){
+		let R = REM.get(slot);
+		if(R) return R;
+		R = {
+			slot, active: false, left: false, name: 'Mage ' + (slot + 1), hello: false, tint: null, colorIdx: COLOR_OF_SLOT[slot % 4],
+			x: 0, y: 0, w: 38, h: 56, vx: 0, vy: 0, facing: -1, ground: true, hp: 1, maxHp: 1,
+			aimX: 0, aimY: 0, triggers: 0, castT: 0, weapon: null, armed: false, dash: false, stun: false, parry: false, ko: false,
+			atk: null, walk: 0, t: 0, flash: 0, trail: [], profile: null, rtt: 120,
+			ghost: null, err: { x: 0, y: 0 }, lastRecv: 0, seq: -1, inst: Object.create(null)
+		};
+		R.tint = R.colorIdx === 0 ? null : hexOfIdx(R.colorIdx);
+		const ENT = {
+			x: 0, y: 0, w: 38, h: 56, hp: 1, maxHp: 1, dead: false, flash: 0, dots: [], stunTimer: 0, slowTimer: 0, facing: -1, vx: 0, vy: 0,
+			_pvpProxy: true, _pvpSlot: slot, name: R.name,
+			weaponSegment: () => R._seg || null
+		};
+		R.ent = ENT;
+		R.owner = {
+			id: 'pvp-remote-' + slot, entity: ENT,
+			alive: () => R.active && !R.ko,
+			facing: () => R.facing < 0 ? -1 : 1,
+			// their magic only ever hurts YOU here (each client decides what hits itself), and never a teammate
+			foes: () => (A.state === 'fight' && !A.down && hostile(slot, NET.slot) && typeof player !== 'undefined') ? [ player ] : [],
+			allies: () => [],
+			hurt: (e, dmg, info) => { if(typeof player !== 'undefined' && e === player && hostile(slot, NET.slot)) hurtMe(dmg * BAL.spell * casterPm(info), info); },
+			hurtSelf: () => {},
+			aim: () => ({ x: R.aimX, y: R.aimY }),
+			triggers: 0,
+			drain: (a) => a,      // their reserve is spent on their side
+			hostOverrides: {
+				getWeapon: () => R.weapon ? { id: R.weapon, name: R.weapon } : null,
+				heal: (ent, amt) => {},      // their healing happens on their client (their hp arrives with their state)
+				isAttacking: (e) => e === ENT ? (R.castT > 0 || !!R.atk) : (typeof MAGIC_HOST !== 'undefined' ? MAGIC_HOST.isAttacking(e) : false),
+				portalStrike: () => null,
+				storeMagicItem: () => 'Not yours to keep',
+				casterHealth: () => R.hp / Math.max(1, R.maxHp)
+			}
+		};
+		REM.set(slot, R);
+		return R;
+	}
+	const remotes = () => Array.from(REM.values());
+	const remoteOfEnt = (en) => en && en._pvpProxy ? REM.get(en._pvpSlot) || null : null;
+	/* the fighters your spells and blows may strike right now */
+	const foesOfMine = () => remotes().filter(R => R.active && !R.ko && !R.left && hostile(R.slot, NET.slot));
+	/* the name to show for a slot */
+	const nameOf = (s) => s === NET.slot ? 'You' : (REM.get(s) ? REM.get(s).name : 'Mage ' + (s + 1));
 
 	/* their Magic Power, slot boosts, vows and gear: sent with each cast as one multiplier */
 	function casterPm(info){
@@ -1031,14 +1057,14 @@
 		return Math.max(0.4, Math.min(3, m));
 	}
 	function hurtMe(dmg, info){
-		if(!(dmg > 0) || A.state !== 'fight') return;
+		if(!(dmg > 0) || A.state !== 'fight' || A.down) return;
 		const f = player.iFrames; player.iFrames = 0;
 		damagePlayer(dmg * (typeof runeWardMult === 'function' ? runeWardMult() : 1), (info && info.effects) || []);
 		player.iFrames = Math.max(f, dmg >= 15 ? 10 : 0);
 		if(info && info.x != null && typeof spawnImpact === 'function') spawnImpact(info.x, info.y, info.color || '#ffffff');
 	}
 
-	/* ---------- melee: the opponent's attacks, rebuilt from the weapon data you both have ---------- */
+	/* ---------- melee: their attacks, rebuilt from the weapon data you all have ---------- */
 	function weaponDef(id){
 		const MM = root.MeleeMode;
 		return (MM && MM.weapons && MM.weapons[id]) || (root.MELEE_WEAPONS && root.MELEE_WEAPONS.weapons[id]) || (root.MELEE_WEAPONS && root.MELEE_WEAPONS.weapons.sword) || null;
@@ -1051,42 +1077,42 @@
 		if(t < d.startup + d.active + (d.cancel || 0) + (d.recovery || 0) + (A2.missExtra || 0)) return 'recovery';
 		return 'done';
 	}
-	function remoteAttack(m){
+	function remoteAttack(R, m){
 		const w = weaponDef(m.w); if(!w || !w.moves || !w.moves[m.k]) return;
 		const base = w.moves[m.k];
 		const def = Object.assign({}, base, { hitbox: Object.assign({}, base.hitbox || {}), knockback: Object.assign({}, base.knockback || {}) });
-		const late = Math.max(0, Math.min(10, Math.round((NET.rtt / 2) / 16.7)));      // it started half a round trip ago
+		const late = Math.max(0, Math.min(10, Math.round((R.rtt / 2) / 16.7)));      // it started half a round trip ago
 		R.atk = { key: m.k, def, t: late, aim: { x: m.ax, y: m.ay }, missExtra: 0, pulse: 0, phase: 'startup', weapon: m.w };
 		R.atk.phase = meleePhaseOf(R.atk);
 		R.weapon = m.w; R.armed = true;
 		if(Math.abs(m.ax) > 0.16) R.facing = m.ax > 0 ? 1 : -1;
 	}
 
-	/* ---------- rune spells: a cast from the other side becomes a real spell owned by them ---------- */
-	function remoteCast(c){
+	/* ---------- rune spells: a cast from another client becomes a real spell owned by that fighter ---------- */
+	function remoteCast(R, c){
 		if(!root.MAGIC_WORLD_REF) return;
 		if(c.d) NET.defCache[c.k] = c.d;
 		const def = NET.defCache[c.k];
 		if(!def) return;
-		const W = root.MAGIC_WORLD_REF;
+		const W = root.MAGIC_WORLD_REF, ENT = R.ent;
 		// the spell leaves from where they stood when they cast it
 		ENT.x = c.x - ENT.w / 2; ENT.y = c.y - ENT.h / 2;
 		R.aimX = c.ax; R.aimY = c.ay;
 		R.castT = 12;
 		const prof = R.profile || (root.MagicEngine ? root.MagicEngine.deriveProfile({}) : null);
 		let res = null;
-		try { res = W.cast(def, { profile: prof, owner: OWNER_R, host: root.MAGIC_HOST_REF, spawnAt: c.sa ? { x: c.sa[0], y: c.sa[1] } : null, passive: !!c.ps }); } catch(e){ res = null; }
-		if(res && res.ok){ remoteInst[c.i] = res.instance; if(c.pm > 0) res.instance._pm = Math.max(0.4, Math.min(3, c.pm)); }
+		try { res = W.cast(def, { profile: prof, owner: R.owner, host: root.MAGIC_HOST_REF, spawnAt: c.sa ? { x: c.sa[0], y: c.sa[1] } : null, passive: !!c.ps }); } catch(e){ res = null; }
+		if(res && res.ok){ R.inst[c.i] = res.instance; if(c.pm > 0) res.instance._pm = Math.max(0.4, Math.min(3, c.pm)); }
 		A.stats.remoteCasts++;
 	}
-	function remoteEnd(i){
-		const inst = remoteInst[i]; if(!inst) return;
+	function remoteEnd(R, i){
+		const inst = R.inst[i]; if(!inst) return;
 		try { root.MAGIC_WORLD_REF.endInstance(inst); } catch(e){}
-		delete remoteInst[i];
+		delete R.inst[i];
 	}
 
 	/* ---------- your own casts and blows going out ---------- */
-	const outInst = new Map();      // your passive instances → net id (so switching one off ends their copy)
+	const outInst = new Map();      // your passive instances → net id (so switching one off ends their copies)
 	function onLocalCast(def, opts, res){
 		if(!NET.link || A.state !== 'fight' && A.state !== 'countdown') return;
 		const json = JSON.stringify(def);
@@ -1113,19 +1139,20 @@
 		send('ma', { k: key, w: w.id || MM.weaponId, ax: +(atk.aim ? atk.aim.x : player.facing).toFixed(2), ay: +(atk.aim ? atk.aim.y : 0).toFixed(2), c: atk.def._charge ? +atk.def._charge.toFixed(2) : 0 });
 	}
 	function onLocalMeleeHit(ev){
-		if(ev.target !== ENT || A.state !== 'fight') return;
+		const R = remoteOfEnt(ev.target);
+		if(!R || A.state !== 'fight' || !hostile(R.slot, NET.slot)) return;
 		const kb = ev.knockback || {};
 		send('mh', { d: Math.round(ev.amount * BAL.melee), kx: +((kb.x || 0) * (ev.direction || 1)).toFixed(2), ky: +(kb.y || 0).toFixed(2), du: kb.duration || 10,
-			st: ev.hitstun || 8, ty: ev.attackType || 'light', id: ev.attackId, n: ev.name || '' });
-		ENT.flash = 8; R.flash = 8;
+			st: ev.hitstun || 8, ty: ev.attackType || 'light', id: ev.attackId, n: ev.name || '' }, R.slot);
+		R.ent.flash = 8; R.flash = 8;
 		A.stats.blowsLanded++;
 	}
-	function onMeleeHitMe(h){
-		if(A.state !== 'fight') return;
+	function onMeleeHitMe(h, from){
+		if(A.state !== 'fight' || A.down || !hostile(from, NET.slot)) return;
 		const h0 = health, f = player.iFrames; player.iFrames = 0;
 		damagePlayer(h.d, []);
 		const MM = root.MeleeMode;
-		if(health === h0 && MM && MM.parry && MM.parry.success){ player.iFrames = f; send('mp', { id: h.id }); A.banner('PARRY!', '#9fe6ff', 50); return; }
+		if(health === h0 && MM && MM.parry && MM.parry.success){ player.iFrames = f; send('mp', { id: h.id }, from); A.banner('PARRY!', '#9fe6ff', 50); return; }
 		player.iFrames = Math.max(f, 8);
 		const kx = clamp((h.kx || 0) * 0.85, -16, 16), ky = clamp(h.ky || 0, -14, 8);
 		if(kx || ky){ player._knockbackVx = kx; player._knockbackVy = ky; player._knockbackTimer = clamp(h.du || 12, 10, 30); player.launchVx = 0; if(ky < 0) player.onGround = false; }
@@ -1133,17 +1160,17 @@
 		if(typeof spawnImpact === 'function') spawnImpact(player.x + player.w / 2, player.y + player.h * 0.4, '#ffffff');
 		if(typeof shakeScreen === 'function') shakeScreen(h.ty === 'heavy' || h.ty === 'downward' ? 6 : 3, 8);
 	}
-	function onParried(){
+	function onParried(R){
 		// your blow was parried on their side: you stagger
 		const MM = root.MeleeMode;
 		if(MM){ if(MM.atk && MM.endAttack) MM.endAttack(); MM.hitstun = Math.max(MM.hitstun || 0, 30); }
 		player.stunTimer = Math.max(player.stunTimer || 0, 32);
-		player._knockbackVx = (R.x + R.w / 2 > player.x + player.w / 2 ? -1 : 1) * 6; player._knockbackVy = -2; player._knockbackTimer = 12;
+		player._knockbackVx = (R && R.x + R.w / 2 > player.x + player.w / 2 ? -1 : 1) * 6; player._knockbackVy = -2; player._knockbackTimer = 12;
 		A.banner('PARRIED', '#ff9a9a', 50);
 	}
 
 	/* ---------- receiving state: dead reckoning onto a ghost body, errors eased out ---------- */
-	function onState(s){
+	function onState(R, s){
 		// [seq, x, y, vx, vy, flags, hp, mhp, ax, ay, tr, castT, w, h]
 		if(!Array.isArray(s)) return;
 		const seq = s[0];
@@ -1153,19 +1180,19 @@
 		R.facing = (fl & 1) ? 1 : -1; R.ground = !!(fl & 2); R.dash = !!(fl & 4); R.stun = !!(fl & 8); R.parry = !!(fl & 16); R.armed = !!(fl & 32);
 		const ko = !!(fl & 64);
 		R.hp = s[6]; R.maxHp = Math.max(1, s[7]);
-		R.aimX = s[8]; R.aimY = s[9]; R.triggers = s[10]; OWNER_R.triggers = s[10];
+		R.aimX = s[8]; R.aimY = s[9]; R.triggers = s[10]; R.owner.triggers = s[10];
 		if(s[11] > R.castT) R.castT = s[11];
 		if(s[12]) R.weapon = s[12];
 		if(s[13]) R.h = s[13];
-		R.ko = ko;
+		R.ko = ko || (multi() && A.koSlots && A.koSlots.has(R.slot));
 		const wasActive = R.active;
-		R.active = true; R.lastRecv = now();
+		R.active = true; R.left = false; R.lastRecv = now();
 		R.vx = s[3]; R.vy = s[4];
 		// a fresh ghost from this snapshot, run forward by half a round trip
 		const g = R.ghost || (R.ghost = { x: 0, y: 0, w: 38, h: 56, vx: 0, vy: 0, onGround: false, _pvpGhost: true });
 		const prevX = R.x, prevY = R.y;
 		g.x = s[1]; g.y = s[2]; g.vx = s[3]; g.vy = s[4]; g.h = R.h; g.w = 38; g.onGround = R.ground;
-		const steps = clamp(Math.round((NET.rtt / 2) / 16.7), 0, 9);
+		const steps = clamp(Math.round((R.rtt / 2) / 16.7), 0, 9);
 		for(let i = 0; i < steps; i++) stepGhost(g);
 		if(!wasActive || Math.hypot(g.x - prevX, g.y - prevY) > 260){ R.x = g.x; R.y = g.y; R.err.x = 0; R.err.y = 0; }
 		else { R.err.x = prevX - g.x; R.err.y = prevY - g.y; R.x = g.x; R.y = g.y; }
@@ -1177,7 +1204,7 @@
 		try { moveEntityTile(g); } catch(e){ g.x += g.vx; g.y += g.vy; }
 		g.vx = pvx;
 	}
-	function tickRemote(){
+	function tickRemote(R){
 		if(!R.active) return;
 		R.t += 1 / 60;
 		R.snapAge = (R.snapAge || 0) + 1;
@@ -1194,18 +1221,20 @@
 		if(R.flash > 0) R.flash--;
 		if(R.atk){ R.atk.t++; R.atk.phase = meleePhaseOf(R.atk); if(R.atk.phase === 'done') R.atk = null; }
 		// the proxy the engine and your weapon see
+		const ENT = R.ent;
 		ENT.x = R.x; ENT.y = R.y; ENT.w = R.w; ENT.h = R.h; ENT.hp = Math.max(1, R.hp); ENT.maxHp = R.maxHp; ENT.facing = R.facing;
-		ENT.vx = R.vx; ENT.vy = R.vy; ENT.dead = R.ko || A.state !== 'fight'; ENT.name = NET.peerName;
+		ENT.vx = R.vx; ENT.vy = R.vy; ENT.dead = R.ko || A.state !== 'fight' || !hostile(R.slot, NET.slot); ENT.name = R.name;
 		ENT._swing = R.atk && (R.atk.phase === 'startup' || R.atk.phase === 'active') ? 2 : 0;
 		ENT.stunTimer = 0; ENT._kbTimer = 0; ENT.dots.length = 0;
 		if(ENT.flash > 0) ENT.flash--;
-		if(now() - R.lastRecv > 6000 && NET.link){ R.active = false; A.status = 'Connection to opponent lost…'; }
+		if(now() - R.lastRecv > 6000 && NET.link){ R.active = false; A.status = 'Connection to ' + R.name + ' lost…'; }
 	}
 
-	/* ---------- drawing the opponent with your own rig ---------- */
+	/* ---------- drawing them with your own rig ---------- */
 	const POSE_KEYS = [ 'lean', 'head', 'hat', 'armF', 'armB', 'legF', 'legB', 'sword', 'shift', 'crouch' ];
 	const lerpPose = (a, b, t) => { const o = {}; for(const k of POSE_KEYS){ const av = (a && a[k]) || 0, bv = (b && b[k]) || 0; o[k] = av + (bv - av) * t; } return o; };
-	function basePose(){
+	function basePose(R){
+		if(R.ko && multi()) return { lean: -0.9, head: 0.4, hat: 0.4, armF: 1.2, armB: -1.2, legF: 0.5, legB: -0.5, sword: 0.6, shift: -6, crouch: 12 };
 		if(R.stun) return { lean: -0.5, head: 0.28, hat: 0.2, armF: 0.95, armB: -1.3, legF: 0.2, legB: -0.35, sword: 0.4, shift: -4, crouch: 2 };
 		if(R.dash) return { lean: 0.72, head: 0.1, hat: 0.12, armF: -0.35, armB: 0.9, legF: 1.05, legB: -0.7, sword: 0.2, shift: 3, crouch: 2 };
 		if(!R.ground) return R.vy < 0 ? { lean: -0.18, head: -0.08, hat: -0.08, armF: -0.9, armB: -0.7, legF: -0.45, legB: 0.55, sword: -0.2, shift: 0, crouch: -2 }
@@ -1214,8 +1243,8 @@
 		const b = Math.sin(R.t * 4.8);
 		return { lean: 0.02, head: -0.02, hat: 0, armF: 0.42 + b * 0.04, armB: 0.28, legF: 0.04, legB: -0.04, sword: 0, shift: 0, crouch: (1 - b) * 0.6 };
 	}
-	function remotePose(){
-		const base = basePose(), A2 = R.atk;
+	function remotePose(R){
+		const base = basePose(R), A2 = R.atk;
 		if(!A2 || !A2.def.poses) return base;
 		const d = A2.def, t = A2.t, ps = d.poses;
 		const eIn = (x) => x * x, eOut = (x) => 1 - (1 - x) * (1 - x);
@@ -1224,7 +1253,7 @@
 		const span = (d.cancel || 0) + (d.recovery || 0);
 		return lerpPose(ps.strike, ps.follow, eOut(clamp(span <= 1 ? 1 : (t - d.startup - d.active) / span, 0, 1)));
 	}
-	function remoteSwing(w){
+	function remoteSwing(R, w){
 		const MM = root.MeleeMode; if(!MM || !w) return null;
 		const A2 = R.atk, f = R.facing || 1;
 		const aim = A2 ? A2.aim : { x: f, y: 0 };
@@ -1238,19 +1267,24 @@
 		let best = 0; for(const k of [ 'g1', 'g2', 'g3' ]){ const d = w.moves[k]; if(!d || !d.hitbox) continue; best = Math.max(best, Math.hypot(d.hitbox.ox || 0, d.hitbox.oy || 0) + Math.max(18, d.hitbox.w || 36) * 0.5); }
 		return best;
 	}
-	function drawRemote(ctx, camX, camY){
-		if(!R.active || R.koHidden) return;
+	function drawRemote(ctx, R, camX, camY){
+		if(!R.active || R.koHidden || R.left) return;
 		const Rig = root.PlayerRig;
 		const sx = R.x - camX, sy = R.y - camY;
 		const cw = ctx.canvas.width, chh = ctx.canvas.height;
-		if(sx < -160 || sx > cw + 160 || sy < -220 || sy > chh + 160){ drawOffscreenArrow(ctx, sx, sy); return; }
+		const ally = !hostile(R.slot, NET.slot);
+		const tag = R.tint || hexOfIdx(R.colorIdx);
+		if(sx < -160 || sx > cw + 160 || sy < -220 || sy > chh + 160){ if(!(R.ko && multi())) drawOffscreenArrow(ctx, R, sx, sy); return; }
 		const who = R._who || (R._who = { x: 0, y: 0, w: 38, h: 56, facing: 1, baseH: 56, flash: 0 });
 		who.x = R.x; who.y = R.y; who.h = R.h; who.w = 38; who.facing = R.facing; who.flash = R.flash;
 		const w = R.armed && R.weapon ? weaponDef(R.weapon) : null;
 		const style = w ? (w.style || R.weapon) : null;
-		const sw = style ? (remoteSwing(w) || { swing: null, aim: { x: R.facing, y: 0 } }) : { swing: null, aim: { x: R.aimX - (R.x + 19) > 0 ? 1 : -1, y: 0 } };
+		const sw = style ? (remoteSwing(R, w) || { swing: null, aim: { x: R.facing, y: 0 } }) : { swing: null, aim: { x: R.aimX - (R.x + 19) > 0 ? 1 : -1, y: 0 } };
 		ctx.save();
+		if(R.ko && multi()) ctx.globalAlpha = 0.4;      // down for this round
 		ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.ellipse(sx + 19, sy + R.h, 20, 5, 0, 0, 7); ctx.fill();
+		// a teammate stands on a soft ring of your team's colour
+		if(ally){ ctx.strokeStyle = TEAM[teamOf(NET.slot) % 2].col; ctx.lineWidth = 2; ctx.globalAlpha *= 0.7; ctx.beginPath(); ctx.ellipse(sx + 19, sy + R.h, 26, 7, 0, 0, 7); ctx.stroke(); ctx.globalAlpha = R.ko && multi() ? 0.4 : 1; }
 		let res = null;
 		if(Rig && Rig.isReady && Rig.isReady()){
 			const o = {
@@ -1259,7 +1293,7 @@
 				castT: R.castT, castColor: '#9fe6ff', aim: { x: sw.aim.x * (R.facing || 1), y: sw.aim.y }, reachPx: style ? reachOf(w) : 0,
 				squash: 0, angleLegs: !!R.atk, angleArms: !!R.atk, tint: R.tint
 			};
-			try { res = Rig.draw(ctx, sx, sy, who, remotePose(), o); } catch(e){ res = null; }
+			try { res = Rig.draw(ctx, sx, sy, who, remotePose(R), o); } catch(e){ res = null; }
 		}
 		if(!res && typeof drawMageSprite === 'function'){
 			drawMageSprite(ctx, sx, sy, 38, R.h, { colorIdx: R.colorIdx, facing: R.facing, animState: R.ground ? (Math.abs(R.vx) > 0.6 ? 'run' : 'idle') : (R.vy < 0 ? 'jumping' : 'falling'), animFrame: Math.floor(R.t * 10) % 4, flash: R.flash });
@@ -1275,34 +1309,41 @@
 		R._seg = res && res.hand && res.tip ? { x0: res.hand.x + camX, y0: res.hand.y + camY, x1: res.tip.x + camX, y1: res.tip.y + camY } : null;
 		if(R.parry){ ctx.strokeStyle = 'rgba(160,230,255,0.8)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(sx + 19, sy + R.h / 2, 34, 0, 7); ctx.stroke(); }
 		if(R.stun){ ctx.fillStyle = '#fff8'; for(let k = 0; k < 3; k++){ const an = R.t * 5 + k * 2.1; ctx.beginPath(); ctx.arc(sx + 19 + Math.cos(an) * 12, sy - 6 + Math.sin(an) * 4, 2, 0, 7); ctx.fill(); } }
-		// name and health over the head
+		// name and health over the head (a teammate's bar is green-edged)
 		const bw = 72, bx = sx + 19 - bw / 2, by = sy - 18;
-		ctx.fillStyle = '#000a'; ctx.fillRect(bx - 1, by - 1, bw + 2, 7);
-		const pct = clamp(R.hp / R.maxHp, 0, 1);
+		ctx.fillStyle = ally ? '#1d4a2a' : '#000a'; ctx.fillRect(bx - 1, by - 1, bw + 2, 7);
+		const pct = R.ko && multi() ? 0 : clamp(R.hp / R.maxHp, 0, 1);
 		ctx.fillStyle = pct > 0.5 ? '#5be37d' : pct > 0.25 ? '#ffb14a' : '#ff4a4a'; ctx.fillRect(bx, by, bw * pct, 5);
-		ctx.font = 'bold 12px Arial'; ctx.textAlign = 'center'; ctx.fillStyle = '#000'; ctx.fillText(NET.peerName, sx + 20, by - 5); ctx.fillStyle = R.tint || '#9fc4ff'; ctx.fillText(NET.peerName, sx + 19, by - 6);
+		const label = R.name + (ally ? '  (ally)' : '') + (R.ko && multi() ? '  ✖' : '');
+		ctx.font = 'bold 12px Arial'; ctx.textAlign = 'center'; ctx.fillStyle = '#000'; ctx.fillText(label, sx + 20, by - 5); ctx.fillStyle = tag; ctx.fillText(label, sx + 19, by - 6);
 		ctx.restore();
 	}
-	function drawOffscreenArrow(ctx, sx, sy){
+	function drawOffscreenArrow(ctx, R, sx, sy){
 		const cw = ctx.canvas.width, chh = ctx.canvas.height;
 		const ax = clamp(sx, 40, cw - 40), ay = clamp(sy, 80, chh - 80);
-		ctx.save(); ctx.fillStyle = R.tint || '#9fc4ff'; ctx.translate(ax, ay); ctx.rotate(Math.atan2(sy - ay, sx - ax));
+		ctx.save(); ctx.fillStyle = R.tint || hexOfIdx(R.colorIdx); ctx.translate(ax, ay); ctx.rotate(Math.atan2(sy - ay, sx - ax));
 		ctx.beginPath(); ctx.moveTo(18, 0); ctx.lineTo(-10, -12); ctx.lineTo(-10, 12); ctx.fill(); ctx.restore();
 	}
 
 	/* ==================================================================
 	   MATCH FLOW — lobby → host picks the map → countdown → fight → round result → …
+	   A round ends when one fighter (free-for-all, 1v1) or one team (2v2) is left standing. The host referees:
+	   every client reports its own knock-out, the host keeps who is still standing and calls the round.
 	   ================================================================== */
 	const A = {
-		state: 'boot', practice: true, round: 0, score: { left: 0, right: 0 }, t0: 0, mapId: 'ember', seed: 1,
+		state: 'boot', practice: true, round: 0, score: {}, t0: 0, mapId: 'ember', seed: 1,
 		status: '', banners: [], lastAtkId: 0, stats: { localCasts: 0, remoteCasts: 0, blowsLanded: 0 },
-		hz: { vent: -1, icicle: {}, bolt: -1, lavaT: 0, iceVx: 0 }, rematch: { me: false, them: false }, ui: null, previewClock0: now()
+		hz: { vent: -1, icicle: {}, bolt: -1, lavaT: 0, iceVx: 0 }, rematch: { me: false, them: false }, ui: null, previewClock0: now(),
+		alive: new Set(), koSlots: new Set(), down: false, lastWinner: null
 	};
 	A.banner = function(text, color, frames, big){ A.banners.push({ text, color: color || '#fff', t: 0, life: frames || 70, big: !!big }); };
-	const mySide = () => NET.side;
-	const theirSide = () => NET.side === 'left' ? 'right' : 'left';
+	const mySide = () => NET.slot === 0 ? 'left' : 'right';      // legacy (old callers): slot 0 is "left"
 	function clock(){ return A.state === 'fight' || A.state === 'roundEnd' ? Math.max(0, (hostNow() - A.t0) / 1000) : (now() - A.previewClock0) / 1000; }
 	const hazardsLive = () => A.state === 'fight';
+	/* the slots taking part: you and everyone who said hello and has not left */
+	const present = () => [ NET.slot ].concat(remotes().filter(R => R.hello && !R.left).map(R => R.slot)).sort((a, b) => a - b);
+	const winnerName = (key) => !key ? 'Nobody' : key[0] === 't' ? TEAM[+key.slice(1)].name : nameOf(+key.slice(1));
+	const winnerColor = (key) => !key ? '#ddd' : key[0] === 't' ? TEAM[+key.slice(1)].col : slotHex(+key.slice(1));
 
 	/* ---------- building a map into the game ---------- */
 	function applyMap(id, seed){
@@ -1326,59 +1367,96 @@
 		for(const p of P.plats){ if(p.invisible) continue; P.pieces.push(paintPiece(p, P.map)); }
 		return true;
 	}
-	function spawnPoint(side){ const s = P.map.spawns[side]; return { x: s.x - player.w / 2, y: s.y - player.h - 2 }; }
+	/* where a slot starts. Even slots start on the left, odd on the right (so 2v2 teams start together); slots 2 and 3
+	   stand a little further in, on solid ground (the sky isles have gaps). Accepts the old 'left' / 'right' too. */
+	function spawnSpot(map, slot){
+		if(slot === 'left') slot = 0; else if(slot === 'right') slot = 1;
+		slot = slot | 0;
+		const base = map.spawns[slot % 2 === 0 ? 'left' : 'right'];
+		if(slot < 2) return { x: base.x, y: base.y };
+		const dir = slot % 2 === 0 ? 1 : -1;
+		for(const off of [ 240, 180, 120, 70, -90 ]){
+			const x = base.x + dir * off;
+			let top = null;
+			for(const p of map.solids.concat(map.ledges)){ if(x < p.x + 20 || x > p.x + p.w - 20) continue; if(p.y >= base.y - 220 && p.y <= base.y + 140 && (top == null || Math.abs(p.y - base.y) < Math.abs(top - base.y))) top = p.y; }
+			if(top != null) return { x, y: top };
+		}
+		return { x: base.x + dir * 60, y: base.y };
+	}
+	function spawnPoint(slot){ const s = spawnSpot(P.map, slot); return { x: s.x - player.w / 2, y: s.y - player.h - 2 }; }
 	function placeAtSpawn(){
-		const s = spawnPoint(mySide());
+		const s = spawnPoint(NET.slot);
 		player.x = s.x; player.y = s.y; player.vx = 0; player.vy = 0; player.launchVx = 0;
 		player._knockbackTimer = 0; player.stunTimer = 0; player.slowTimer = 0; player.dots = []; player.iFrames = 30;
-		player.facing = mySide() === 'left' ? 1 : -1;
+		player.facing = NET.slot % 2 === 0 ? 1 : -1;
 	}
 	function resetFighters(){
 		health = maxHealth; mana = maxMana;
 		if(typeof updateHealthHUD === 'function') updateHealthHUD();
 		if(typeof updateManaHUD === 'function') updateManaHUD();
+		A.down = false; A.koSlots = new Set();
 		placeAtSpawn();
-		try { MAGIC_WORLD.clearOwner('player'); MAGIC_WORLD.clearOwner('pvp-remote'); } catch(e){}
+		try { MAGIC_WORLD.clearOwner('player'); for(const R of remotes()) MAGIC_WORLD.clearOwner(R.owner.id); } catch(e){}
 		if(typeof projectiles !== 'undefined') projectiles.length = 0;
 		if(typeof enemyProjectiles !== 'undefined') enemyProjectiles.length = 0;
-		for(const k in remoteInst) delete remoteInst[k];
-		R.atk = null; R.ko = false; R.koHidden = false;
+		for(const R of remotes()){ for(const k in R.inst) delete R.inst[k]; R.atk = null; R.ko = false; R.koHidden = false; }
 		if(typeof spellCooldowns !== 'undefined') for(let i = 0; i < spellCooldowns.length; i++) spellCooldowns[i] = 0;
 	}
 
-	/* ---------- host decisions (the host referees: map, round starts, round results) ---------- */
+	/* ---------- host decisions (the host referees: map, round starts, knock-outs, round results) ---------- */
 	function hostSelect(id){
 		const seed = (Math.random() * 1e9) | 0;
 		applyMap(id, seed);
-		A.score = { left: 0, right: 0 }; A.round = 0; A.rematch = { me: false, them: false };
+		A.score = {}; A.round = 0; A.rematch = { me: false, them: false };
 		send('sel', { m: id, s: seed });
 		hostStartRound(1);
 		closeUI();
 	}
 	function hostStartRound(n){
 		const t0 = hostNow() + 3200;
-		send('rnd', { r: n, t0, m: A.mapId, s: A.seed, sc: [ A.score.left, A.score.right ] });
-		startRound(n, t0);
+		const al = present();
+		send('rnd', { r: n, t0, m: A.mapId, s: A.seed, sc: A.score, al, mo: NET.mode });
+		startRound(n, t0, al);
 	}
-	function startRound(n, t0){
+	function startRound(n, t0, al){
 		A.round = n; A.t0 = t0; A.state = 'countdown';
+		A.alive = new Set(al || present());
 		resetFighters();
+		// someone who joined in the middle of a round watches until the next one
+		if(al && al.indexOf(NET.slot) < 0){ A.down = true; A.banner('Watching — you join next round', '#d6c8ff', 120); }
 		A.banner('Round ' + n, '#ffe6a8', 90, true);
 	}
-	function hostResult(loserSide){
+	/* a fighter is down (theirs reported by them, yours by you); the host decides whether the round is over */
+	function hostKO(slot){
+		if(A.state !== 'fight' || !A.alive.has(slot)) return;
+		A.alive.delete(slot);
+		A.koSlots.add(slot);
+		send('dn', { s: slot, r: A.round });
+		if(slot !== NET.slot && REM.get(slot)) REM.get(slot).ko = true;
+		if(multi() && slot !== NET.slot) A.banner(nameOf(slot) + ' is down', slotHex(slot), 80);
+		// is one side left standing?
+		const standing = new Set(Array.from(A.alive).map(s => NET.mode === 'teams' ? 't' + (s % 2) : 's' + s));
+		if(standing.size <= 1) hostResult(standing.size ? Array.from(standing)[0] : null);
+	}
+	function hostResult(winKey){
 		if(A.state !== 'fight') return;
-		const winner = loserSide === 'left' ? 'right' : 'left';
-		A.score[winner]++;
-		const over = A.score[winner] >= ROUNDS_TO_WIN;
-		send('res', { r: A.round, w: winner, sc: [ A.score.left, A.score.right ], over: over ? 1 : 0 });
-		showResult(winner, over);
+		if(winKey) A.score[winKey] = (A.score[winKey] || 0) + 1;
+		const over = !!winKey && A.score[winKey] >= ROUNDS_TO_WIN;
+		send('res', { r: A.round, w: winKey, sc: A.score, over: over ? 1 : 0 });
+		showResult(winKey, over);
 		if(!over) setTimeout(() => { if(A.state === 'roundEnd') hostStartRound(A.round + 1); }, 2600);
 	}
-	function showResult(winner, over){
+	function showResult(winKey, over){
 		A.state = over ? 'over' : 'roundEnd';
-		const iWon = winner === mySide();
-		A.banner(over ? (iWon ? 'VICTORY' : 'DEFEAT') : (iWon ? 'Round won' : 'Round lost'), iWon ? '#8dffb0' : '#ff8a8a', over ? 99999 : 140, true);
-		if(winner !== mySide()) R.koHidden = false;
+		A.lastWinner = winKey;
+		const iWon = !!winKey && winKey === scoreKey(NET.slot);
+		let text;
+		if(!winKey) text = over ? 'DRAW' : 'Draw — no one standing';
+		else if(iWon) text = over ? 'VICTORY' : 'Round won';
+		else if(!multi()) text = over ? 'DEFEAT' : 'Round lost';
+		else text = over ? winnerName(winKey) + ' wins the match' : winnerName(winKey) + ' takes the round';
+		A.banner(text, iWon ? '#8dffb0' : (winKey ? (multi() ? winnerColor(winKey) : '#ff8a8a') : '#dddddd'), over ? 99999 : 140, true);
+		for(const R of remotes()) if(!R.ko) R.koHidden = false;
 		if(over) setTimeout(() => openResults(iWon), 1200);
 	}
 	function onLocalKO(){
@@ -1387,68 +1465,107 @@
 			setTimeout(() => { health = maxHealth; mana = maxMana; placeAtSpawn(); if(typeof updateHealthHUD === 'function') updateHealthHUD(); }, 900);
 			return;
 		}
-		if(A.state !== 'fight') return;
-		if(NET.host) hostResult(mySide());
-		else send('ko', { r: A.round });
+		if(A.state !== 'fight' || A.down) return;
+		A.down = true;
+		if(multi()) A.banner('You are down — watching the rest of the round', '#ffb0b0', 140);
+		if(NET.host) hostKO(NET.slot);
+		else send('ko', { r: A.round }, 0);
 		player.iFrames = 9999;
+	}
+	function onPeerLeft(slot){
+		const R = REM.get(slot);
+		if(!R || R.left) return;
+		R.left = true; R.active = false;
+		A.status = '';
+		A.banner(R.name + ' left the arena', '#ffd0a0', 140);
+		if(slot === 0 && !NET.host){ A.status = 'The host left the arena'; return; }
+		if(NET.host){
+			if(A.state === 'fight') hostKO(slot);
+			if(present().length < 2 && (A.state === 'fight' || A.state === 'countdown' || A.state === 'roundEnd')){ A.status = 'Everyone else left the arena'; }
+		}
 	}
 
 	/* ---------- messages ---------- */
-	function hello(){
+	function hello(to){
 		const prof = (typeof magicProfileForGame === 'function') ? magicProfileForGame() : null;
-		let col = null; try { col = (typeof PLAYER_COLOR_HEX !== 'undefined' && typeof MY_COLOR_IDX !== 'undefined') ? PLAYER_COLOR_HEX[MY_COLOR_IDX % PLAYER_COLOR_HEX.length] : null; } catch(e){}
-		send('h', { n: (root.CloudSave && root.CloudSave.displayName) || 'Mage', p: prof, c: col, v: 2 });
+		send('h', { n: (root.CloudSave && root.CloudSave.displayName) || 'Mage', p: prof, c: slotHex(NET.slot), v: 3, sl: NET.slot }, to);
 	}
-	function onEvent(k, d){
-		NET.bytes += 0;
+	function lobbyCheck(){
+		// the host opens the map picker once everyone in the match has said hello (or after a wait, with whoever came)
+		if(!NET.host || A.state !== 'lobby') return;
+		const got = remotes().filter(R => R.hello && !R.left).length;
+		const waited = NET.lobbyT && now() - NET.lobbyT > 20000;
+		if(got >= NET.n - 1 || (waited && got >= 1)){ A.state = 'select'; A.status = ''; openPicker(); }
+		else A.status = 'Waiting for players… ' + (got + 1) + ' / ' + NET.n;
+	}
+	function onEvent(k, d, from){
+		if(typeof from !== 'number') from = NET.slot === 0 ? 1 : 0;      // a legacy sender without a slot
+		if(from === NET.slot) return;
+		const R = remote(from);
 		switch(k){
-			case 's': onState(d); break;
-			case 'h':
+			case 's': onState(R, d); break;
+			case 'h': {
+				const first = !R.hello;
 				R.seq = -1;      // a new session of theirs starts its packet count again
-				NET.peer = true; NET.peerName = (d && d.n) || 'Opponent'; R.profile = d && d.p || null;
-				if(d && d.c) R.tint = d.c;
-				if(!A.helloBack){ A.helloBack = true; hello(); }
+				R.hello = true; R.left = false; R.name = (d && d.n) || ('Mage ' + (from + 1)); R.ent.name = R.name; R.profile = d && d.p || null;
+				if(first) hello(from);      // answer once, to them only
 				if(NET.host){
-					if(A.state === 'lobby'){ A.state = 'select'; openPicker(); }
-					else if(A.state === 'fight' || A.state === 'countdown' || A.state === 'roundEnd'){ send('sel', { m: A.mapId, s: A.seed }); send('rnd', { r: A.round, t0: A.t0, m: A.mapId, s: A.seed, sc: [ A.score.left, A.score.right ] }); }
-				} else if(A.state === 'lobby'){ A.state = 'select'; openWaiting(); }
-				A.status = '';
+					if(A.state === 'lobby') lobbyCheck();
+					else if(A.state === 'fight' || A.state === 'countdown' || A.state === 'roundEnd'){
+						send('sel', { m: A.mapId, s: A.seed }, from);
+						send('rnd', { r: A.round, t0: A.t0, m: A.mapId, s: A.seed, sc: A.score, al: Array.from(A.alive), mo: NET.mode }, from);
+					} else if(A.state === 'select' && A.ui) openPicker();      // refresh the "who is here" line
+				} else if(from === 0 && A.state === 'lobby'){ A.state = 'select'; openWaiting(); }
+				if(!NET.host || A.state !== 'lobby') A.status = '';
 				break;
-			case 'pi': send('po', { t: d.t, h: now() }); break;
+			}
+			case 'pi': send('po', { t: d.t, h: now() }, from); break;
 			case 'po': {
 				const rtt = now() - d.t;
 				if(rtt > 0 && rtt < 3000){
-					NET.rtt = NET.rtt * 0.7 + rtt * 0.3;
-					// the best (lowest-latency) samples give the truest clock offset
-					if(rtt <= NET.rttMin * 1.25 || NET.rttMin === 1e9){ NET.rttMin = Math.min(NET.rttMin, rtt); if(!NET.host){ const off = d.h - (d.t + rtt / 2); NET.offset = NET.offsetSet ? NET.offset * 0.6 + off * 0.4 : off; NET.offsetSet = true; } }
+					R.rtt = R.rtt * 0.7 + rtt * 0.3;
+					if(from === 0 || NET.host) NET.rtt = NET.host ? (remotes().reduce((s, q) => s + q.rtt, 0) / Math.max(1, REM.size)) : R.rtt;
+					// the best (lowest-latency) samples from the host give the truest clock offset
+					if(from === 0 && !NET.host && (rtt <= NET.rttMin * 1.25 || NET.rttMin === 1e9)){
+						NET.rttMin = Math.min(NET.rttMin, rtt);
+						const off = d.h - (d.t + rtt / 2); NET.offset = NET.offsetSet ? NET.offset * 0.6 + off * 0.4 : off; NET.offsetSet = true;
+					}
 				}
 				break;
 			}
-			case 'sel': if(!NET.host){ applyMap(d.m, d.s); closeUI(); } break;
-			case 'rnd': if(!NET.host){ if(A.mapId !== d.m || A.seed !== (d.s >>> 0)) applyMap(d.m, d.s); A.score = { left: d.sc[0], right: d.sc[1] }; closeUI(); startRound(d.r, d.t0); } break;
-			case 'res': if(!NET.host){ A.score = { left: d.sc[0], right: d.sc[1] }; showResult(d.w, !!d.over); } break;
-			case 'ko': if(NET.host && d.r === A.round) hostResult(theirSide()); break;
-			case 'rc': remoteCast(d); break;
-			case 'rx': remoteEnd(d.i); break;
-			case 'ma': remoteAttack(d); break;
-			case 'mh': onMeleeHitMe(d); break;
-			case 'mp': onParried(d); break;
+			case 'sel': if(!NET.host && from === 0){ applyMap(d.m, d.s); closeUI(); } break;
+			case 'rnd':
+				if(!NET.host && from === 0){
+					if(d.mo) NET.mode = d.mo;
+					if(A.mapId !== d.m || A.seed !== (d.s >>> 0)) applyMap(d.m, d.s);
+					A.score = Array.isArray(d.sc) ? { s0: d.sc[0], s1: d.sc[1] } : (d.sc || {});
+					closeUI(); startRound(d.r, d.t0, d.al);
+				}
+				break;
+			case 'res': if(!NET.host && from === 0){ A.score = Array.isArray(d.sc) ? { s0: d.sc[0], s1: d.sc[1] } : (d.sc || {}); showResult(typeof d.w === 'string' && d.w[0] !== 'l' && d.w[0] !== 'r' ? d.w : (d.w === 'left' ? 's0' : d.w === 'right' ? 's1' : d.w), !!d.over); } break;
+			case 'dn': if(!NET.host && from === 0 && d.r === A.round){ A.koSlots.add(d.s); if(d.s === NET.slot) A.down = true; else if(REM.get(d.s)){ REM.get(d.s).ko = true; if(multi()) A.banner(nameOf(d.s) + ' is down', slotHex(d.s), 80); } } break;
+			case 'ko': if(NET.host && d.r === A.round) hostKO(from); break;
+			case 'rc': remoteCast(R, d); break;
+			case 'rx': remoteEnd(R, d.i); break;
+			case 'ma': remoteAttack(R, d); break;
+			case 'mh': onMeleeHitMe(d, from); break;
+			case 'mp': onParried(R); break;
 			case 'rq':
 				A.rematch.them = true;
-				if(NET.host){ A.banner(NET.peerName + ' wants a rematch', '#ffe6a8', 120); if(A.rematch.me) { A.state = 'select'; openPicker(); } }
+				if(NET.host){ A.banner(R.name + ' wants a rematch', '#ffe6a8', 120); if(A.rematch.me){ A.state = 'select'; openPicker(); } }
 				break;
-			case 'cast': if(d && A.state === 'fight') spawnRemoteCast(d, '_pvpRemote'); break;      // the old phase spells
-			case 'hit': if(A.state === 'fight') damagePlayer((d && d.dmg) || 10, (d && d.effects) || null); break;
-			case 'bye': R.active = false; A.status = NET.peerName + ' left the arena'; break;
+			case 'cast': if(d && A.state === 'fight' && hostile(from, NET.slot)) spawnRemoteCast(d, '_pvpRemote'); break;      // the old phase spells
+			case 'hit': if(A.state === 'fight' && !A.down && hostile(from, NET.slot)) damagePlayer((d && d.dmg) || 10, (d && d.effects) || null); break;
+			case 'bye': onPeerLeft(from); break;
 		}
 	}
 	function sendState(force){
 		const t = now();
 		const MM = root.MeleeMode;
 		const fl = (player.facing > 0 ? 1 : 0) | (player.onGround ? 2 : 0) | (MM && MM.dash && MM.dash.t > 0 ? 4 : 0) | (player.stunTimer > 0 ? 8 : 0)
-			| (MM && MM.parry && MM.parry.t > 0 ? 16 : 0) | (MM && MM.armed ? 32 : 0) | (health <= 0 ? 64 : 0);
+			| (MM && MM.parry && MM.parry.t > 0 ? 16 : 0) | (MM && MM.armed ? 32 : 0) | (health <= 0 || A.down ? 64 : 0);
 		const s = [ ++NET.seq, Math.round(player.x), Math.round(player.y), +player.vx.toFixed(2), +player.vy.toFixed(2), fl,
-			Math.max(0, Math.round(health)), Math.round(maxHealth), Math.round(mouseScreenX + camera.x), Math.round(mouseScreenY + camera.y),
+			Math.max(0, Math.round(A.down ? 0 : health)), Math.round(maxHealth), Math.round(mouseScreenX + camera.x), Math.round(mouseScreenY + camera.y),
 			root.__magicTriggers || 0, player.castTimer || 0, MM && MM.armed ? MM.weaponId : 0, player.h ];
 		// skip a packet that says nothing new (still sent now and then as a heartbeat)
 		const key = s.slice(1).join(',');
@@ -1460,14 +1577,17 @@
 	function netTick(){
 		if(!NET.link) return;
 		const t = now();
-		// a sharp change (jump, landing, turning, stopping) goes out at once; otherwise 20–30 per second
+		if(NET.link.transport) NET.transport = NET.link.transport();
+		// a sharp change (jump, landing, turning, stopping) goes out at once; otherwise 20–30 per second (a little less with more players)
 		const sharp = Math.sign(player.vx) !== Math.sign(lastSharp.vx) || (player.vy < -4 && lastSharp.vy >= 0) || player.onGround !== lastSharp.g || player.facing !== lastSharp.f;
 		lastSharp = { vx: player.vx, vy: player.vy, f: player.facing, g: player.onGround };
+		const every = (NET.transport === 'p2p' ? 33 : 50) + (NET.n > 2 ? (NET.n - 2) * 6 : 0);
 		if(sharp && t - NET.lastSend > 25) sendState(true);
-		else if(t - NET.lastSend >= (NET.transport === 'p2p' ? 33 : 50)) sendState(false);      // 30/s over a direct link, 20/s through the relay
+		else if(t - NET.lastSend >= every) sendState(false);
 		if(t - NET.pingT > (NET.fastPings > 0 ? 120 : (NET.offsetSet || NET.host ? 1000 : 250))){ NET.pingT = t; if(NET.fastPings > 0) NET.fastPings--; send('pi', { t }); }
 		if(t - NET.rate0 > 1000){ NET.mps = NET.msgs; NET.msgs = 0; NET.rate0 = t; }
 		onLocalAttack();
+		lobbyCheck();
 		// passive spells you switched off end on their side too
 		for(const [inst, id] of outInst){ if(inst.done){ send('rx', { i: id }); outInst.delete(inst); } }
 	}
@@ -1539,7 +1659,7 @@
 			}
 		}
 		if(map.voidY && player.y > map.voidY){
-			const s = spawnPoint(mySide());
+			const s = spawnPoint(NET.slot);
 			player.x = s.x; player.y = s.y; player.vx = 0; player.vy = 0; player._knockbackTimer = 0; player.launchVx = 0;
 			player.iFrames = 45;
 			A.banner('The fall costs you', '#d6c8ff', 60);
@@ -1569,18 +1689,21 @@
 
 	/* ---------- the legacy phase spells (old projectiles) hitting the opponent ---------- */
 	function legacyHits(){
-		if(!R.active || A.state !== 'fight' || typeof projectiles === 'undefined' || typeof projectileHitsRect !== 'function') return;
-		const hr = { x: R.x, y: R.y, w: R.w, h: R.h };
+		if(A.state !== 'fight' || A.down || typeof projectiles === 'undefined' || typeof projectileHitsRect !== 'function') return;
+		const foes = foesOfMine(); if(!foes.length) return;
 		for(let i = 0; i < projectiles.length; i++){
 			const p = projectiles[i];
 			if(!p || p.hasHit || p._pvpRemote || p.isSolidPlatform || (p.phase && p.phase.noHit) || p.shape === 'allyOrb' || p.behavior === 'selfCast') continue;
-			if(!projectileHitsRect(p, hr)) continue;
-			const dmg = Math.max(4, Math.round((p.power || 10) * 8));
-			if(!p._fromDomain) send('hit', { dmg, effects: (p.effects && p.effects.length) ? p.effects : null });
-			if(typeof spawnImpact === 'function') spawnImpact(p.x, p.y, p.color);
-			dmgNumbers.push({ x: R.x + R.w / 2, y: R.y - 10, text: Math.round(dmg) + '', age: 0, color: p.color });
-			R.flash = 12;
-			p.hasHit = true;
+			for(const R of foes){
+				if(!projectileHitsRect(p, { x: R.x, y: R.y, w: R.w, h: R.h })) continue;
+				const dmg = Math.max(4, Math.round((p.power || 10) * 8));
+				if(!p._fromDomain) send('hit', { dmg, effects: (p.effects && p.effects.length) ? p.effects : null }, R.slot);
+				if(typeof spawnImpact === 'function') spawnImpact(p.x, p.y, p.color);
+				dmgNumbers.push({ x: R.x + R.w / 2, y: R.y - 10, text: Math.round(dmg) + '', age: 0, color: p.color });
+				R.flash = 12;
+				p.hasHit = true;
+				break;
+			}
 		}
 	}
 
@@ -1710,7 +1833,7 @@
 	function openPicker(){
 		css(); closeUI();
 		const back = document.createElement('div'); back.className = 'pa-back'; stopAll(back);
-		back.innerHTML = '<div class="pa-title">CHOOSE THE ARENA</div><div class="pa-sub">' + (A.practice ? 'Practice — pick a map to train on' : 'You are the host. ' + NET.peerName + ' fights where you choose.') + '</div>';
+		back.innerHTML = '<div class="pa-title">CHOOSE THE ARENA</div><div class="pa-sub">' + (A.practice ? 'Practice — pick a map to train on' : 'You are the host. ' + (multi() ? MODE_NAME[NET.mode] + ' — ' + present().map(nameOf).join(', ') : nameOf(1) + ' fights where you choose.')) + '</div>';
 		back.appendChild(cards(true, (id) => A.practice ? practiceStart(id) : hostSelect(id)));
 		if(A.practice && root.RuneMages){
 			const sp = document.createElement('div'); sp.className = 'pa-spar';
@@ -1732,15 +1855,16 @@
 	function openWaiting(){
 		css(); closeUI();
 		const back = document.createElement('div'); back.className = 'pa-back'; stopAll(back);
-		back.innerHTML = '<div class="pa-title">THE HOST IS CHOOSING</div><div class="pa-sub">' + NET.peerName + ' picks the arena — get ready.</div>';
+		back.innerHTML = '<div class="pa-title">THE HOST IS CHOOSING</div><div class="pa-sub">' + nameOf(0) + ' picks the arena' + (multi() ? ' · ' + MODE_NAME[NET.mode] + ', ' + NET.n + ' fighters' : '') + ' — get ready.</div>';
 		back.appendChild(cards(false));
 		document.body.appendChild(back); A.ui = back;
 	}
 	function openResults(iWon){
 		css(); closeUI();
 		const back = document.createElement('div'); back.className = 'pa-back'; stopAll(back);
-		back.innerHTML = '<div class="pa-title" style="color:' + (iWon ? '#8dffb0' : '#ff9a9a') + '">' + (iWon ? 'VICTORY' : 'DEFEAT') + '</div>' +
-			'<div class="pa-sub">' + MAP_BY_ID[A.mapId].name + ' · ' + A.score[mySide()] + ' – ' + A.score[theirSide()] + '</div>';
+		const wk = A.lastWinner;
+		back.innerHTML = '<div class="pa-title" style="color:' + (iWon ? '#8dffb0' : '#ff9a9a') + '">' + (iWon ? 'VICTORY' : multi() && wk ? winnerName(wk).toUpperCase() + ' WINS' : 'DEFEAT') + '</div>' +
+			'<div class="pa-sub">' + MAP_BY_ID[A.mapId].name + ' · ' + standingsText() + '</div>';
 		const btns = document.createElement('div'); btns.className = 'pa-btns';
 		const again = document.createElement('button'); again.className = 'pa-btn main'; again.textContent = NET.host ? 'Rematch (choose map)' : 'Ask for a rematch';
 		again.onclick = () => {
@@ -1776,34 +1900,82 @@
 		}
 	}
 
+	/* ---------- the standings (3–4 fighters): a row per fighter, grouped by team in 2v2 ---------- */
+	const MODE_NAME = { duel: '1v1', ffa: 'Free-for-all', teams: '2v2 Teams' };
+	function standingsText(){
+		if(!multi()){ const o = remotes().find(R => !R.left); return (A.score[scoreKey(NET.slot)] || 0) + ' – ' + (o ? A.score[scoreKey(o.slot)] || 0 : 0); }
+		if(NET.mode === 'teams') return TEAM[0].name + ' ' + (A.score.t0 || 0) + ' – ' + (A.score.t1 || 0) + ' ' + TEAM[1].name;
+		return present().map(s => nameOf(s) + ' ' + (A.score['s' + s] || 0)).join(' · ');
+	}
+	function drawStandings(ctx, vw, map){
+		const slots = present().concat(remotes().filter(R => R.left && R.hello).map(R => R.slot)).filter((v, i, a) => a.indexOf(v) === i);
+		const order = NET.mode === 'teams' ? slots.slice().sort((a, b) => (a % 2) - (b % 2) || a - b) : slots.slice().sort((a, b) => a - b);
+		const colW = Math.min(160, (Math.min(680, vw - 40)) / Math.max(2, order.length)), W = colW * order.length, x0 = (vw - W) / 2, y0 = 52, H = NET.mode === 'teams' ? 64 : 50;
+		ctx.fillStyle = 'rgba(8,6,14,0.74)'; ctx.fillRect(x0 - 8, y0, W + 16, H);
+		ctx.strokeStyle = (map ? map.accent : '#888') + '99'; ctx.strokeRect(x0 - 7.5, y0 + 0.5, W + 15, H - 1);
+		ctx.font = 'bold 11px Arial'; ctx.textAlign = 'center'; ctx.fillStyle = '#ffe6a8';
+		ctx.fillText(MODE_NAME[NET.mode].toUpperCase() + ' · ROUND ' + Math.max(1, A.round) + ' · FIRST TO ' + ROUNDS_TO_WIN, vw / 2, y0 + 12);
+		order.forEach((s, i) => {
+			const bx = x0 + i * colW + 6, bw = colW - 12, me = s === NET.slot, R = REM.get(s);
+			const hp = me ? (A.down ? 0 : health / maxHealth) : R ? (R.ko ? 0 : R.hp / R.maxHp) : 0;
+			const down = me ? A.down : !R || R.ko || R.left;
+			const col = slotHex(s);
+			ctx.globalAlpha = down ? 0.5 : 1;
+			ctx.fillStyle = col; ctx.beginPath(); ctx.arc(bx + 5, y0 + 23, 4, 0, 7); ctx.fill();
+			ctx.textAlign = 'left'; ctx.font = (me ? 'bold ' : '') + '12px Arial'; ctx.fillStyle = '#efe6d2';
+			let nm = (me ? 'You' : (R ? R.name : 'Mage')) + (R && R.left ? ' (left)' : down ? ' ✖' : '');
+			while(ctx.measureText(nm).width > bw - 40 && nm.length > 4) nm = nm.slice(0, -2);
+			ctx.fillText(nm, bx + 13, y0 + 27);
+			ctx.fillStyle = '#000'; ctx.fillRect(bx, y0 + 32, bw, 7);
+			ctx.fillStyle = col; ctx.fillRect(bx, y0 + 32, bw * clamp(hp, 0, 1), 7);
+			if(NET.mode !== 'teams') for(let k = 0; k < ROUNDS_TO_WIN; k++){ ctx.fillStyle = k < (A.score['s' + s] || 0) ? '#ffd56a' : 'rgba(255,255,255,0.18)'; ctx.beginPath(); ctx.arc(bx + bw - 6 - k * 11, y0 + 23, 4, 0, 7); ctx.fill(); }
+			ctx.globalAlpha = 1;
+		});
+		if(NET.mode === 'teams') for(let tm = 0; tm < 2; tm++){
+			const idx = order.map((s, i) => s % 2 === tm ? i : -1).filter(i => i >= 0); if(!idx.length) continue;
+			const cx = x0 + (idx[0] + idx[idx.length - 1] + 1) / 2 * colW;
+			ctx.font = 'bold 11px Arial'; ctx.textAlign = 'center'; ctx.fillStyle = TEAM[tm].col;
+			ctx.fillText(TEAM[tm].name + (tm === teamOf(NET.slot) ? ' (yours)' : ''), cx - 30, y0 + 55);
+			for(let k = 0; k < ROUNDS_TO_WIN; k++){ ctx.fillStyle = k < (A.score['t' + tm] || 0) ? '#ffd56a' : 'rgba(255,255,255,0.18)'; ctx.beginPath(); ctx.arc(cx + 40 + k * 12, y0 + 51, 4, 0, 7); ctx.fill(); }
+		}
+	}
+
 	/* ---------- canvas HUD ---------- */
 	function drawHud(ctx, vw, vh){
 		ctx.save();
 		const map = P.map;
-		// versus bar
+		// versus bar (1v1) or the standings panel (3–4 fighters)
 		if(!A.practice && (A.state === 'fight' || A.state === 'countdown' || A.state === 'roundEnd' || A.state === 'over')){
-			const W = Math.min(760, vw - 40), x0 = (vw - W) / 2, y0 = 14, bw = W / 2 - 46;
-			ctx.fillStyle = 'rgba(8,6,14,0.72)'; ctx.fillRect(x0, y0, W, 46);
-			ctx.strokeStyle = (map ? map.accent : '#888') + '99'; ctx.strokeRect(x0 + 0.5, y0 + 0.5, W - 1, 45);
-			const meLeft = mySide() === 'left';
-			const sides = [ { name: meLeft ? 'You' : NET.peerName, hp: meLeft ? health / maxHealth : R.hp / R.maxHp, col: '#5b9cff', score: A.score.left },
-				{ name: meLeft ? NET.peerName : 'You', hp: meLeft ? R.hp / R.maxHp : health / maxHealth, col: '#ff5b6a', score: A.score.right } ];
-			sides.forEach((s, i) => {
-				const bx = i ? x0 + W - 10 - bw : x0 + 10, pct = clamp(s.hp, 0, 1);
-				ctx.fillStyle = '#000'; ctx.fillRect(bx, y0 + 24, bw, 12);
-				ctx.fillStyle = s.col; if(i) ctx.fillRect(bx + bw * (1 - pct), y0 + 24, bw * pct, 12); else ctx.fillRect(bx, y0 + 24, bw * pct, 12);
-				ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fillRect(bx, y0 + 24, bw, 2);
-				ctx.font = 'bold 13px Arial'; ctx.textAlign = i ? 'right' : 'left'; ctx.fillStyle = '#efe6d2'; ctx.fillText(s.name, i ? bx + bw : bx, y0 + 18);
-				for(let k = 0; k < ROUNDS_TO_WIN; k++){ ctx.fillStyle = k < s.score ? '#ffd56a' : 'rgba(255,255,255,0.18)'; ctx.beginPath(); ctx.arc(vw / 2 + (i ? 14 + k * 14 : -14 - k * 14), y0 + 30, 5, 0, 7); ctx.fill(); }
-			});
-			ctx.font = 'bold 12px Arial'; ctx.textAlign = 'center'; ctx.fillStyle = '#ffe6a8'; ctx.fillText('ROUND ' + Math.max(1, A.round), vw / 2, y0 + 16);
+			if(multi()) drawStandings(ctx, vw, map);
+			else {
+				const W = Math.min(760, vw - 40), x0 = (vw - W) / 2, y0 = 14, bw = W / 2 - 46;
+				ctx.fillStyle = 'rgba(8,6,14,0.72)'; ctx.fillRect(x0, y0, W, 46);
+				ctx.strokeStyle = (map ? map.accent : '#888') + '99'; ctx.strokeRect(x0 + 0.5, y0 + 0.5, W - 1, 45);
+				const other = remotes().find(R => !R.left) || remote(NET.slot === 0 ? 1 : 0);
+				const meLeft = NET.slot === 0;
+				const mine = { name: 'You', hp: health / maxHealth, score: A.score[scoreKey(NET.slot)] || 0 }, theirs = { name: other.name, hp: other.hp / other.maxHp, score: A.score[scoreKey(other.slot)] || 0 };
+				const sides = [ Object.assign({ col: '#5b9cff' }, meLeft ? mine : theirs), Object.assign({ col: '#ff5b6a' }, meLeft ? theirs : mine) ];
+				sides.forEach((s, i) => {
+					const bx = i ? x0 + W - 10 - bw : x0 + 10, pct = clamp(s.hp, 0, 1);
+					ctx.fillStyle = '#000'; ctx.fillRect(bx, y0 + 24, bw, 12);
+					ctx.fillStyle = s.col; if(i) ctx.fillRect(bx + bw * (1 - pct), y0 + 24, bw * pct, 12); else ctx.fillRect(bx, y0 + 24, bw * pct, 12);
+					ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fillRect(bx, y0 + 24, bw, 2);
+					ctx.font = 'bold 13px Arial'; ctx.textAlign = i ? 'right' : 'left'; ctx.fillStyle = '#efe6d2'; ctx.fillText(s.name, i ? bx + bw : bx, y0 + 18);
+					for(let k = 0; k < ROUNDS_TO_WIN; k++){ ctx.fillStyle = k < s.score ? '#ffd56a' : 'rgba(255,255,255,0.18)'; ctx.beginPath(); ctx.arc(vw / 2 + (i ? 14 + k * 14 : -14 - k * 14), y0 + 30, 5, 0, 7); ctx.fill(); }
+				});
+				ctx.font = 'bold 12px Arial'; ctx.textAlign = 'center'; ctx.fillStyle = '#ffe6a8'; ctx.fillText('ROUND ' + Math.max(1, A.round), vw / 2, y0 + 16);
+			}
+		}
+		if(A.down && !A.practice && multi() && (A.state === 'fight' || A.state === 'countdown')){
+			ctx.font = 'bold 14px Arial'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(vw / 2 - 170, vh - 92, 340, 26);
+			ctx.fillStyle = '#d6c8ff'; ctx.fillText('Down — watching ' + (A.watch != null ? nameOf(A.watch) : 'the fight'), vw / 2, vh - 74);
 		}
 		// connection
 		if(NET.link){
 			const ping = Math.round(NET.rtt);
 			ctx.font = '11px Arial'; ctx.textAlign = 'right';
 			ctx.fillStyle = ping < 90 ? '#7dff9a' : ping < 160 ? '#ffd56a' : '#ff8a8a';
-			ctx.fillText((NET.transport === 'p2p' ? 'direct · ' : 'relay · ') + 'ping ' + ping + ' ms · ' + NET.mps + ' msg/s', vw - 14, vh - 12);
+			ctx.fillText((NET.transport === 'p2p' ? 'direct · ' : NET.transport === 'mixed' ? 'mixed · ' : 'relay · ') + 'ping ' + ping + ' ms · ' + NET.mps + ' msg/s' + (multi() ? ' · ' + NET.n + ' fighters' : ''), vw - 14, vh - 12);
 		}
 		if(A.status){
 			ctx.font = 'bold 16px Arial'; ctx.textAlign = 'center';
@@ -1841,7 +2013,10 @@
 	function camera_(){
 		if(!P.map) return false;
 		const vw = canvas.width, vh = canvas.height, c = P.map.cam;
-		const tx = player.x + player.w / 2 - vw / 2, ty = player.y + player.h / 2 - vh * (P.map.camBias || 0.58);
+		// down in a 3–4 fighter round: the camera follows someone still standing
+		const watch = A.down && A.watch != null && REM.get(A.watch) && REM.get(A.watch).active ? REM.get(A.watch) : null;
+		const fx = watch ? watch.x + 19 : player.x + player.w / 2, fy = watch ? watch.y + 28 : player.y + player.h / 2;
+		const tx = fx - vw / 2, ty = fy - vh * (P.map.camBias || 0.58);
 		let cx = (c.x1 - c.x0) <= vw ? (c.x0 + c.x1 - vw) / 2 : clamp(tx, c.x0, c.x1 - vw);
 		let cy = (c.y1 - c.y0) <= vh ? c.y1 - vh : clamp(ty, c.y0, c.y1 - vh);
 		if(!A.camInit || Math.abs(camera.x - cx) > 900 || Math.abs(camera.y - cy) > 900){ camera.x = cx; camera.y = cy; A.camInit = true; }
@@ -1932,16 +2107,28 @@
 	function tick(){
 		if(!P.map) return;
 		netTick();
-		tickRemote();
+		for(const R of remotes()) tickRemote(R);
 		legacyHits();
 		if(A.state === 'countdown'){
 			placeAtSpawn();
 			if(hostNow() >= A.t0){ A.state = 'fight'; A.banner('FIGHT!', '#ffd56a', 60, true); }
 		}
+		// down for the rest of the round: no moving, no casting, no blows; watch whoever is still standing
+		if(A.down && !A.practice){
+			player.vx = 0; player.stunTimer = Math.max(player.stunTimer || 0, 2); player.iFrames = Math.max(player.iFrames || 0, 30);
+			const standing = remotes().filter(R => R.active && !R.ko && !R.left);
+			if(!standing.some(R => R.slot === A.watch)) A.watch = standing.length ? (standing.find(R => !hostile(R.slot, NET.slot)) || standing[0]).slot : null;
+		} else A.watch = null;
+		// the old single-opponent helpers in the game read window.__pvpOpp: the nearest fighter you can hit
+		let near = null, nd = 1e9;
+		for(const R of foesOfMine()){ const d = Math.abs(R.x - player.x) + Math.abs(R.y - player.y); if(d < nd){ nd = d; near = R; } }
+		root.__pvpOpp = near || NO_OPP;
+		root.__pvpOpps = foesOfMine();
 		hazardsTick();
 		if(A.practice && root.RuneMages && P.map.voidY) for(const m of root.RuneMages.list) if(m.y > P.map.voidY){ const s = P.map.spawns.right; m.x = s.x - 16; m.y = s.y - 80; m.vx = 0; m.vy = 0; }
 		if(!NET.link && !A.practice) return;
 	}
+	const NO_OPP = { active: false, x: 0, y: 0, w: 38, h: 56, facing: 1 };
 
 	/* ==================================================================
 	   BOOT — wire the game's systems to the arena
@@ -1952,14 +2139,21 @@
 		const qs = new URLSearchParams(location.search);
 		const match = qs.get('match');
 		A.practice = !match;
-		NET.side = qs.get('side') === 'right' ? 'right' : 'left';
-		NET.host = NET.side === 'left';
-		R.colorIdx = NET.side === 'right' ? 0 : 2;
-		R.tint = typeof PLAYER_COLOR_HEX !== 'undefined' ? (R.colorIdx === 0 ? null : PLAYER_COLOR_HEX[R.colorIdx]) : null;
+		// the match: ?slot=&n=&pm= (from PvPNet.matchUrl); older links only say side=left|right (a duel)
+		const sl = qs.get('slot');
+		NET.slot = sl != null && /^[0-3]$/.test(sl) ? +sl : (qs.get('side') === 'right' ? 1 : 0);
+		NET.n = clamp(parseInt(qs.get('n'), 10) || 2, 2, 4);
+		if(NET.slot >= NET.n) NET.n = NET.slot + 1;
+		const pm = qs.get('pm');
+		NET.mode = pm === 'teams' && NET.n === 4 ? 'teams' : pm === 'ffa' || NET.n > 2 ? 'ffa' : 'duel';
+		if(NET.mode === 'ffa' && NET.n === 2 && pm !== 'ffa') NET.mode = 'duel';
+		NET.side = NET.slot === 0 ? 'left' : 'right';
+		NET.host = NET.slot === 0;
+		for(let s = 0; s < NET.n; s++) if(s !== NET.slot) remote(s);
 		applyMap(qs.get('map') && MAP_BY_ID[qs.get('map')] ? qs.get('map') : 'ember', 1);
 		placeAtSpawn();
 
-		// your rune casts go out to the other side
+		// your rune casts go out to the other fighters
 		if(MAGIC_WORLD && !MAGIC_WORLD._pvpWrapped){
 			const orig = MAGIC_WORLD.cast;
 			MAGIC_WORLD.cast = function(def, opts){
@@ -1969,36 +2163,44 @@
 			};
 			MAGIC_WORLD._pvpWrapped = true;
 		}
-		// your spells and blows can reach the opponent (only cosmetically here: their side decides what hits them)
-		const fighting = () => R.active && A.state === 'fight' && !R.ko;
+		// your spells and blows can reach your opponents (only cosmetically here: each side decides what hits it)
+		const fighting = () => A.state === 'fight' && !A.down;
 		const gE = MAGIC_HOST.getEnemies, dE = MAGIC_HOST.damageEnemy, hR = MAGIC_HOST.hitRect, kb = MAGIC_HOST.knockback, aS = MAGIC_HOST.applyStatus, tp = MAGIC_HOST.teleport, nd = MAGIC_HOST.nudge;
-		MAGIC_HOST.getEnemies = () => { const l = gE(); return fighting() ? l.concat([ ENT ]) : l; };
+		MAGIC_HOST.getEnemies = () => { const l = gE(); return fighting() ? l.concat(foesOfMine().map(R => R.ent)) : l; };
 		MAGIC_HOST.damageEnemy = (en, dmg, info) => {
-			if(en !== ENT) return dE(en, dmg, info);
-			ENT.flash = 8; R.flash = 8;
+			const R = remoteOfEnt(en);
+			if(!R) return dE(en, dmg, info);
+			if(!hostile(R.slot, NET.slot)) return;
+			R.ent.flash = 8; R.flash = 8;
 			dmgNumbers.push({ x: (info && info.x != null ? info.x : R.x + R.w / 2), y: (info && info.y != null ? info.y : R.y) - 10, text: Math.round(dmg * BAL.spell) + '', age: 0, color: (info && info.color) || '#9fe6ff' });
 			if(typeof spawnImpact === 'function' && info) spawnImpact(info.x, info.y, info.color || '#9fe6ff');
 		};
-		MAGIC_HOST.hitRect = (en) => en === ENT ? { x: R.x, y: R.y, w: R.w, h: R.h } : hR(en);
-		MAGIC_HOST.knockback = (en, ...a) => en === ENT ? undefined : kb(en, ...a);
-		MAGIC_HOST.applyStatus = (en, ...a) => en === ENT ? true : aS(en, ...a);
-		MAGIC_HOST.teleport = (en, ...a) => en === ENT ? false : tp(en, ...a);
-		MAGIC_HOST.nudge = (en, ...a) => en === ENT ? undefined : nd(en, ...a);
+		MAGIC_HOST.hitRect = (en) => { const R = remoteOfEnt(en); return R ? { x: R.x, y: R.y, w: R.w, h: R.h } : hR(en); };
+		MAGIC_HOST.knockback = (en, ...a) => remoteOfEnt(en) ? undefined : kb(en, ...a);
+		MAGIC_HOST.applyStatus = (en, ...a) => remoteOfEnt(en) ? true : aS(en, ...a);
+		MAGIC_HOST.teleport = (en, ...a) => remoteOfEnt(en) ? false : tp(en, ...a);
+		MAGIC_HOST.nudge = (en, ...a) => remoteOfEnt(en) ? undefined : nd(en, ...a);
 		const MM = root.MeleeMode;
 		if(MM){
 			const tg = MM.targets;
-			MM.targets = function(){ const l = tg.call(this); if(fighting()) l.push(ENT); return l; };
+			MM.targets = function(){ const l = tg.call(this); if(fighting()) for(const R of foesOfMine()) l.push(R.ent); return l; };
 			MM.damageListeners.push(onLocalMeleeHit);
+			// a fighter who is down cannot swing
+			const ba = MM.beginAttack;
+			if(typeof ba === 'function') MM.beginAttack = function(){ if(A.down && !A.practice) return; return ba.apply(this, arguments); };
 		}
+		// …or cast
+		const cms = root.castMagicSpell;
+		if(typeof cms === 'function') root.castMagicSpell = function(){ if(A.down && !A.practice) return; return cms.apply(this, arguments); };
 		// a knock-out is a round result, not a respawn
 		const rs = root.respawnPlayer;
 		root.respawnPlayer = function(){ if(A.state === 'fight' || A.state === 'countdown' || A.practice) return onLocalKO(); return rs.apply(this, arguments); };
 
 		// legacy hooks other code still calls
-		root.__pvpOpp = R;
+		root.__pvpOpp = NO_OPP; root.__pvpOpps = [];
 		root.__pvpApplyGravityPull = function(){};
 		root.__pvpRememberOutgoing = function(){};
-		root.__pvpNet = { sendCast: (c) => send('cast', c), sendHit: (h) => send('hit', h) };
+		root.__pvpNet = { sendCast: (c) => send('cast', c), sendHit: (h) => { const f = foesOfMine()[0]; if(f) send('hit', h, f.slot); } };
 
 		if(A.practice){ A.state = 'select'; openPicker(); return; }
 		A.state = 'lobby'; A.status = 'Connecting to the arena…';
@@ -2007,14 +2209,14 @@
 			if(!root.PvPNet){ A.status = 'Online PvP is not available'; return; }
 			const local = qs.get('local') === '1';
 			if(!local && !(root.CloudSave && root.CloudSave.client && root.CloudSave.client())){ setTimeout(connect, 400); return; }
-			NET.link = root.PvPNet.connectMatch(match, NET.side, {
+			NET.link = root.PvPNet.connectMatch(match, { slot: NET.slot, n: NET.n }, {
 				local,
-				onConnected: () => { A.status = 'Waiting for your opponent…'; hello(); },
-				onReady: () => { hello(); },
+				onConnected: () => { NET.lobbyT = now(); A.status = NET.n > 2 ? 'Waiting for players… 1 / ' + NET.n : 'Waiting for your opponent…'; hello(); },
+				onPeer: (slot) => { const R = remote(slot); R.left = false; hello(slot); },
 				onEvent: onEvent,
-				onLeft: () => { R.active = false; A.status = NET.peerName + ' left the arena'; },
+				onLeft: (slot) => onPeerLeft(typeof slot === 'number' ? slot : (NET.slot === 0 ? 1 : 0)),
 				// a direct peer-to-peer link opened (or fell back to the relay): re-measure the delay and the clock
-				onTransport: (t) => { NET.transport = t; NET.rttMin = 1e9; NET.pingT = 0; NET.fastPings = 8; if(t === 'p2p') A.banner('Direct connection', '#9fe6a8', 70); }
+				onTransport: (t, slot) => { NET.rttMin = 1e9; NET.pingT = 0; NET.fastPings = 8; if(t === 'p2p') A.banner('Direct connection' + (multi() && typeof slot === 'number' ? ' to ' + nameOf(slot) : ''), '#9fe6a8', 70); }
 			});
 		};
 		setTimeout(connect, 300);
@@ -2022,9 +2224,11 @@
 	}
 
 	root.PvpArena = {
-		MAPS, MAP_BY_ID, boot, tick, camera: camera_, drawBack, drawFront, drawOpponent: (ctx) => drawRemote(ctx, camera.x, camera.y), afterMove,
-		applyMap, state: () => A.state, A, NET, R, P, BAL, platforms: () => P.plats,
-		spawnFor: (side) => { const m = P.map || MAPS[0]; const s = m.spawns[side]; return { x: s.x - 19, y: s.y - 60 }; },
-		_test: { hostSelect, practiceStart, onEvent, icicleState, boltState, gustState, ventState, clock, renderSnap, snapFloorAt, floorAt, snapCamera, snapCache }
+		MAPS, MAP_BY_ID, boot, tick, camera: camera_, drawBack, drawFront,
+		drawOpponent: (ctx) => { for(const R of remotes()) drawRemote(ctx, R, camera.x, camera.y); }, afterMove,
+		applyMap, state: () => A.state, A, NET, REM, remotes, P, BAL, platforms: () => P.plats,
+		// where a slot (0–3, or the old 'left' / 'right') starts on the current map
+		spawnFor: (slot) => { const m = P.map || MAPS[0]; const s = spawnSpot(m, slot); return { x: s.x - 19, y: s.y - 60 }; },
+		_test: { hostSelect, practiceStart, onEvent, icicleState, boltState, gustState, ventState, clock, renderSnap, snapFloorAt, floorAt, snapCamera, snapCache, spawnSpot, hostKO, present, teamOf, hostile }
 	};
 })(typeof window !== 'undefined' ? window : globalThis);

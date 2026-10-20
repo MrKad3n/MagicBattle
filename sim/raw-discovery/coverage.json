@@ -1,0 +1,31 @@
+{
+ "opsSeen": {
+  "compress-high": 187,
+  "prog-lurk": 54,
+  "term-burstNear": 196,
+  "condition": 315,
+  "divide-keep": 73,
+  "prog-hold": 112,
+  "term-expandBurst": 80,
+  "delay": 179,
+  "compress": 150,
+  "divide-still": 87,
+  "prog-drop": 58,
+  "prog-arc": 58,
+  "prog-direct": 55,
+  "split": 67,
+  "term-burstArrive": 24,
+  "prog-stagger": 9,
+  "prog-guided": 58,
+  "divide-outward": 92
+ },
+ "policyHitRates": {
+  "still": 0.975,
+  "strafe": 0.635,
+  "jumper": 0.725,
+  "reactive": 0.431,
+  "aggressive": 0.78,
+  "kiter": 0.313,
+  "random": 0.662
+ }
+}

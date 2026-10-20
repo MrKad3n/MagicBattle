@@ -1,0 +1,826 @@
+{
+ "bugs": [
+  {
+   "id": "RD-0019",
+   "kind": "lingeringRepeatHits",
+   "run": "aggressive@720",
+   "detail": "5 hits, 2 bodies still alive after 10 s",
+   "genome": {
+    "amt": 400,
+    "shape": "arrow",
+    "power": 8,
+    "struct": "divide",
+    "form": "arc",
+    "count": 8,
+    "motion": "still",
+    "branches": 3,
+    "prog": "lurk",
+    "term": "expandBurst",
+    "delay": 0.6,
+    "spacing": 40
+   }
+  },
+  {
+   "id": "RD-0310",
+   "kind": "lingeringRepeatHits",
+   "run": "random@380",
+   "detail": "4 hits, 4 bodies still alive after 10 s",
+   "genome": {
+    "amt": 120,
+    "shape": "wave",
+    "power": 8,
+    "struct": "divide",
+    "form": "horizontal",
+    "count": 8,
+    "motion": "still",
+    "branches": 3,
+    "prog": "lurk",
+    "term": "expandBurst",
+    "delay": 0.6,
+    "spacing": 160
+   }
+  },
+  {
+   "id": "RD-0379",
+   "kind": "lingeringRepeatHits",
+   "run": "strafe@380",
+   "detail": "6 hits, 1 bodies still alive after 10 s",
+   "genome": {
+    "amt": 120,
+    "shape": "wave",
+    "power": 14,
+    "struct": "divide",
+    "form": "circle",
+    "count": 3,
+    "motion": "still",
+    "branches": 2,
+    "prog": "guided",
+    "term": "none",
+    "delay": 0.6,
+    "spacing": 40
+   }
+  },
+  {
+   "id": "RD-0379",
+   "kind": "lingeringRepeatHits",
+   "run": "strafe@720",
+   "detail": "11 hits, 1 bodies still alive after 10 s",
+   "genome": {
+    "amt": 120,
+    "shape": "wave",
+    "power": 14,
+    "struct": "divide",
+    "form": "circle",
+    "count": 3,
+    "motion": "still",
+    "branches": 2,
+    "prog": "guided",
+    "term": "none",
+    "delay": 0.6,
+    "spacing": 40
+   }
+  },
+  {
+   "id": "RD-0379",
+   "kind": "lingeringRepeatHits",
+   "run": "kiter@720",
+   "detail": "4 hits, 2 bodies still alive after 10 s",
+   "genome": {
+    "amt": 120,
+    "shape": "wave",
+    "power": 14,
+    "struct": "divide",
+    "form": "circle",
+    "count": 3,
+    "motion": "still",
+    "branches": 2,
+    "prog": "guided",
+    "term": "none",
+    "delay": 0.6,
+    "spacing": 40
+   }
+  }
+ ],
+ "minimisedRepros": [
+  {
+   "kind": "lingeringRepeatHits",
+   "from": "RD-0019",
+   "run": "aggressive@720",
+   "detail": "5 hits, 2 bodies still alive after 10 s",
+   "runes": 9,
+   "def": {
+    "kind": "magic",
+    "v": 1,
+    "name": "RD-0019",
+    "rootId": "r99j63geo",
+    "seq": 9,
+    "nodes": {
+     "r99j63geo": {
+      "id": "r99j63geo",
+      "type": "target",
+      "params": {
+       "kind": "enemy",
+       "astate": "anchored",
+       "select": "nearCaster",
+       "zoneUse": "zone",
+       "techFilter": "any",
+       "techSign": "any",
+       "radius": 220,
+       "range": 1600
+      },
+      "parent": null,
+      "dir": null,
+      "gx": 0,
+      "gy": 0,
+      "order": 0,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r99j63ht6": {
+      "id": "r99j63ht6",
+      "type": "generate",
+      "params": {
+       "amount": 400,
+       "spawn": "caster",
+       "inherit": "yes"
+      },
+      "parent": "r99j63geo",
+      "dir": "s",
+      "gx": 0,
+      "gy": 1,
+      "order": 1,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r99j63i4x": {
+      "id": "r99j63i4x",
+      "type": "compress",
+      "params": {
+       "power": 8,
+       "shape": "arrow",
+       "poly": null,
+       "shapeDoc": null
+      },
+      "parent": "r99j63ht6",
+      "dir": "s",
+      "gx": 0,
+      "gy": 2,
+      "order": 2,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r99j63jl4": {
+      "id": "r99j63jl4",
+      "type": "divide",
+      "params": {
+       "count": 8,
+       "dist": "even",
+       "formation": "arc",
+       "spacing": 40,
+       "motion": "still"
+      },
+      "parent": "r99j63i4x",
+      "dir": "s",
+      "gx": 0,
+      "gy": 3,
+      "order": 3,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r99j63kog": {
+      "id": "r99j63kog",
+      "type": "redirect",
+      "params": {
+       "toward": "mouse",
+       "angle": 0,
+       "arrive": "stop",
+       "speedPct": 80
+      },
+      "parent": "r99j63jl4",
+      "dir": "s",
+      "gx": 0,
+      "gy": 4,
+      "order": 4,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     },
+     "r99j63l6y": {
+      "id": "r99j63l6y",
+      "type": "anchor",
+      "params": {
+       "state": "anchored",
+       "where": "here",
+       "offset": "keep",
+       "len": 60,
+       "bindTo": "target",
+       "selfMode": "follow",
+       "strength": 5,
+       "count": 1
+      },
+      "parent": "r99j63kog",
+      "dir": "s",
+      "gx": 0,
+      "gy": 5,
+      "order": 5,
+      "link": {
+       "mode": "condition",
+       "delay": 1,
+       "cond": {
+        "type": "arrived",
+        "params": {},
+        "timeout": 3
+       }
+      }
+     },
+     "r99j63m7v": {
+      "id": "r99j63m7v",
+      "type": "redirect",
+      "params": {
+       "toward": "target",
+       "angle": 0,
+       "arrive": "pass",
+       "speedPct": 100
+      },
+      "parent": "r99j63l6y",
+      "dir": "s",
+      "gx": 0,
+      "gy": 6,
+      "order": 6,
+      "link": {
+       "mode": "condition",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 180
+        },
+        "timeout": 4
+       }
+      }
+     },
+     "r99j63nhl": {
+      "id": "r99j63nhl",
+      "type": "compress",
+      "params": {
+       "power": -6,
+       "shape": "keep",
+       "poly": null,
+       "shapeDoc": null
+      },
+      "parent": "r99j63m7v",
+      "dir": "s",
+      "gx": 0,
+      "gy": 7,
+      "order": 7,
+      "link": {
+       "mode": "condition",
+       "delay": 1,
+       "cond": {
+        "type": "targetNear",
+        "params": {
+         "range": 110
+        },
+        "timeout": 4
+       }
+      }
+     },
+     "r99j63o8v": {
+      "id": "r99j63o8v",
+      "type": "discharge",
+      "params": {
+       "radius": 1.4
+      },
+      "parent": "r99j63nhl",
+      "dir": "s",
+      "gx": 0,
+      "gy": 8,
+      "order": 8,
+      "link": {
+       "mode": "instant",
+       "delay": 1,
+       "cond": {
+        "type": "enemyNear",
+        "params": {
+         "range": 140
+        },
+        "timeout": 10
+       }
+      }
+     }
+    },
+    "phases": []
+   }
+  }
+ ],
+ "rejectNotes": [
+  {
+   "id": "RD-0002",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0008",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0009",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0011",
+   "why": "peak output 1140 > 960"
+  },
+  {
+   "id": "RD-0018",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0030",
+   "why": "peak output 1863 > 960"
+  },
+  {
+   "id": "RD-0032",
+   "why": "peak output 967 > 960"
+  },
+  {
+   "id": "RD-0035",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0041",
+   "why": "peak output 1140 > 960"
+  },
+  {
+   "id": "RD-0044",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0045",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0047",
+   "why": "peak output 1140 > 960"
+  },
+  {
+   "id": "RD-0049",
+   "why": "peak output 1901 > 960"
+  },
+  {
+   "id": "RD-0050",
+   "why": "peak output 967 > 960"
+  },
+  {
+   "id": "RD-0055",
+   "why": "peak output 1901 > 960"
+  },
+  {
+   "id": "RD-0060",
+   "why": "peak output 1863 > 960"
+  },
+  {
+   "id": "RD-0069",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0070",
+   "why": "peak output 1901 > 960"
+  },
+  {
+   "id": "RD-0081",
+   "why": "peak output 1140 > 960"
+  },
+  {
+   "id": "RD-0082",
+   "why": "peak output 1140 > 960"
+  },
+  {
+   "id": "RD-0089",
+   "why": "peak output 1863 > 960"
+  },
+  {
+   "id": "RD-0108",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0114",
+   "why": "peak output 967 > 960"
+  },
+  {
+   "id": "RD-0116",
+   "why": "peak output 1863 > 960"
+  },
+  {
+   "id": "RD-0119",
+   "why": "peak output 1901 > 960"
+  },
+  {
+   "id": "RD-0128",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0133",
+   "why": "peak output 967 > 960"
+  },
+  {
+   "id": "RD-0135",
+   "why": "peak output 1901 > 960"
+  },
+  {
+   "id": "RD-0137",
+   "why": "peak output 1863 > 960"
+  },
+  {
+   "id": "RD-0141",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0142",
+   "why": "peak output 967 > 960"
+  },
+  {
+   "id": "RD-0143",
+   "why": "peak output 1863 > 960"
+  },
+  {
+   "id": "RD-0144",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0149",
+   "why": "peak output 1863 > 960"
+  },
+  {
+   "id": "RD-0150",
+   "why": "peak output 967 > 960"
+  },
+  {
+   "id": "RD-0153",
+   "why": "peak output 1863 > 960"
+  },
+  {
+   "id": "RD-0154",
+   "why": "peak output 1863 > 960"
+  },
+  {
+   "id": "RD-0158",
+   "why": "peak output 1863 > 960"
+  },
+  {
+   "id": "RD-0160",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0162",
+   "why": "peak output 1140 > 960"
+  },
+  {
+   "id": "RD-0163",
+   "why": "peak output 1901 > 960"
+  },
+  {
+   "id": "RD-0172",
+   "why": "peak output 967 > 960"
+  },
+  {
+   "id": "RD-0173",
+   "why": "peak output 1863 > 960"
+  },
+  {
+   "id": "RD-0175",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0183",
+   "why": "peak output 1863 > 960"
+  },
+  {
+   "id": "RD-0187",
+   "why": "peak output 1140 > 960"
+  },
+  {
+   "id": "RD-0203",
+   "why": "peak output 1863 > 960"
+  },
+  {
+   "id": "RD-0205",
+   "why": "peak output 1863 > 960"
+  },
+  {
+   "id": "RD-0206",
+   "why": "peak output 1140 > 960"
+  },
+  {
+   "id": "RD-0211",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0220",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0222",
+   "why": "peak output 1863 > 960"
+  },
+  {
+   "id": "RD-0226",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0227",
+   "why": "peak output 1140 > 960"
+  },
+  {
+   "id": "RD-0231",
+   "why": "peak output 1863 > 960"
+  },
+  {
+   "id": "RD-0236",
+   "why": "peak output 967 > 960"
+  },
+  {
+   "id": "RD-0240",
+   "why": "peak output 1863 > 960"
+  },
+  {
+   "id": "RD-0256",
+   "why": "peak output 1863 > 960"
+  },
+  {
+   "id": "RD-0268",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0270",
+   "why": "peak output 967 > 960"
+  },
+  {
+   "id": "RD-0272",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0290",
+   "why": "peak output 967 > 960"
+  },
+  {
+   "id": "RD-0293",
+   "why": "peak output 1863 > 960"
+  },
+  {
+   "id": "RD-0296",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0298",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0317",
+   "why": "peak output 1863 > 960"
+  },
+  {
+   "id": "RD-0318",
+   "why": "peak output 1863 > 960"
+  },
+  {
+   "id": "RD-0319",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0324",
+   "why": "peak output 1863 > 960"
+  },
+  {
+   "id": "RD-0326",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0328",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0329",
+   "why": "peak output 1863 > 960"
+  },
+  {
+   "id": "RD-0332",
+   "why": "peak output 1863 > 960"
+  },
+  {
+   "id": "RD-0348",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0351",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0352",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0354",
+   "why": "peak output 1863 > 960"
+  },
+  {
+   "id": "RD-0359",
+   "why": "peak output 1863 > 960"
+  },
+  {
+   "id": "RD-0369",
+   "why": "peak output 1863 > 960"
+  },
+  {
+   "id": "RD-0373",
+   "why": "peak output 1140 > 960"
+  },
+  {
+   "id": "RD-0375",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0376",
+   "why": "peak output 1863 > 960"
+  },
+  {
+   "id": "RD-0378",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0382",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0383",
+   "why": "peak output 967 > 960"
+  },
+  {
+   "id": "RD-0387",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0401",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0402",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0405",
+   "why": "peak output 1140 > 960"
+  },
+  {
+   "id": "RD-0409",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0410",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0424",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0426",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0427",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0429",
+   "why": "peak output 1901 > 960"
+  },
+  {
+   "id": "RD-0431",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0440",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0441",
+   "why": "peak output 1863 > 960"
+  },
+  {
+   "id": "RD-0446",
+   "why": "peak output 1863 > 960"
+  },
+  {
+   "id": "RD-0448",
+   "why": "peak output 1901 > 960"
+  },
+  {
+   "id": "RD-0450",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0452",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0456",
+   "why": "peak output 1863 > 960"
+  },
+  {
+   "id": "RD-0457",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0461",
+   "why": "peak output 1140 > 960"
+  },
+  {
+   "id": "RD-0466",
+   "why": "peak output 1863 > 960"
+  },
+  {
+   "id": "RD-0470",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0474",
+   "why": "peak output 1863 > 960"
+  },
+  {
+   "id": "RD-0476",
+   "why": "peak output 1863 > 960"
+  },
+  {
+   "id": "RD-0479",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0485",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0487",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0488",
+   "why": "peak output 1863 > 960"
+  },
+  {
+   "id": "RD-0490",
+   "why": "peak output 1118 > 960"
+  },
+  {
+   "id": "RD-0497",
+   "why": "peak output 1863 > 960"
+  },
+  {
+   "id": "RD-0509",
+   "why": "peak output 1863 > 960"
+  }
+ ]
+}

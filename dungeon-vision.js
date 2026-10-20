@@ -245,6 +245,23 @@
 		return null;
 	}
 
+	/* Many lights close together (a lava lake, a row of glowing props) cost a fill each but look like one: lights of the same
+	   colour within ~110 px are merged into one a little larger and brighter, so a crowded scene stays cheap. */
+	function mergeLights(lights){
+		if(lights.length <= 24) return lights;
+		const cell = 110, grid = new Map(), out = [];
+		for(let i = 0; i < lights.length; i++){
+			const L = lights[i];
+			if(i === 0){ out.push(L); continue; }       // the player's own light stays as it is
+			const k = Math.round(L.x / cell) + ',' + Math.round(L.y / cell) + ',' + (L.c ? L.c.join('.') : '');
+			const m = grid.get(k);
+			if(!m){ const c = { x: L.x, y: L.y, r: L.r, i: L.i, c: L.c, n: 1 }; grid.set(k, c); out.push(c); continue; }
+			m.x = (m.x * m.n + L.x) / (m.n + 1); m.y = (m.y * m.n + L.y) / (m.n + 1); m.n++;
+			m.r = Math.max(m.r, L.r) * 1.04; m.i = Math.min(1.2, Math.max(m.i, L.i) + 0.04);
+		}
+		if(out.length > 64){ out.sort((p, q) => q.i * q.r - p.i * p.r); out.length = 64; }
+		return out;
+	}
 	function collectLights(cam, vw, vh){
 		const lights = [];
 		const d = (typeof dungeon !== 'undefined') ? dungeon : null;
@@ -355,20 +372,24 @@
 		}
 
 		if(typeof DungeonFluid !== 'undefined' && DungeonFluid.ready && DungeonFluid.bins){
-			const t = 12;
+			/* Lava glows along its surface. One light used to be added every 48 px of lava — a wide lake meant dozens of
+			   full gradient fills a frame. Now a light every ~200 px of each lava floor, a little larger to cover the gaps. */
+			const t = 12, STEP = 17;
 			const i0 = Math.floor((cam.x - 80) / t), i1 = Math.ceil((cam.x + vw + 80) / t);
-			for(let bi = i0; bi <= i1; bi += 4){
+			const lastAt = {};
+			for(let bi = i0; bi <= i1; bi++){
 				const list = DungeonFluid.bins[bi];
 				if(!list) continue;
 				for(let k = 0; k < list.length; k++){
 					const col = list[k];
 					if(!col || !(col.visLava > 10 || col.lava > 10)) continue;
+					const fk = Math.round(col.floor / 80);
+					if(lastAt[fk] != null && bi - lastAt[fk] < STEP) continue;
+					lastAt[fk] = bi;
 					const h = col.visLava || col.lava;
-					const x = col.x + t * 0.5;
+					const x = col.x + t * 0.5 + STEP * t * 0.5;
 					const y = col.floor - Math.min(h, 80) * 0.45;
-					if(inView(x, y, 150, cam, vw, vh, 40)){
-						pushLight(lights, x, y, { r: 150, i: 0.55, c: [255, 95, 18] });
-					}
+					if(inView(x, y, 190, cam, vw, vh, 40)) pushLight(lights, x, y, { r: 190, i: 0.6, c: [255, 95, 18] });
 				}
 			}
 		}
@@ -459,7 +480,7 @@
 
 		for(let i = 0; i < _extra.length; i++) lights.push(_extra[i]);
 		_extra.length = 0;
-		return lights;
+		return mergeLights(lights);
 	}
 
 	function castDistances(px, py, maxR, n){
@@ -559,23 +580,15 @@
 		g.fillRect(0, 0, vw, vh);
 		g.globalCompositeOperation = 'destination-out';
 		g.globalAlpha = 1;
+		const punchSpr = lightSprite('punch');
 		for(let i = 0; i < lights.length; i++){
 			const L = lights[i];
 			const lx = L.x - cam.x, ly = L.y - cam.y;
 			if(lx < -L.r || ly < -L.r || lx > vw + L.r || ly > vh + L.r) continue;
-			const punch = Math.min(0.95, L.i * (brightArena ? 0.98 : 0.85));
-			const grd = g.createRadialGradient(lx, ly, 2, lx, ly, L.r);
-			grd.addColorStop(0, 'rgba(255,255,255,' + punch + ')');
-			grd.addColorStop(0.22, 'rgba(255,255,255,' + (punch * 0.62) + ')');
-			grd.addColorStop(0.48, 'rgba(255,255,255,' + (punch * 0.32) + ')');
-			grd.addColorStop(0.72, 'rgba(255,255,255,' + (punch * 0.12) + ')');
-			grd.addColorStop(0.88, 'rgba(255,255,255,' + (punch * 0.04) + ')');
-			grd.addColorStop(1, 'rgba(255,255,255,0)');
-			g.fillStyle = grd;
-			g.beginPath();
-			g.arc(lx, ly, L.r, 0, Math.PI * 2);
-			g.fill();
+			g.globalAlpha = Math.min(0.95, L.i * (brightArena ? 0.98 : 0.85));
+			g.drawImage(punchSpr, lx - L.r, ly - L.r, L.r * 2, L.r * 2);
 		}
+		g.globalAlpha = 1;
 
 		ctx.save();
 		ctx.imageSmoothingEnabled = true;
@@ -590,15 +603,37 @@
 			const lx = L.x - cam.x, ly = L.y - cam.y;
 			if(lx < -L.r || ly < -L.r || lx > vw + L.r || ly > vh + L.r) continue;
 			if(blocksVision(Math.floor(L.x / tile()), Math.floor(L.y / tile()))) continue;
-			const grd = ctx.createRadialGradient(lx, ly, 4, lx, ly, L.r * (0.25 + 0.55 * Math.min(1, L.i)));
-			grd.addColorStop(0, 'rgba(' + L.c[0] + ',' + L.c[1] + ',' + L.c[2] + ',' + ((brightArena ? 0.34 : 0.2) * Math.min(1, L.i)) + ')');
-			grd.addColorStop(1, 'rgba(' + L.c[0] + ',' + L.c[1] + ',' + L.c[2] + ',0)');
-			ctx.fillStyle = grd;
-			ctx.beginPath();
-			ctx.arc(lx, ly, L.r * 0.55, 0, Math.PI * 2);
-			ctx.fill();
+			// a tinted glow sprite (one per colour, cached) scaled to the light: no gradient built per light per frame
+			const gr = L.r * (0.25 + 0.55 * Math.min(1, L.i));
+			ctx.globalAlpha = (brightArena ? 0.34 : 0.2) * Math.min(1, L.i);
+			ctx.drawImage(lightSprite(L.c), lx - gr, ly - gr, gr * 2, gr * 2);
 		}
 		ctx.restore();
+	}
+
+	/* light sprites: a soft white disc for punching the fog, and a glow per colour (cached, at most 32 colours) */
+	const _spr = new Map();
+	function lightSprite(c){
+		const key = c === 'punch' ? 'punch' : (c[0] | 0) + ',' + (c[1] | 0) + ',' + (c[2] | 0);
+		let cv = _spr.get(key);
+		if(cv) return cv;
+		const S = 128;
+		cv = document.createElement('canvas'); cv.width = cv.height = S;
+		const g = cv.getContext('2d');
+		const grd = g.createRadialGradient(S / 2, S / 2, 1, S / 2, S / 2, S / 2);
+		if(key === 'punch'){
+			for(const [o, a] of [[0, 1], [0.22, 0.62], [0.48, 0.32], [0.72, 0.12], [0.88, 0.04], [1, 0]]) grd.addColorStop(o, 'rgba(255,255,255,' + a + ')');
+		} else {
+			// the old glow: full colour at its centre fading to nothing at 0.55 of the light's radius, drawn over a disc of
+			// that size — here the whole sprite is that disc
+			grd.addColorStop(0, 'rgba(' + key + ',1)');
+			grd.addColorStop(1, 'rgba(' + key + ',0)');
+		}
+		g.fillStyle = grd;
+		g.fillRect(0, 0, S, S);
+		if(_spr.size > 34) _spr.delete(_spr.keys().next().value);
+		_spr.set(key, cv);
+		return cv;
 	}
 
 	function addLight(x, y, r, intensity, color){

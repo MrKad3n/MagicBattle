@@ -1,0 +1,57 @@
+{
+ "meanUpdateMs": 0.005,
+ "worstUpdateMs": 8.98,
+ "peakBodies": 8,
+ "slowest": [
+  {
+   "id": "RD-0001",
+   "maxMs": 8.98,
+   "peak": 1
+  },
+  {
+   "id": "RD-0168",
+   "maxMs": 7.98,
+   "peak": 5
+  },
+  {
+   "id": "RD-0014",
+   "maxMs": 7.91,
+   "peak": 2
+  },
+  {
+   "id": "RD-0003",
+   "maxMs": 5.96,
+   "peak": 5
+  },
+  {
+   "id": "RD-0010",
+   "maxMs": 5.72,
+   "peak": 3
+  },
+  {
+   "id": "RD-0005",
+   "maxMs": 5.62,
+   "peak": 3
+  },
+  {
+   "id": "RD-0012",
+   "maxMs": 5.32,
+   "peak": 0
+  },
+  {
+   "id": "RD-0013",
+   "maxMs": 5.26,
+   "peak": 1
+  },
+  {
+   "id": "RD-0004",
+   "maxMs": 4.8,
+   "peak": 5
+  },
+  {
+   "id": "RD-0015",
+   "maxMs": 4.77,
+   "peak": 3
+  }
+ ]
+}

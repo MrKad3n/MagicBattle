@@ -1,0 +1,570 @@
+{
+ "seed": 6060,
+ "requested": 520,
+ "evaluated": 404,
+ "rejected": {
+  "invalid": 0,
+  "technique": 0,
+  "output": 116,
+  "reserve": 0,
+  "duplicate": 6
+ },
+ "seconds": 24,
+ "clean": 401,
+ "withBugs": 3,
+ "notReproducible": 0,
+ "plainShotHitMoving": 0.58,
+ "top": [
+  {
+   "id": "RD-0207",
+   "score": 4.182,
+   "tags": [
+    "multi-branch",
+    "timed-convergence",
+    "burst"
+   ],
+   "ops": [
+    "compress-high",
+    "split",
+    "prog-stagger",
+    "term-burstNear",
+    "delay",
+    "condition"
+   ],
+   "cost": 420,
+   "hitMoving": 0.92,
+   "dmgMoving": 331,
+   "cells": 37,
+   "beatsPlainShot": 0.34
+  },
+  {
+   "id": "RD-0428",
+   "score": 4.098,
+   "tags": [
+    "multi-branch",
+    "burst",
+    "pursuit"
+   ],
+   "ops": [
+    "compress-high",
+    "divide-still",
+    "prog-guided",
+    "term-burstNear",
+    "condition"
+   ],
+   "cost": 263,
+   "hitMoving": 0.83,
+   "dmgMoving": 317,
+   "cells": 23,
+   "beatsPlainShot": 0.25
+  },
+  {
+   "id": "RD-0188",
+   "score": 4.095,
+   "tags": [
+    "multi-branch",
+    "burst",
+    "pursuit"
+   ],
+   "ops": [
+    "compress-high",
+    "divide-outward",
+    "prog-guided",
+    "term-burstNear",
+    "condition"
+   ],
+   "cost": 147,
+   "hitMoving": 0.83,
+   "dmgMoving": 306,
+   "cells": 21,
+   "beatsPlainShot": 0.25
+  },
+  {
+   "id": "RD-0052",
+   "score": 4.09,
+   "tags": [
+    "multi-branch",
+    "burst",
+    "pursuit"
+   ],
+   "ops": [
+    "compress-high",
+    "divide-still",
+    "prog-guided",
+    "term-burstNear",
+    "condition"
+   ],
+   "cost": 263,
+   "hitMoving": 0.83,
+   "dmgMoving": 305,
+   "cells": 18,
+   "beatsPlainShot": 0.25
+  },
+  {
+   "id": "RD-0284",
+   "score": 4.09,
+   "tags": [
+    "multi-branch",
+    "burst",
+    "pursuit"
+   ],
+   "ops": [
+    "compress-high",
+    "split",
+    "prog-guided",
+    "term-burstNear",
+    "condition"
+   ],
+   "cost": 263,
+   "hitMoving": 0.83,
+   "dmgMoving": 290,
+   "cells": 18,
+   "beatsPlainShot": 0.25
+  },
+  {
+   "id": "RD-0397",
+   "score": 4.088,
+   "tags": [
+    "area-denial",
+    "burst"
+   ],
+   "ops": [
+    "compress-high",
+    "divide-keep",
+    "prog-lurk",
+    "term-burstNear",
+    "condition"
+   ],
+   "cost": 150,
+   "hitMoving": 0.83,
+   "dmgMoving": 343,
+   "cells": 17,
+   "beatsPlainShot": 0.25
+  },
+  {
+   "id": "RD-0193",
+   "score": 4.087,
+   "tags": [
+    "multi-branch",
+    "burst",
+    "pursuit"
+   ],
+   "ops": [
+    "compress-high",
+    "divide-outward",
+    "prog-guided",
+    "term-burstNear",
+    "condition"
+   ],
+   "cost": 147,
+   "hitMoving": 0.83,
+   "dmgMoving": 391,
+   "cells": 16,
+   "beatsPlainShot": 0.25
+  },
+  {
+   "id": "RD-0343",
+   "score": 4.087,
+   "tags": [
+    "multi-branch",
+    "burst",
+    "pursuit"
+   ],
+   "ops": [
+    "compress-high",
+    "divide-outward",
+    "prog-guided",
+    "term-burstNear",
+    "condition"
+   ],
+   "cost": 272,
+   "hitMoving": 0.83,
+   "dmgMoving": 293,
+   "cells": 16,
+   "beatsPlainShot": 0.25
+  },
+  {
+   "id": "RD-0407",
+   "score": 4.087,
+   "tags": [
+    "multi-branch",
+    "burst",
+    "pursuit"
+   ],
+   "ops": [
+    "compress-high",
+    "divide-still",
+    "prog-guided",
+    "term-burstNear",
+    "condition"
+   ],
+   "cost": 147,
+   "hitMoving": 0.83,
+   "dmgMoving": 308,
+   "cells": 16,
+   "beatsPlainShot": 0.25
+  },
+  {
+   "id": "RD-0083",
+   "score": 4.083,
+   "tags": [
+    "multi-branch",
+    "burst",
+    "pursuit"
+   ],
+   "ops": [
+    "compress-high",
+    "divide-keep",
+    "prog-guided",
+    "term-burstNear",
+    "condition"
+   ],
+   "cost": 147,
+   "hitMoving": 0.83,
+   "dmgMoving": 307,
+   "cells": 14,
+   "beatsPlainShot": 0.25
+  },
+  {
+   "id": "RD-0274",
+   "score": 4.082,
+   "tags": [
+    "multi-branch",
+    "burst",
+    "pursuit"
+   ],
+   "ops": [
+    "compress-high",
+    "divide-still",
+    "prog-guided",
+    "term-burstNear",
+    "condition"
+   ],
+   "cost": 263,
+   "hitMoving": 0.83,
+   "dmgMoving": 295,
+   "cells": 13,
+   "beatsPlainShot": 0.25
+  },
+  {
+   "id": "RD-0234",
+   "score": 4.072,
+   "tags": [
+    "area-denial",
+    "burst"
+   ],
+   "ops": [
+    "compress-high",
+    "divide-keep",
+    "prog-lurk",
+    "term-burstArrive",
+    "condition"
+   ],
+   "cost": 263,
+   "hitMoving": 0.83,
+   "dmgMoving": 294,
+   "cells": 7,
+   "beatsPlainShot": 0.25
+  },
+  {
+   "id": "RD-0063",
+   "score": 3.995,
+   "tags": [
+    "area-denial",
+    "burst"
+   ],
+   "ops": [
+    "compress-high",
+    "prog-lurk",
+    "term-burstNear",
+    "condition"
+   ],
+   "cost": 138,
+   "hitMoving": 0.83,
+   "dmgMoving": 374,
+   "cells": 9,
+   "beatsPlainShot": 0.25
+  },
+  {
+   "id": "RD-0412",
+   "score": 3.992,
+   "tags": [
+    "multi-branch",
+    "timed-convergence",
+    "burst"
+   ],
+   "ops": [
+    "compress-high",
+    "split",
+    "prog-stagger",
+    "term-burstNear",
+    "delay",
+    "condition"
+   ],
+   "cost": 416,
+   "hitMoving": 0.83,
+   "dmgMoving": 331,
+   "cells": 27,
+   "beatsPlainShot": 0.25
+  },
+  {
+   "id": "RD-0208",
+   "score": 3.98,
+   "tags": [
+    "multi-branch",
+    "burst",
+    "pursuit"
+   ],
+   "ops": [
+    "compress-high",
+    "divide-keep",
+    "prog-guided",
+    "term-burstNear",
+    "condition"
+   ],
+   "cost": 147,
+   "hitMoving": 0.83,
+   "dmgMoving": 226,
+   "cells": 22,
+   "beatsPlainShot": 0.25
+  },
+  {
+   "id": "RD-0102",
+   "score": 3.94,
+   "tags": [
+    "multi-branch",
+    "timed-convergence",
+    "burst"
+   ],
+   "ops": [
+    "compress-high",
+    "split",
+    "prog-stagger",
+    "term-burstNear",
+    "delay",
+    "condition"
+   ],
+   "cost": 420,
+   "hitMoving": 0.83,
+   "dmgMoving": 235,
+   "cells": 25,
+   "beatsPlainShot": 0.25
+  },
+  {
+   "id": "RD-0271",
+   "score": 3.932,
+   "tags": [
+    "multi-branch",
+    "pursuit"
+   ],
+   "ops": [
+    "compress-high",
+    "split",
+    "prog-guided"
+   ],
+   "cost": 254,
+   "hitMoving": 0.83,
+   "dmgMoving": 276,
+   "cells": 19,
+   "beatsPlainShot": 0.25
+  },
+  {
+   "id": "RD-0273",
+   "score": 3.932,
+   "tags": [
+    "multi-branch",
+    "pursuit"
+   ],
+   "ops": [
+    "compress-high",
+    "divide-keep",
+    "prog-guided"
+   ],
+   "cost": 262,
+   "hitMoving": 0.83,
+   "dmgMoving": 277,
+   "cells": 19,
+   "beatsPlainShot": 0.25
+  },
+  {
+   "id": "RD-0054",
+   "score": 3.917,
+   "tags": [
+    "area-denial",
+    "burst"
+   ],
+   "ops": [
+    "compress-high",
+    "split",
+    "prog-lurk",
+    "term-burstArrive",
+    "condition"
+   ],
+   "cost": 258,
+   "hitMoving": 0.75,
+   "dmgMoving": 274,
+   "cells": 10,
+   "beatsPlainShot": 0.17
+  },
+  {
+   "id": "RD-0362",
+   "score": 3.91,
+   "tags": [
+    "multi-branch",
+    "burst"
+   ],
+   "ops": [
+    "compress-high",
+    "divide-still",
+    "prog-direct",
+    "term-burstNear",
+    "condition"
+   ],
+   "cost": 420,
+   "hitMoving": 0.83,
+   "dmgMoving": 241,
+   "cells": 30,
+   "beatsPlainShot": 0.25
+  },
+  {
+   "id": "RD-0460",
+   "score": 3.897,
+   "tags": [
+    "multi-branch",
+    "timed-convergence",
+    "burst"
+   ],
+   "ops": [
+    "compress-high",
+    "split",
+    "prog-stagger",
+    "term-burstNear",
+    "delay",
+    "condition"
+   ],
+   "cost": 420,
+   "hitMoving": 0.83,
+   "dmgMoving": 229,
+   "cells": 29,
+   "beatsPlainShot": 0.25
+  },
+  {
+   "id": "RD-0051",
+   "score": 3.892,
+   "tags": [
+    "multi-branch",
+    "burst",
+    "pursuit"
+   ],
+   "ops": [
+    "compress-high",
+    "split",
+    "prog-guided",
+    "term-burstNear",
+    "condition"
+   ],
+   "cost": 418,
+   "hitMoving": 0.83,
+   "dmgMoving": 468,
+   "cells": 17,
+   "beatsPlainShot": 0.25
+  },
+  {
+   "id": "RD-0103",
+   "score": 3.888,
+   "tags": [
+    "multi-branch",
+    "burst",
+    "pursuit"
+   ],
+   "ops": [
+    "compress-high",
+    "divide-outward",
+    "prog-guided",
+    "term-burstNear",
+    "condition"
+   ],
+   "cost": 432,
+   "hitMoving": 0.83,
+   "dmgMoving": 243,
+   "cells": 29,
+   "beatsPlainShot": 0.25
+  },
+  {
+   "id": "RD-0331",
+   "score": 3.883,
+   "tags": [
+    "multi-branch",
+    "burst",
+    "pursuit"
+   ],
+   "ops": [
+    "compress-high",
+    "divide-outward",
+    "prog-guided",
+    "term-burstNear",
+    "condition"
+   ],
+   "cost": 423,
+   "hitMoving": 0.83,
+   "dmgMoving": 443,
+   "cells": 17,
+   "beatsPlainShot": 0.25
+  },
+  {
+   "id": "RD-0255",
+   "score": 3.882,
+   "tags": [
+    "multi-branch",
+    "burst",
+    "pursuit"
+   ],
+   "ops": [
+    "compress-high",
+    "split",
+    "prog-guided",
+    "term-burstNear",
+    "condition"
+   ],
+   "cost": 423,
+   "hitMoving": 0.83,
+   "dmgMoving": 437,
+   "cells": 16,
+   "beatsPlainShot": 0.25
+  }
+ ],
+ "byTag": {
+  "multi-branch": {
+   "n": 282,
+   "best": "RD-0207"
+  },
+  "timed-convergence": {
+   "n": 94,
+   "best": "RD-0207"
+  },
+  "burst": {
+   "n": 298,
+   "best": "RD-0207"
+  },
+  "pursuit": {
+   "n": 57,
+   "best": "RD-0428"
+  },
+  "area-denial": {
+   "n": 52,
+   "best": "RD-0397"
+  },
+  "precision": {
+   "n": 6,
+   "best": "RD-0157"
+  },
+  "flanking": {
+   "n": 58,
+   "best": "RD-0106"
+  },
+  "overhead": {
+   "n": 58,
+   "best": "RD-0115"
+  }
+ }
+}

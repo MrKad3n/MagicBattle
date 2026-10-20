@@ -1468,6 +1468,7 @@
 		try{ urlSeed = new URLSearchParams(global.location && global.location.search || '').get('seed'); }catch(e){}
 		const parsed = urlSeed == null ? NaN : parseInt(urlSeed,10);
 		if(Number.isFinite(parsed)) return Math.abs(parsed) || 1;
+		if(global.DUNGEON_SEED_OVERRIDE != null) return global.DUNGEON_SEED_OVERRIDE;      // shared in co-op
 		return ((Date.now() ^ (Math.random()*0xffffff|0)) & 0x7fffffff) || 1;
 	}
 

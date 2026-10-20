@@ -1,0 +1,31 @@
+  50 evaluated (4 s)
+  100 evaluated (7 s)
+  150 evaluated (10 s)
+  200 evaluated (12 s)
+  250 evaluated (15 s)
+  300 evaluated (18 s)
+  350 evaluated (20 s)
+  400 evaluated (23 s)
+{
+ "evaluated": 404,
+ "clean": 401,
+ "rejected": {
+  "invalid": 0,
+  "technique": 0,
+  "output": 116,
+  "reserve": 0,
+  "duplicate": 6
+ },
+ "seconds": 24,
+ "base": 0.58,
+ "top": [
+  "RD-0207 4.182 multi-branch/timed-convergence/burst",
+  "RD-0428 4.098 multi-branch/burst/pursuit",
+  "RD-0188 4.095 multi-branch/burst/pursuit",
+  "RD-0052 4.09 multi-branch/burst/pursuit",
+  "RD-0284 4.09 multi-branch/burst/pursuit",
+  "RD-0397 4.088 area-denial/burst",
+  "RD-0193 4.087 multi-branch/burst/pursuit",
+  "RD-0343 4.087 multi-branch/burst/pursuit"
+ ]
+}

@@ -148,6 +148,7 @@
 			visLava:0, visWater:0,
 		};
 		binsAt(i).push(c);
+		keysDirty = true;
 		return c;
 	}
 	function probe(from, ni, create){
@@ -166,6 +167,7 @@
 	}
 
 	function addRect(kind, x, y, w, h){
+		calm = 0;
 		if(w < 6 || h < 4) return;
 		fillToSurface(kind, x, w, y, y - 80, y + h + 240);
 	}
@@ -203,6 +205,7 @@
 		return isDryBasin(roomAround(global.dungeon, x, y)) || inDryHall(x, y);
 	}
 	function paintColumn(c, kind, surfaceY){
+		calm = 0;
 		if(!c) return;
 		const room = roomAround(global.dungeon, c.x + COL * 0.5, c.floor - 8);
 		const walk = room ? room.y + room.h - (room.raisedFloor || 0) : c.floor;
@@ -311,6 +314,8 @@
 		}
 	}
 
+	let keysDirty = true;
+	let moved = 0, calm = 0;          // settling: how much flowed this tick, and for how many ticks almost nothing has
 	function transfer(a, b, kind, flow){
 		if(flow < 0.08) return 0;
 		const have = amt(a, kind);
@@ -320,6 +325,7 @@
 		if(flow < 0.08) return 0;
 		setAmt(a, kind, have - flow);
 		setAmt(b, kind, amt(b, kind) + flow);
+		moved += flow;
 		return flow;
 	}
 
@@ -362,12 +368,13 @@
 		if(!Fluid.bins) return;
 		const v = viewBox();
 		const i0 = idx(v.x - 720), i1 = idx(v.x + v.w + 720);
+		const yT = v.y - 520, yB = v.y + v.h + 520;      // inPlayFocus, with the view worked out once instead of per column
 		for(let i = i0; i <= i1; i++){
 			const list = Fluid.bins[i];
 			if(!list) continue;
 			for(let n = 0; n < list.length; n++){
 				const c = list[n];
-				if(c && inPlayFocus(c)) fn(c);
+				if(c && c.floor > yT && c.floor - Math.max(c.lava, c.water, 48) < yB) fn(c);
 			}
 		}
 	}
@@ -421,22 +428,21 @@
 	function equalize(kind, fillOut, focusOnly){
 		if(!Fluid.bins || !Fluid.keys) return;
 		if(fillOut) expandFrontier(kind);
-		const seen = Object.create(null);
+		const seen = new Set();
 		function begin(start){
-			if(!start || start._riseLock || seen[colId(start)] || amt(start, kind) < 0.8) return;
+			if(!start || start._riseLock || seen.has(start) || amt(start, kind) < 0.8) return;
 			if(focusOnly && !inPlayFocus(start)) return;
 			const comp = [];
 			const q = [start];
 			while(q.length){
 				const c = q.pop();
-				const id = colId(c);
-				if(seen[id]) continue;
-				seen[id] = 1;
+				if(seen.has(c)) continue;
+				seen.add(c);
 				comp.push(c);
 				const L = fillOut ? probe(c, c.i - 1, true) : findNear(c.i - 1, c.floor, 72);
 				const R = fillOut ? probe(c, c.i + 1, true) : findNear(c.i + 1, c.floor, 72);
-				if(L && !seen[colId(L)] && linked(c, L, kind)) q.push(L);
-				if(R && !seen[colId(R)] && linked(c, R, kind)) q.push(R);
+				if(L && !seen.has(L) && linked(c, L, kind)) q.push(L);
+				if(R && !seen.has(R) && linked(c, R, kind)) q.push(R);
 			}
 			if(comp.length < 2) return;
 			let target = 1e9, wet = 0, vol = 0;
@@ -479,8 +485,9 @@
 				setAmt(c, kind, Math.max(0, Math.min(cap, c.floor - surface)));
 			}
 		}
-		refreshKeys();
-		for(let n = 0; n < Fluid.keys.length; n++) begin(Fluid.keys[n]);
+		if(keysDirty || fillOut) refreshKeys();
+		if(focusOnly) eachFocusCol(begin);
+		else for(let n = 0; n < Fluid.keys.length; n++) begin(Fluid.keys[n]);
 	}
 
 	function lerpVis(){
@@ -493,6 +500,7 @@
 	}
 
 	function refreshKeys(){
+		keysDirty = false;
 		Fluid.keys = [];
 		if(!Fluid.bins) return;
 		for(const k in Fluid.bins){
@@ -520,6 +528,7 @@
 	}
 
 	function rebuild(){
+		calm = 0; keysDirty = true;
 		const d = global.dungeon;
 		Fluid.bins = Object.create(null);
 		Fluid.keys = [];
@@ -548,10 +557,11 @@
 		}
 		tally();
 		Fluid.ready = Fluid.keys.length > 0;
-		if(_drawCache) _drawCache.key = '';
+		tiles.clear();
 	}
 
 	function setBandHeight(kind, x, w, floor, height){
+		calm = 0;
 		const i0 = idx(x), i1 = idx(x + w - 1);
 		const y0 = floor - height - 80, y1 = floor + 40;
 		for(let i = i0; i <= i1; i++){
@@ -563,6 +573,7 @@
 	}
 
 	function invalidate(x, w){
+		calm = 0;
 		if(!Fluid.bins) return;
 		const i0 = idx(x) - 2, i1 = idx(x + w) + 2;
 		for(let i = i0; i <= i1; i++){
@@ -599,6 +610,7 @@
 			}
 		}
 		Fluid.bins = keep;
+		keysDirty = true;
 		refreshKeys();
 	}
 
@@ -678,15 +690,24 @@
 		if(!Fluid.ready) return;
 		Fluid._t++;
 		syncEvents(global.dungeon);
-		pass('lava', false, true);
-		pass('water', false, true);
-		if((Fluid._t % 8) === 0){
-			equalize('lava', false, true);
-			equalize('water', false, true);
+		/* Settled liquid barely moves, so once almost nothing has flowed for a second the simulation only runs every
+		   fourth tick (anything that disturbs it — a new source, a tile change, a rising flood — wakes it again). */
+		const sleepy = calm > 60;
+		if(!sleepy || (Fluid._t % 4) === 0){
+			moved = 0;
+			pass('lava', false, true);
+			pass('water', false, true);
+			if((Fluid._t % (sleepy ? 16 : 8)) === 0){
+				equalize('lava', false, true);
+				equalize('water', false, true);
+			}
+			const flowing = (Fluid.streams.lava && Fluid.streams.lava.length) || (Fluid.streams.water && Fluid.streams.water.length);
+			calm = (moved < 0.6 && !flowing) ? calm + (sleepy ? 4 : 1) : 0;
 		}
 		flattenRise(global.dungeon);
 		lerpVis();
-		if((Fluid._t % 32) === 0) pruneEmpty();
+		// dropping empty columns rebuilds the whole index, so do it rarely (and not at all while everything is settled)
+		if((Fluid._t % 180) === 0 && (!sleepy || keysDirty)) pruneEmpty();
 	}
 
 	Fluid.surfaceAt = function(x, kind, yHint){
@@ -786,8 +807,7 @@
 	}
 
 	const LAVA_PACK = 0.1;
-	let _drawCache = null;
-	function drawKind(ctx, kind, cam, t, viewW, viewH){
+	function drawKind(ctx, kind, cam, t, viewW, viewH, noStreams){
 		if(!Fluid.keys) return;
 		const surfImg = kind === 'lava' ? tex.lavaSurf : tex.waterSurf;
 		const bodyImg = kind === 'lava' ? tex.lavaBody : tex.waterBody;
@@ -913,6 +933,9 @@
 		}
 		flush();
 
+		if(!noStreams) drawStreams(ctx, kind, cam, viewW, viewH);
+	}
+	function drawStreams(ctx, kind, cam, viewW, viewH){
 		const streams = Fluid.streams && Fluid.streams[kind];
 		if(streams){
 			for(let i = 0; i < streams.length; i++){
@@ -933,41 +956,75 @@
 		return (typeof DUNGEON_TYPE !== 'undefined' && DUNGEON_TYPE === 'ice') ||
 			(typeof dungeon !== 'undefined' && dungeon && dungeon._theme === 'ice');
 	}
+	/* Drawing. Liquid is painted into 512 px world tiles that are kept until the liquid inside them changes (a settled
+	   pool is painted once). Before, the whole screen was repainted into an offscreen canvas every few frames and again
+	   whenever the camera moved 8 px — so walking past water or lava repainted it every frame. Falling streams change
+	   every frame and are drawn directly. */
+	const TCH = 512, MAX_TILES = 40;
+	const tiles = new Map();
+	let tileFrame = 0;
+	function tileSig(tx, ty){
+		// a cheap fingerprint of the liquid that can show in this tile: rounded visible depths of the columns around it
+		const x0 = tx * TCH - 72, x1 = tx * TCH + TCH + 72, y0 = ty * TCH - 72, y1 = ty * TCH + TCH + 72;
+		let h = 0, any = false;
+		if(!Fluid.bins) return 'e';
+		for(let i = idx(x0), ie = idx(x1); i <= ie; i++){
+			const list = Fluid.bins[i];
+			if(!list) continue;
+			for(let n = 0; n < list.length; n++){
+				const c = list[n];
+				const a = Math.max(c.visLava, c.visWater);
+				if(a < 3 || c.floor < y0 || c.floor - a > y1) continue;
+				any = true;
+				h = (Math.imul(h, 31) + i * 7 + Math.round(c.floor) + Math.round(c.visLava / 2) * 131 + Math.round(c.visWater / 2) * 977) | 0;
+			}
+		}
+		return any ? String(h) + (isIceTheme() ? 'i' : '') : 'e';
+	}
+	function paintTile(t, tx, ty){
+		const g = t.g;
+		g.setTransform(1, 0, 0, 1, 0, 0);
+		g.clearRect(0, 0, TCH, TCH);
+		const cam = { x: tx * TCH, y: ty * TCH };
+		drawKind(g, 'lava', cam, 0, TCH, TCH, true);
+		drawKind(g, 'water', cam, 0, TCH, TCH, true);
+	}
 	Fluid.draw = function(ctx){
 		if(!Fluid.ready || !ctx) return;
 		const cam = (typeof camera !== 'undefined' && camera) ? camera : { x:0, y:0 };
 		const viewW = (typeof canvas !== 'undefined' && canvas) ? canvas.width : 1600;
 		const viewH = (typeof canvas !== 'undefined' && canvas) ? canvas.height : 900;
-		const snapX = Math.floor(cam.x / 8) * 8;
-		const snapY = Math.floor(cam.y / 8) * 8;
-		const tick = Fluid._t | 0;
-		const ice = isIceTheme();
-		const key = snapX + ':' + snapY + ':' + viewW + ':' + viewH + ':' + (tick >> 2) + (ice ? ':i' : '');
-		if(!_drawCache || _drawCache.w !== viewW || _drawCache.h !== viewH){
-			const el = (typeof document !== 'undefined') ? document.createElement('canvas') : null;
-			if(!el){
-				ctx.imageSmoothingEnabled = false;
-				drawKind(ctx, 'lava', cam, 0, viewW, viewH);
-				drawKind(ctx, 'water', cam, 0, viewW, viewH);
-				return;
-			}
-			el.width = viewW;
-			el.height = viewH;
-			_drawCache = { el:el, g:el.getContext('2d'), w:viewW, h:viewH, key:'' };
-			_drawCache.g.imageSmoothingEnabled = false;
-		}
-		if(_drawCache.key !== key){
-			const g = _drawCache.g;
-			g.setTransform(1, 0, 0, 1, 0, 0);
-			g.clearRect(0, 0, viewW, viewH);
-			const frozen = { x:snapX, y:snapY };
-			drawKind(g, 'lava', frozen, 0, viewW, viewH);
-			drawKind(g, 'water', frozen, 0, viewW, viewH);
-			_drawCache.key = key;
-		}
 		ctx.imageSmoothingEnabled = false;
-		ctx.drawImage(_drawCache.el, snapX - cam.x, snapY - cam.y);
+		if(typeof document === 'undefined'){
+			drawKind(ctx, 'lava', cam, 0, viewW, viewH);
+			drawKind(ctx, 'water', cam, 0, viewW, viewH);
+			return;
+		}
+		tileFrame++;
+		let repaints = 0;
+		const tx0 = Math.floor(cam.x / TCH), tx1 = Math.floor((cam.x + viewW) / TCH);
+		const ty0 = Math.floor(cam.y / TCH), ty1 = Math.floor((cam.y + viewH) / TCH);
+		for(let ty = ty0; ty <= ty1; ty++) for(let tx = tx0; tx <= tx1; tx++){
+			const key = tx + ',' + ty;
+			let t = tiles.get(key);
+			const sig = tileSig(tx, ty);
+			if(sig === 'e'){ if(t) t.sig = 'e'; continue; }
+			if(!t){
+				const el = document.createElement('canvas'); el.width = el.height = TCH;
+				t = { el, g: el.getContext('2d'), sig: '', used: 0 };
+				t.g.imageSmoothingEnabled = false;
+				tiles.set(key, t);
+				if(tiles.size > MAX_TILES){ let ok = null, ou = Infinity; for(const [k, v] of tiles) if(v.used < ou){ ou = v.used; ok = k; } if(ok) tiles.delete(ok); }
+			}
+			t.used = tileFrame;
+			// repaint changed tiles, a few a frame (a tile that has never been painted always is)
+			if(t.sig !== sig && (repaints < 3 || !t.sig)){ paintTile(t, tx, ty); t.sig = sig; repaints++; }
+			ctx.drawImage(t.el, Math.round(tx * TCH - cam.x), Math.round(ty * TCH - cam.y));
+		}
+		drawStreams(ctx, 'lava', cam, viewW, viewH);
+		drawStreams(ctx, 'water', cam, viewW, viewH);
 	};
+	Fluid.clearDrawCache = function(){ tiles.clear(); };
 
 	Fluid.rebuild = rebuild;
 	Fluid.tick = tick;

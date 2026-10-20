@@ -460,6 +460,15 @@
 			parts.push({ k: 'snow', x: cx + (Math.random() - 0.5) * 1800, y: player.y - 520 - Math.random() * 260, vx: -0.6 - Math.random() * 0.6, vy: 0.7 + Math.random() * 0.6, life: 0, max: 12, r: 1.2 + Math.random() });
 		}
 		if (wind > 0.3 && Math.random() < wind * 0.5) parts.push({ k: 'drift', x: cx + 900 + Math.random() * 300, y: E.surf(cx) - 20 - Math.random() * 160, vx: -9 - wind * 8, vy: (Math.random() - 0.5) * 0.6, life: 0, max: 3, len: 40 + Math.random() * 80 });
+		// spray off raging water near the player
+		for (const w of W.water) {
+			if (!w.rapids || cx < w.x0 - 1400 || cx > w.x1 + 1400) continue;
+			for (let k = 0; k < 3; k++) {
+				const x = w.x0 + Math.random() * (w.x1 - w.x0);
+				parts.push({ k: 'spray', x, y: w.y - 2, vx: (Math.random() - 0.5) * 1.6, vy: -1.2 - Math.random() * 2.6, life: 0, max: 0.5 + Math.random() * 0.6, r: 1.5 + Math.random() * 3 });
+			}
+			for (const fx of w.boils || []) if (Math.random() < 0.5) parts.push({ k: 'spray', x: fx + (Math.random() - 0.5) * 60, y: w.y - 4, vx: (Math.random() - 0.5) * 2.4, vy: -2.4 - Math.random() * 3, life: 0, max: 0.6 + Math.random() * 0.5, r: 2 + Math.random() * 3 });
+		}
 		// fireflies at dusk-dark spots (river banks, the forest floor): W.motes = [{x0, x1, kind}]
 		for (const m of W.motes || []) {
 			if (cx < m.x0 - 900 || cx > m.x1 + 900 || Math.random() > 0.05) continue;
@@ -488,6 +497,10 @@
 				p.x += p.vx + Math.sin(p.life * 2 + p.y * 0.01) * 0.4;
 				p.y += p.vy;
 				if (p.y > E.surf(p.x)) p.life = p.max;
+			} else if (p.k === 'spray') {
+				p.x += p.vx;
+				p.y += p.vy;
+				p.vy += 0.16;
 			} else if (p.k === 'drift') {
 				p.x += p.vx;
 				p.y += p.vy;
@@ -537,7 +550,73 @@
 			if (f.front) continue;
 			drawFall(ctx, cam, f, t, vw);
 		}
-		for (const s of W.backStructs || []) if (s.x1 > cam.x - 300 && s.x0 < cam.x + vw + 300) s.draw(ctx, cam, t, vw, vh);
+		for (const s of W.backStructs || []) if (s.x1 > cam.x - 300 && s.x0 < cam.x + vw + 300) { if (s.kind === 'riverFar') drawRiverFar(ctx, cam, s, t); else s.draw(ctx, cam, t, vw, vh); }
+	}
+	function hash(n) { const v = Math.sin(n * 127.1 + 311.7) * 43758.5453; return v - Math.floor(v); }
+	function drawRiverFar(ctx, cam, s, t) {
+		/* The river coming toward you from far upstream, seen through (and over) the bridge: a band of water that is narrow and
+		   hazy at the far end and widens to the full channel at your end, with green banks along it. Streaks of current slide
+		   down it and spread as they come closer (they speed up with perspective), and white water breaks over two rapids. */
+		const cx = s.cx - cam.x, yF = s.yFar - cam.y, yN = s.yNear - cam.y;
+		const hF = s.wFar / 2, hN = s.wNear / 2;
+		const xAt = (y, u) => { const p = (y - yF) / (yN - yF); return cx + u * (hF + (hN - hF) * p * p); };
+		ctx.save();
+		// banks: a wider wedge of grass and rock under the water
+		ctx.beginPath();
+		ctx.moveTo(xAt(yF, -1) - 40, yF - 6); ctx.lineTo(xAt(yF, 1) + 40, yF - 6);
+		ctx.lineTo(cx + hN + 220, yN + 4); ctx.lineTo(cx - hN - 220, yN + 4); ctx.closePath();
+		const EW = global.EmberfallWorld;
+		const md = EW && EW.meadow ? EW.meadow(false) : null;
+		if (md) {
+			// the same painted fields as the low countryside behind, so the banks read as land rather than a flat block
+			if (!md.pat) md.pat = ctx.createPattern(md.cv, 'repeat-x');
+			md.pat.setTransform(new DOMMatrix().translate(Math.round(-cam.x * 0.6), Math.round(yF - 40)));
+			ctx.fillStyle = md.pat; ctx.fill();
+			const sh = ctx.createLinearGradient(0, yF, 0, yN);
+			sh.addColorStop(0, 'rgba(190,210,200,0.35)'); sh.addColorStop(1, 'rgba(20,40,20,0.25)');
+			ctx.fillStyle = sh; ctx.fill();
+		} else {
+			const bg = ctx.createLinearGradient(0, yF, 0, yN);
+			bg.addColorStop(0, 'rgba(120,150,120,0.9)'); bg.addColorStop(1, 'rgba(58,84,48,1)');
+			ctx.fillStyle = bg; ctx.fill();
+		}
+		// the water
+		ctx.beginPath();
+		const N = 24;
+		for (let i = 0; i <= N; i++) { const y = yF + (yN - yF) * i / N; const x = xAt(y, -1) + Math.sin(i * 1.7 + t * 2) * 3 * i / N; if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); }
+		for (let i = N; i >= 0; i--) { const y = yF + (yN - yF) * i / N; ctx.lineTo(xAt(y, 1) + Math.sin(i * 1.3 - t * 2) * 3 * i / N, y); }
+		ctx.closePath();
+		const wg = ctx.createLinearGradient(0, yF, 0, yN);
+		wg.addColorStop(0, 'rgba(170,200,205,1)'); wg.addColorStop(0.5, 'rgba(88,138,150,1)'); wg.addColorStop(1, 'rgba(46,96,110,1)');
+		ctx.fillStyle = wg; ctx.fill();
+		ctx.clip();
+		// streaks of current
+		ctx.lineCap = 'round';
+		for (let k = 0; k < 70; k++) {
+			const u = (hash(k * 3.7) * 2 - 1) * 0.92;
+			const ph = (t * (0.32 + hash(k * 1.3) * 0.18) + hash(k * 5.1)) % 1;
+			const pa = ph, pb = Math.min(1, ph + 0.06 + 0.1 * ph);
+			const ya = yF + (yN - yF) * pa * pa, yb = yF + (yN - yF) * pb * pb;
+			ctx.strokeStyle = 'rgba(235,250,255,' + (0.15 + 0.55 * ph) + ')';
+			ctx.lineWidth = 0.6 + ph * 2.6;
+			ctx.beginPath(); ctx.moveTo(xAt(ya, u), ya); ctx.lineTo(xAt(yb, u), yb); ctx.stroke();
+		}
+		// two rapids across the river: rows of breaking white water
+		for (const rp of [0.42, 0.74]) {
+			const y = yF + (yN - yF) * rp * rp;
+			const wHalf = hF + (hN - hF) * rp * rp;
+			for (let k = 0; k < 18; k++) {
+				const u = -1 + (k + 0.5) / 9;
+				const b = Math.abs(Math.sin(t * 3.1 + k * 1.7));
+				ctx.fillStyle = 'rgba(248,253,255,' + (0.35 + 0.5 * b) + ')';
+				ctx.beginPath(); ctx.ellipse(cx + u * wHalf, y - b * 3 * rp, (6 + 10 * rp) * (0.6 + b * 0.6), (2 + 4 * rp) * (0.6 + b * 0.5), 0, 0, Math.PI * 2); ctx.fill();
+			}
+		}
+		// haze over the far end
+		const hz = ctx.createLinearGradient(0, yF, 0, yF + (yN - yF) * 0.35);
+		hz.addColorStop(0, 'rgba(200,215,225,0.55)'); hz.addColorStop(1, 'rgba(200,215,225,0)');
+		ctx.fillStyle = hz; ctx.fillRect(cx - hN - 300, yF - 10, hN * 2 + 600, (yN - yF) * 0.4);
+		ctx.restore();
 	}
 	function drawFall(ctx, cam, f, t, vw) {
 		if (f.frozen) { drawFrozenFall(ctx, cam, f, t, vw); return; }
@@ -746,6 +825,9 @@
 				ctx.fillStyle = g;
 				ctx.fillRect(x - 9, y - 9, 18, 18);
 				ctx.restore();
+			} else if (p.k === 'spray') {
+				ctx.fillStyle = 'rgba(240,250,255,' + (0.75 * (1 - k)) + ')';
+				ctx.beginPath(); ctx.arc(x, y, p.r * (0.6 + k * 0.8), 0, Math.PI * 2); ctx.fill();
 			} else if (p.k === 'fly') {
 				const flap = Math.abs(Math.sin(p.ph));
 				ctx.fillStyle = p.col;

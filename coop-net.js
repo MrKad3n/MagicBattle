@@ -160,8 +160,35 @@
 	}
 
 	/* ---------------- IN-GAME SYNC ---------------- */
+	/* testing without a server: tabs of one browser talk over a BroadcastChannel (?local=1) */
+	function connectCoopLocal(matchId, handlers) {
+		const me = myId();
+		const bc = new BroadcastChannel('coop-local-' + matchId);
+		const peers = new Set();
+		const post = (m) => { try { bc.postMessage(m); } catch (e) {} };
+		const EV = { state: 'onState', cast: 'onCast', enemyDmg: 'onEnemyDmg', boss: 'onBoss', world: 'onWorld', projectiles: 'onProjectiles', event: 'onEvent' };
+		bc.onmessage = (ev) => {
+			const m = ev.data; if (!m || m.from === me) return;
+			if (m.p === 'hi') {
+				if (!peers.has(m.from)) { peers.add(m.from); post({ p: 'hi', from: me }); if (peers.size >= 1) handlers.onReady && handlers.onReady(); }
+				return;
+			}
+			if (m.p === 'bye') { if (peers.delete(m.from)) handlers.onLeft && handlers.onLeft(m.from); return; }
+			const h = EV[m.event]; if (h && handlers[h]) handlers[h](m.payload);
+		};
+		setTimeout(() => { handlers.onConnected && handlers.onConnected(); post({ p: 'hi', from: me }); }, 30);
+		global.addEventListener && global.addEventListener('beforeunload', () => post({ p: 'bye', from: me }));
+		const send = (event, payload) => post({ event, from: me, payload: Object.assign({ from: me }, payload) });
+		return {
+			id: me,
+			sendState(s) { send('state', s); }, sendCast(c) { send('cast', c); }, sendEnemyDmg(d) { send('enemyDmg', d); }, sendBoss(b) { send('boss', b); },
+			sendWorld(w) { send('world', w); }, sendProjectiles(p) { send('projectiles', p); }, sendEvent(e) { send('event', e); },
+			leave() { post({ p: 'bye', from: me }); try { bc.close(); } catch (e) {} },
+		};
+	}
 	function connectCoop(matchId, handlers) {
 		handlers = handlers || {};
+		if (/[?&]local=1/.test((global.location && global.location.search) || '')) return connectCoopLocal(matchId, handlers);
 		const client = sb();
 		if (!client) {
 			return {

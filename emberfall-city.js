@@ -427,6 +427,9 @@
 	const here = (o) => (o.room || null) === (currentRoom ? currentRoom.id : null);
 	function tryLoot(player) {
 		if (!player) return false;
+		// a usable door or exit always wins over props and loot standing near it
+		const dr = tryDoor(player);
+		if (dr && !dr.locked) return false;
 		const it = nearThing(player, W.interacts.filter(o => here(o) && (!o.when || o.when())));
 		if (it) {
 			if (it.use) it.use(player, { say, flag, setFlag, give: (id) => { if (typeof global.addRoadFind === 'function') global.addRoadFind(id); } });

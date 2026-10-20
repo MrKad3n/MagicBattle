@@ -664,7 +664,7 @@
 	const bgImgs = {};
 	BG_NAMES.forEach(name => {
 		const img = new Image();
-		img.src = 'images/props/' + name + '.png?v=1';
+		img.src = 'images/props/' + name + '.png?v=2';
 		bgImgs[name] = img;
 	});
 

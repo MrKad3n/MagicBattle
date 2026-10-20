@@ -128,8 +128,8 @@
 		E.ground([
 			[0, B - 120], [700, B - 120], [1500, B - 330], [1750, B - 420], [2400, B - 420], [3150, B - 200], [3400, B - 160],
 			[6100, B - 160], [6950, B + 30], [7060, B + 40, 'l'], [7420, B + 420, 'l'], [7480, B + 430],
-			[8480, B + 430, 'l'], [8540, B + 420, 'l'], [8860, B + 40], [9300, B + 40], [9330, B + 40, 'l'],
-			[9360, B + 200, 'l'], [9440, B + 200, 'l'], [9470, B + 40], [10100, B + 40], [10700, B - 40], [11950, B - 40, 'l'],
+			[8480, B + 430, 'l'], [8540, B + 420, 'l'], [8860, B + 40], [9300, B + 40],
+			[10100, B + 40], [10700, B - 40], [11950, B - 40, 'l'],
 			[12090, B - 160], [12550, B - 160, 'l'], [12690, B - 280], [13150, B - 280, 'l'], [13290, B - 400], [13700, B - 420],
 			[14150, B - 560], [14500, B - 560], [15000, B - 360], [15700, B - 140], [16200, B - 80], [18400, B - 80],
 			[18700, B - 40], [19900, B - 40], [20600, B - 20], [21000, B], [22000, B]
@@ -175,10 +175,12 @@
 		for (let x = 3450; x < 6000; x += 300) bush('flowers-gold', x, 46, { layer: 'front' });
 		district(6300, 'River Mill');
 
-		// ---- the River Mill: stone bridge over the Valedorn, mill race and wheel on the east bank
+		// ---- the River Mill: stone bridge over the raging Valedorn, which runs out toward the viewer
 		bld('bridge', 7080, { w: 1700, d: 330, arches: 3, moss: true }, { key: 'westbridge', y: B + 40, flat: false });
 		plat(7040, B + 40, 1860, 40, { thin: true, oneway: true });
-		water(7150, 8780, B + 330, B + 430, { flow: 1.6 });
+		water(7150, 8780, B + 330, B + 430, { flow: 4, rapids: true, boils: [7260, 7360, 7647, 7900, 8213, 8560, 8640] });
+		W.backStructs = W.backStructs || [];
+		W.backStructs.push({ kind: 'riverFar', x0: 7080, x1: 8780, cx: 7930, yFar: B + 70, yNear: B + 330, wFar: 220, wNear: 1600 });
 		bush('reeds0', 7230, 120, { layer: 'front' });
 		bush('reeds1', 8460, 110, { layer: 'front', flip: true });
 		bush('reeds0', 7600, 90);
@@ -189,9 +191,7 @@
 		bush('boulder0', 8640, 170, { layer: 'mid', sink: 20, flip: true });
 		bush('rock4', 8560, 90, { sink: 10 });
 		grove(6400, 6950, 260, ['willow0', 'oak0'], 380, 440, 25, { layer: 'back' });
-		water(9330, 9470, B + 100, B + 200, { flow: 2.6 });
-		plat(9300, B + 40, 200, 30, { thin: true, art: 'planks' });
-		W.wheels = [{ x: 9400, y: B + 60, r: 150 }];
+		W.wheels = [];
 		house(9520, { w: 480, floors: 2, roof: 'slate', wall: 'stone', frame: false, chimney: [0.8], archWin: true, seed: 33, sign: { side: 1, icon: 'wheat' } },
 			{ id: 'river-mill', label: 'River Mill', room: 'river-mill', kind: 'mill' });
 		road('sacks', 10150, 110);
@@ -278,10 +278,10 @@
 				FIRST_MEETING: talk('Traveling Merchant', '🛒', ['I change the crates every morning. Today’s stock is whatever the last wagon did not eat.']),
 				BASIC_DIALOGUE: talk('Traveling Merchant', '🛒', ['Look again tomorrow. The unusual things never stay long.'])
 			} });
-		P({ id: 'millwright', name: 'Millwright Osric', x: 9700, minX: 9520, maxX: 10060, icon: '⚙️', sprite: 'black-smith',
+		P({ id: 'millwright', name: 'Millwright Osric', x: 9900, minX: 9830, maxX: 10080, icon: '⚙️', sprite: 'black-smith',
 			dialogue: {
-				FIRST_MEETING: talk('Millwright Osric', '⚙️', ['This wheel turns the stones that feed the fields you just walked through. The river does the work. I only keep it honest.']),
-				BASIC_DIALOGUE: talk('Millwright Osric', '⚙️', ['When the wheel stops, the bread stops. That is the whole lesson.'])
+				FIRST_MEETING: talk('Millwright Osric', '⚙️', ['We had a wheel here once. The Valedorn tore it off its axle in the spring flood and threw the pieces at the bridge.', 'Now the stones run on the old horse capstan inside. Slower, but the river cannot reach it.']),
+				BASIC_DIALOGUE: talk('Millwright Osric', '⚙️', ['Do not try to swim that river. It does not care how strong your spells are.'])
 			} });
 		P({ id: 'farmer_nell', name: 'Farmer Nell', x: 4260, minX: 3600, maxX: 4380, icon: '🌾', sprite: 'forest-ranger',
 			dialogue: {

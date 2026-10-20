@@ -866,7 +866,7 @@
 	/* ------------------------------------------------------------------ sky + backdrop */
 	const BG = {};
 	function bgImg(name) {
-		if (!BG[name]) BG[name] = A.img('images/props/' + name + '.png?v=1');
+		if (!BG[name]) BG[name] = A.img('images/props/' + name + '.png?v=2');
 		return BG[name];
 	}
 	const STRIP = new Map();
@@ -890,6 +890,8 @@
 			x += dw;
 		}
 	}
+	/* the five clouds in bg-clouds.png: [x, y, w, h] */
+	const CLOUDS = [[67, 0, 430, 161], [813, 25, 409, 171], [392, 135, 508, 220], [50, 310, 406, 182], [660, 358, 559, 208]];
 	let skylineCv = null;
 	function skyline() {
 		/* Hazy rooftops and towers of the far side of the city, painted once. */
@@ -898,9 +900,11 @@
 		const hv = 420;
 		const c = A.canvas(wv, hv);
 		const g = c.getContext('2d');
+		// painted three times, one strip-width apart, so roofs that cross the ends wrap round and the band tiles with no cut
+		for (const dx of [-wv, 0, wv]) {
 		const r = A.rnd(77);
 		g.fillStyle = '#7f93a8';
-		for (let x = 0; x < wv;) {
+		for (let x = dx; x < wv + dx;) {
 			const w = 60 + r() * 120;
 			const h = 70 + r() * 120;
 			const top = hv - h;
@@ -922,7 +926,8 @@
 			x += w - 6;
 		}
 		g.fillStyle = 'rgba(255,214,140,0.5)';
-		for (let i = 0; i < 90; i++) g.fillRect(r() * wv, hv - 30 - r() * 120, 3, 4);
+		for (let i = 0; i < 90; i++) g.fillRect(r() * wv + dx, hv - 30 - r() * 120, 3, 4);
+		}
 		skylineCv = c;
 		return c;
 	}
@@ -1004,11 +1009,21 @@
 			const t = performance.now() / 1000;
 			const dh = vh * 0.24;
 			const dw = dh * clouds.naturalWidth / clouds.naturalHeight;
+			// a sparse sky: single clouds cut from the painting, one slot every ~430 px of drift and only some slots filled
 			ctx.save();
-			ctx.globalAlpha = 0.85;
-			blitStrip(ctx, clouds, cam.x * 0.03 + t * 6, vh * 0.02 + lift * 0.05, dw, dh, vw);
-			ctx.globalAlpha = 0.45;
-			blitStrip(ctx, clouds, cam.x * 0.05 + t * 10 + 500, vh * 0.16 + lift * 0.08, dw * 0.7, dh * 0.7, vw);
+			const sc = dh / clouds.naturalHeight;
+			const slot = 430, scroll = cam.x * 0.03 + t * 6;
+			const first = Math.floor((scroll - 400) / slot), last = Math.floor((scroll + vw) / slot);
+			for (let k = first; k <= last; k++) {
+				const h1 = hash(k * 7 + 3), h2 = hash(k * 13 + 5), h3 = hash(k * 29 + 11);
+				if (h1 < 0.35) continue;
+				const c = CLOUDS[Math.floor(h2 * CLOUDS.length)];
+				const z = sc * (0.9 + h3 * 0.6);
+				const x = k * slot + h3 * 240 - scroll;
+				const y = vh * (0.02 + h2 * 0.14) + lift * (0.05 + h3 * 0.03);
+				ctx.globalAlpha = 0.6 + 0.3 * h3;
+				ctx.drawImage(clouds, c[0], c[1], c[2], c[3], Math.round(x), Math.round(y), Math.round(c[2] * z), Math.round(c[3] * z));
+			}
 			ctx.restore();
 		}
 		// mountains and hills (painted bands), lowered as you climb; two sets cross-fade at a zone edge
@@ -1031,10 +1046,77 @@
 		}
 		ctx.drawImage(hazeCache.cv, 0, Math.round(rest - vh * 0.25));
 		const low = rest + vh * 0.1;
-		if (low < vh) {
-			ctx.fillStyle = cold > 0.5 ? lerpHex('#96a06e', '#a0b0aa', cold) : 'rgba(150,160,110,1)';
-			ctx.fillRect(0, low, vw, vh - low);
+		if (low < vh) drawMeadow(ctx, cam.x * 0.32, low - 26, vw, vh, cold > 0.5);
+	}
+	/* The low countryside under the painted bands: fields, hedgerows, copses and grass, painted once into a strip that
+	   wraps seamlessly (every feature is drawn at x and x ± the strip width). Shown wherever the view reaches below the
+	   bands, and used as the bank texture of far rivers. */
+	const MEADOW = {};
+	const MW = 1024, MH = 320;
+	function meadow(cold) {
+		const key = cold ? 'c' : 'w';
+		if (MEADOW[key]) return MEADOW[key];
+		const cv = A.canvas(MW, MH);
+		const g = cv.getContext('2d');
+		const r = A.rnd(cold ? 913 : 517);
+		const pal = cold
+			? { top: '#c9d3d6', bot: '#8c9ca0', patch: ['rgba(235,240,244,0.35)', 'rgba(150,170,175,0.3)', 'rgba(205,215,220,0.35)'], hedge: '#5c6e6c', tree: ['#4f6460', '#64786f', '#40544f'], grass: 'rgba(240,246,250,0.5)' }
+			: { top: '#a9b27a', bot: '#5f7a3a', patch: ['rgba(196,178,96,0.32)', 'rgba(92,128,52,0.32)', 'rgba(150,160,80,0.3)'], hedge: '#45622c', tree: ['#3d5a26', '#557a32', '#2f4a1e'], grass: 'rgba(210,225,140,0.45)' };
+		const wrap = (fn) => { fn(0); fn(-MW); fn(MW); };
+		const bg = g.createLinearGradient(0, 0, 0, MH);
+		bg.addColorStop(0, pal.top); bg.addColorStop(1, pal.bot);
+		g.fillStyle = bg; g.fillRect(0, 0, MW, MH);
+		// soft field patches, flatter toward the horizon
+		for (let i = 0; i < 70; i++) {
+			const x = r() * MW, y = 20 + r() * (MH - 20), k = 0.35 + y / MH;
+			const w = (60 + r() * 160) * k, h = (8 + r() * 22) * k;
+			g.fillStyle = pal.patch[i % 3];
+			wrap((dx) => { g.beginPath(); g.ellipse(x + dx, y, w, h, 0, 0, Math.PI * 2); g.fill(); });
 		}
+		// hedgerows: wavy lines of shrubs that run across the fields, closer ones lower and bigger
+		for (let row = 0; row < 5; row++) {
+			const y0 = 34 + row * row * 11 + row * 18, sz = 2.5 + row * 1.6;
+			const a = r() * 6, f = 1 + Math.floor(r() * 3);
+			for (let x = 0; x < MW; x += sz * 1.4) {
+				const y = y0 + Math.sin(x / MW * Math.PI * 2 * f + a) * (6 + row * 3);
+				g.fillStyle = r() < 0.5 ? pal.hedge : pal.tree[row % 3];
+				wrap((dx) => { g.beginPath(); g.arc(x + dx, y, sz * (0.7 + r() * 0.6), 0, Math.PI * 2); g.fill(); });
+			}
+		}
+		// copses: little clusters of round trees
+		for (let i = 0; i < 26; i++) {
+			const x = r() * MW, y = 24 + r() * (MH - 70), sc = 0.5 + y / MH * 1.6;
+			const n = 3 + Math.floor(r() * 5);
+			for (let j = 0; j < n; j++) {
+				const tx = x + (r() - 0.5) * 30 * sc, ty = y + (r() - 0.5) * 6 * sc, tr = (4 + r() * 5) * sc;
+				wrap((dx) => {
+					g.fillStyle = 'rgba(0,0,0,0.18)'; g.beginPath(); g.ellipse(tx + dx + tr * 0.3, ty + tr * 0.9, tr, tr * 0.3, 0, 0, Math.PI * 2); g.fill();
+					g.fillStyle = pal.tree[j % 3]; g.beginPath(); g.arc(tx + dx, ty, tr, 0, Math.PI * 2); g.fill();
+					g.fillStyle = cold ? 'rgba(255,255,255,0.35)' : 'rgba(190,210,120,0.25)'; g.beginPath(); g.arc(tx + dx - tr * 0.3, ty - tr * 0.35, tr * 0.5, 0, Math.PI * 2); g.fill();
+				});
+			}
+		}
+		// grass ticks in the near part
+		g.strokeStyle = pal.grass; g.lineWidth = 1;
+		for (let i = 0; i < 900; i++) {
+			const x = r() * MW, y = MH * 0.45 + r() * MH * 0.55, h = 2 + (y / MH) * 6;
+			wrap((dx) => { g.beginPath(); g.moveTo(x + dx, y); g.lineTo(x + dx + (r() - 0.5) * 2, y - h); g.stroke(); });
+		}
+		// fade the top edge in, so it melts into the bottom of the painted bands
+		g.globalCompositeOperation = 'destination-in';
+		const fe = g.createLinearGradient(0, 0, 0, 30);
+		fe.addColorStop(0, 'rgba(0,0,0,0)'); fe.addColorStop(1, 'rgba(0,0,0,1)');
+		g.fillStyle = fe; g.fillRect(0, 0, MW, MH);
+		g.globalCompositeOperation = 'source-over';
+		MEADOW[key] = { cv, bot: pal.bot };
+		return MEADOW[key];
+	}
+	function drawMeadow(ctx, scroll, y, vw, vh, cold) {
+		const m = meadow(cold);
+		y = Math.round(y);
+		let x = -((scroll % MW) + MW) % MW;
+		for (; x < vw + 1; x += MW) ctx.drawImage(m.cv, Math.round(x), y);
+		if (y + MH < vh) { ctx.fillStyle = m.bot; ctx.fillRect(0, y + MH - 1, vw, vh - y - MH + 1); }
 	}
 
 	/* ------------------------------------------------------------------ water */
@@ -1051,6 +1133,7 @@
 				continue;
 			}
 			if (w.frozen) { drawIce(ctx, cam, w, vw, t); continue; }
+			if (w.rapids) { drawRapids(ctx, cam, w, vw, vh, t); continue; }
 			ctx.save();
 			const gr = ctx.createLinearGradient(0, top, 0, bot);
 			gr.addColorStop(0, w.cold ? 'rgba(120,160,190,0.55)' : 'rgba(70,130,150,0.55)');
@@ -1084,6 +1167,84 @@
 			}
 			ctx.restore();
 		}
+	}
+	function drawRapids(ctx, cam, w, vw, vh, t) {
+		/* A raging river seen side-on as it rushes toward you: a choppy, foaming surface; streaks of current sliding down the
+		   face of the water and spreading as they come closer; white water churning at the banks, the rocks and the bridge
+		   piers; and a front of froth where the water pours toward the viewer. */
+		const x0 = Math.max(w.x0 - cam.x, -10), x1 = Math.min(w.x1 - cam.x, vw + 10);
+		if (x1 <= x0) return;
+		const top = w.y - cam.y, bot = w.bed - cam.y;
+		const cxW = (w.x0 + w.x1) / 2, half = (w.x1 - w.x0) / 2;
+		const surfY = (wx) => top + Math.sin(wx * 0.045 + t * 5.2) * 4 + Math.sin(wx * 0.13 - t * 7.3) * 2.4 + Math.sin(wx * 0.017 + t * 1.7) * 3;
+		ctx.save();
+		// the body, following the bed and the banks below the surface
+		ctx.beginPath();
+		ctx.moveTo(x0, surfY(x0 + cam.x));
+		for (let x = x0; x <= x1; x += 8) ctx.lineTo(x, surfY(x + cam.x));
+		ctx.lineTo(x1, surfY(x1 + cam.x));
+		for (let x = x1; x >= x0; x -= 12) ctx.lineTo(x, Math.max(top - 8, Math.min(bot + 4, surf(x + cam.x) - cam.y + 4)));
+		ctx.closePath();
+		const gr = ctx.createLinearGradient(0, top - 6, 0, bot);
+		gr.addColorStop(0, 'rgba(120,175,185,0.72)');
+		gr.addColorStop(0.25, 'rgba(52,108,124,0.82)');
+		gr.addColorStop(1, 'rgba(14,40,52,0.93)');
+		ctx.fillStyle = gr;
+		ctx.fill();
+		ctx.clip();
+		// current: streaks sliding down the face toward the viewer, spreading out from the middle of the river as they come
+		ctx.lineCap = 'round';
+		const depth = Math.max(30, bot - top);
+		for (let lane = 0; lane < (w.x1 - w.x0) / 22; lane++) {
+			const wx = w.x0 + 11 + lane * 22;
+			if (wx - cam.x < x0 - 30 || wx - cam.x > x1 + 30) continue;
+			for (let k = 0; k < 2; k++) {
+				const sp = 0.55 + hash(lane * 7 + k * 13) * 0.6;
+				const ph = (t * sp + hash(lane * 3 + k * 29)) % 1;
+				const p0 = ph * ph, p1 = Math.min(1, ph + 0.18) * Math.min(1, ph + 0.18);
+				const spread = (wx - cxW) / half * 26;
+				const xa = wx - cam.x + spread * p0, xb = wx - cam.x + spread * p1;
+				const ya = top + 6 + p0 * depth * 0.95, yb = top + 6 + p1 * depth * 0.95;
+				ctx.strokeStyle = 'rgba(225,245,250,' + (0.12 + 0.38 * ph) * (1 - ph * 0.5) + ')';
+				ctx.lineWidth = 1 + ph * 2.2;
+				ctx.beginPath(); ctx.moveTo(xa, ya); ctx.lineTo(xb, yb); ctx.stroke();
+			}
+		}
+		// churning white water: a froth band under the surface, and boils around the rocks, the piers and the banks
+		const foamAt = (fx, r, a) => {
+			const sx = fx - cam.x; if (sx < -r * 2 || sx > vw + r * 2) return;
+			for (let k = 0; k < 7; k++) {
+				const ang = t * (2.4 + k * 0.37) + k * 1.9 + fx * 0.01;
+				const px = sx + Math.cos(ang) * r * (0.35 + 0.5 * hash(k + fx)), py = surfY(fx) + 6 + Math.abs(Math.sin(ang * 1.3)) * r * 0.55;
+				const rr = r * (0.28 + 0.22 * Math.abs(Math.sin(ang * 0.7 + k)));
+				ctx.fillStyle = 'rgba(245,252,255,' + a * (0.45 + 0.35 * Math.abs(Math.sin(ang))) + ')';
+				ctx.beginPath(); ctx.ellipse(px, py, rr * 1.4, rr, 0, 0, Math.PI * 2); ctx.fill();
+			}
+		};
+		for (const fx of (w.boils || [])) foamAt(fx, 46, 0.75);
+		foamAt(w.x0 + 40, 40, 0.6); foamAt(w.x1 - 40, 40, 0.6);
+		ctx.restore();
+		// the crest of the surface: broken white highlights racing along it, and froth riding the chop
+		ctx.save();
+		ctx.strokeStyle = 'rgba(240,252,255,0.8)';
+		ctx.lineWidth = 2.5;
+		ctx.beginPath();
+		let pen = false;
+		for (let x = x0; x <= x1; x += 6) {
+			const wx = x + cam.x;
+			const on = Math.sin(wx * 0.06 - t * 6) + Math.sin(wx * 0.021 + t * 2.3) > 0.2;
+			const y = surfY(wx) + 1;
+			if (on) { if (!pen) ctx.moveTo(x, y); else ctx.lineTo(x, y); pen = true; } else pen = false;
+		}
+		ctx.stroke();
+		for (let x = x0; x <= x1; x += 14) {
+			const wx = x + cam.x;
+			const f = Math.sin(wx * 0.09 + t * 8) * 0.5 + Math.sin(wx * 0.033 - t * 3.1) * 0.5;
+			if (f < 0.35) continue;
+			ctx.fillStyle = 'rgba(250,255,255,' + (0.35 + f * 0.45) + ')';
+			ctx.beginPath(); ctx.ellipse(x, surfY(wx) - 1, 6 + f * 6, 3 + f * 2, 0, 0, Math.PI * 2); ctx.fill();
+		}
+		ctx.restore();
 	}
 	function drawIce(ctx, cam, w, vw, t) {
 		/* A frozen pool or stream: a sheet of pale blue ice over dark water, snow drifted on its edges, cracks and a
@@ -1134,6 +1295,7 @@
 	}
 
 	global.EmberfallWorld = {
+		meadow,
 		W, ground, rough, material, rockBody, flatten, surf, inVoid, solidAt, collide, footY, setInside,
 		stairSurface, drawTerrain, drawSprite, drawBuilding, drawSky, drawWater, waterAt, hash, vnoise, chunks,
 		zone, zoneAt, coldAt, climate, propsNear, BANDS

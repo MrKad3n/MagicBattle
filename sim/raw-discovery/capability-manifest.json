@@ -1,0 +1,134 @@
+{
+ "generated": "2026-10-20T13:37:25.668Z",
+ "engine": "magic-engine.js (CONFIG.maxRunes 100, rawMaxSpeed 9)",
+ "profile": {
+  "magicControl": 30,
+  "magicPower": 150,
+  "maxMana": 7000,
+  "maxOutput": 960,
+  "runeCapacity": 100,
+  "maxEnergy": 7000
+ },
+ "allowedRunes": [
+  "target",
+  "generate",
+  "compress",
+  "divide",
+  "split",
+  "redirect",
+  "anchor",
+  "discharge"
+ ],
+ "allowedConditions": [
+  "arrived",
+  "targetNear",
+  "enemyNear",
+  "travelled",
+  "spellAge"
+ ],
+ "forbiddenRunes": [
+  "technique",
+  "reverseTechnique",
+  "domain",
+  "reinforce",
+  "infuse",
+  "force",
+  "attach",
+  "memory",
+  "lock",
+  "zone",
+  "drawOut"
+ ],
+ "grammar": {
+  "AMOUNTS": [
+   120,
+   240,
+   400
+  ],
+  "SHAPES": [
+   "raw",
+   "sphere",
+   "lance",
+   "arrow",
+   "spike",
+   "ring",
+   "wave",
+   "disc"
+  ],
+  "POWERS": [
+   3,
+   8,
+   14
+  ],
+  "FORMS": [
+   "arc",
+   "circle",
+   "vertical",
+   "horizontal",
+   "cluster"
+  ],
+  "COUNTS": [
+   3,
+   5,
+   8
+  ],
+  "MOTIONS": [
+   "keep",
+   "outward",
+   "still"
+  ],
+  "PROGS": [
+   "direct",
+   "hold",
+   "stagger",
+   "guided",
+   "arc",
+   "lurk",
+   "drop"
+  ],
+  "TERMS": [
+   "none",
+   "burstNear",
+   "burstArrive",
+   "expandBurst"
+  ]
+ },
+ "arena": "Mage Arena (9000 × floor 2340, 7 platforms)",
+ "policies": [
+  {
+   "key": "still",
+   "name": "Stands still"
+  },
+  {
+   "key": "strafe",
+   "name": "Strafes left and right"
+  },
+  {
+   "key": "jumper",
+   "name": "Jumps on a fixed rhythm"
+  },
+  {
+   "key": "reactive",
+   "name": "Dodges what it sees coming (human reaction: ~0.22 s late)"
+  },
+  {
+   "key": "aggressive",
+   "name": "Rushes in close and stays there"
+  },
+  {
+   "key": "kiter",
+   "name": "Keeps far away"
+  },
+  {
+   "key": "random",
+   "name": "Random movement"
+  }
+ ],
+ "distances": [
+  380,
+  720
+ ],
+ "runFrames": 360,
+ "tailFrames": 240,
+ "seed": 6060
+}
