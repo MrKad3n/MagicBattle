@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+<script src="loading-screen.js?v=1"></script>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Magic Battle — Inventory</title>
@@ -97,6 +98,13 @@ select,select option{background:#1c1a30;color:#e8eaff}
 	color:#fff;outline:none;transition:border-color .2s;
 }
 .inv-toolbar input:focus{border-color:var(--accent)}
+.inv-filters{display:flex;gap:6px;flex-wrap:wrap;margin:2px 0 8px}
+.inv-filter-btn{
+	padding:5px 14px;font-size:12px;background:rgba(255,255,255,.07);color:#ccc;
+	border:1px solid var(--border);border-radius:999px;cursor:pointer;transition:background .2s,border-color .2s,color .2s;
+}
+.inv-filter-btn:hover{background:rgba(255,255,255,.15)}
+.inv-filter-btn.active{background:rgba(255,255,255,.18);border-color:var(--accent);color:#fff}
 .inv-page-info{font-size:12px;color:var(--muted);white-space:nowrap}
 .inv-page-btn{
 	padding:4px 10px;font-size:13px;background:rgba(255,255,255,.08);
@@ -557,6 +565,12 @@ select,select option{background:#1c1a30;color:#e8eaff}
 		<!-- Inventory Tab -->
 		<div id="inventoryTab" class="panel" style="flex:1;display:flex;flex-direction:column">
 			<h3>Inventory</h3>
+			<div class="inv-filters" id="invFilters">
+				<button class="inv-filter-btn active" data-filter="all" type="button">All</button>
+				<button class="inv-filter-btn" data-filter="relic" type="button">💎 Relics</button>
+				<button class="inv-filter-btn" data-filter="robe" type="button">🥋 Robes</button>
+				<button class="inv-filter-btn" data-filter="staff" type="button">🪄 Staffs</button>
+			</div>
 			<div class="inv-toolbar">
 				<input type="text" id="searchBox" placeholder="Search items..." autocomplete="off"/>
 				<button class="inv-page-btn" id="prevPage">◀</button>
@@ -710,15 +724,15 @@ select,select option{background:#1c1a30;color:#e8eaff}
      ============================================================ -->
 <script src="scrolls.js?v=2"></script>
 <script src="spell-cost.js?v=14"></script>
-<script src="magic-engine.js?v=61"></script>
+<script src="magic-engine.js?v=64"></script>
 <script src="magic-techniques.js?v=43"></script>
 <script src="shape-editor.js?v=3"></script>
 <script src="magic-forge.js?v=22"></script>
-<script src="player-rig.js?v=4"></script>
+<script src="player-rig.js?v=5"></script>
 <script src="melee-weapons.js?v=2"></script>
 <script src="slot-chooser.js?v=4"></script>
-<script src="gear-data.js?v=5"></script>
-<script src="gear-system.js?v=10"></script>
+<script src="gear-data.js?v=6"></script>
+<script src="gear-system.js?v=11"></script>
 <script src="tutorial-coach.js?v=1"></script>
 <script src="tutorials.js?v=2"></script>
 <script>
@@ -1606,6 +1620,7 @@ function runeStatSummary(s){
 	const lines = [
 		'⚔️ Rune damage <b style="color:#e74c3c">×' + dmg.toFixed(2) + '</b>' + (prof ? ' · Max Output <b>' + prof.maxOutput + ' E</b>' : ''),
 		prof ? '🎯 Rune capacity <b style="color:#9b59b6">' + prof.runeCapacity + '</b> · Zones up to <b>' + Math.round(prof.zoneRadiusMax || 0) + ' px</b>' : '',
+		'💪 Melee damage <b style="color:#ff9d3d">×' + (1 + (s.strength || 0) * 0.04).toFixed(2) + '</b> · Move speed <b>+' + Math.round(Math.min(0.25, (s.strength || 0) * 0.003) * 100) + '%</b>',
 		'🛡️ Enemy magic <b style="color:#2ecc71">' + (Math.abs(ward - 1) < 0.005 ? '±0' : ward < 1 ? '−' + Math.round((1 - ward) * 100) : '+' + Math.round((ward - 1) * 100)) + '%</b> · +' + Math.round((s.magicDefence || 0) * 6) + ' max HP'
 	].filter(Boolean);
 	return '<div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--border);font-size:11px;color:var(--muted);line-height:1.6">' + lines.join('<br>') + '</div>';
@@ -1617,18 +1632,19 @@ function renderStats(){
 		{ key:'magicControl',  label:'Control',  icon:'🎯',  color:'#9b59b6' },
 		{ key:'manaRegen',     label:'Mana Regen', icon:'💧',  color:'#3498db' },
 		{ key:'magicDefence',  label:'Defence',  icon:'🛡️',  color:'#2ecc71' },
+		{ key:'strength',      label:'Strength', icon:'💪',  color:'#ff9d3d' },
 	];
 	document.getElementById('statsBar').innerHTML = defs.map(d =>
-		`<div class="stat-chip"><span class="stat-icon">${d.icon}</span>${d.label}: <span class="stat-val" style="color:${d.color}">${s[d.key]}</span></div>`
+		`<div class="stat-chip"><span class="stat-icon">${d.icon}</span>${d.label}: <span class="stat-val" style="color:${d.color}">${s[d.key] || 0}</span></div>`
 	).join('') + `<div class="stat-chip"><span class="stat-icon">🪙</span>Gold: <span class="stat-val" style="color:var(--gold)">${STATE.gold||0}</span></div>`;
 
 	// base stats panel (left col)
 	const base = STATE.baseStats;
 	document.getElementById('baseStatsPanel').innerHTML = defs.map(d => {
-		const bonus = s[d.key] - base[d.key];
-		return `${d.icon} ${d.label}: <b style="color:#fff">${base[d.key]}</b>` +
+		const bonus = (s[d.key] || 0) - (base[d.key] || 0);
+		return `${d.icon} ${d.label}: <b style="color:#fff">${base[d.key] || 0}</b>` +
 			(bonus > 0 ? ` <span style="color:var(--green)">+${bonus}</span>` : '') +
-			` = <b style="color:${d.color}">${s[d.key]}</b>`;
+			` = <b style="color:${d.color}">${s[d.key] || 0}</b>`;
 	}).join('<br>') + runeStatSummary(s);
 
 	// Rank display
@@ -1773,10 +1789,15 @@ function unequipItem(slotKey){
 /* =============================================================
    RENDER: INVENTORY GRID (center)
    ============================================================= */
+let invTypeFilter = 'all';      // 'all' | 'relic' | 'robe' | 'staff'
 function getFilteredInventory(){
-	if(!searchTerm) return STATE.inventory;
+	let list = STATE.inventory;
+	if(invTypeFilter !== 'all'){
+		list = list.filter(entry => { const it = ITEM_DB[entry.itemId]; return it && it.type === invTypeFilter; });
+	}
+	if(!searchTerm) return list;
 	const q = searchTerm.toLowerCase();
-	return STATE.inventory.filter(entry => {
+	return list.filter(entry => {
 		const item = ITEM_DB[entry.itemId];
 		const shown = (typeof GearSystem !== 'undefined' && entry.uid) ? GearSystem.displayName(entry) : ((typeof scrollDisplayName === 'function' ? scrollDisplayName(entry, ITEM_DB) : (item && item.name)) || '');
 		const name = shown || (item && item.name) || '';
@@ -5385,6 +5406,15 @@ function renderAll(){
    ============================================================= */
 document.getElementById('searchBox').addEventListener('input', e => {
 	searchTerm = e.target.value.trim();
+	invPage = 0;
+	renderInventory();
+});
+document.getElementById('invFilters').addEventListener('click', e => {
+	const btn = e.target.closest('.inv-filter-btn');
+	if(!btn) return;
+	// clicking the active type again goes back to showing everything
+	invTypeFilter = (btn.dataset.filter === invTypeFilter) ? 'all' : btn.dataset.filter;
+	document.querySelectorAll('#invFilters .inv-filter-btn').forEach(b => b.classList.toggle('active', b.dataset.filter === invTypeFilter));
 	invPage = 0;
 	renderInventory();
 });

@@ -463,7 +463,7 @@
 	function updateFrostboundKnight(en){
 		if(!en || en.type !== 'frostboundKnight') return false;
 		if(en.isNecroSummon || en.necroFriendly) return false;
-		if(typeof IS_DUNGEON === 'undefined' || !IS_DUNGEON || DUNGEON_TYPE !== 'ice') return false;
+		if(!(typeof IS_SURVIVAL !== 'undefined' && IS_SURVIVAL) && (typeof IS_DUNGEON === 'undefined' || !IS_DUNGEON || DUNGEON_TYPE !== 'ice')) return false;
 		const room = fkRoom(en);
 		if(!room) return false;
 		if(!en._fk) fkInit(en, room);
@@ -543,7 +543,7 @@
 		ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
 	}
 	function drawFrostboundWorld(){
-		if(typeof IS_DUNGEON === 'undefined' || !IS_DUNGEON || DUNGEON_TYPE !== 'ice' || typeof enemies === 'undefined') return;
+		if(!(typeof IS_SURVIVAL !== 'undefined' && IS_SURVIVAL) && (typeof IS_DUNGEON === 'undefined' || !IS_DUNGEON || DUNGEON_TYPE !== 'ice') || typeof enemies === 'undefined') return;
 		let en = null;
 		for(let i = 0; i < enemies.length; i++) if(enemies[i] && enemies[i].type === 'frostboundKnight' && !enemies[i].dead && enemies[i]._fk){ en = enemies[i]; break; }
 		if(!en) return;

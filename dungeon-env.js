@@ -249,6 +249,7 @@
 	}
 
 	function showBanner(text){
+		if(/boss|warped|defeat|awaken|guardian|warden|ignaroth|frostbound|knight falls|colossus|survive the|the way opens/i.test(String(text))) return;
 		Env.banner = { text: text, t: 160 };
 		if(typeof notify === 'function') notify(text);
 	}
@@ -298,6 +299,7 @@
 
 	function drawLavaPool(ctx, x, y, w, h, seed){
 		if(w < 8 || h < 4) return;
+		if(typeof MoltenLava !== 'undefined' && MoltenLava.active()){ MoltenLava.pool(ctx, x, y, w, h, seed); return; }
 		const camx = camera.x, camy = camera.y;
 		const sx = x - camx, sy = y - camy;
 		if(sx + w < -50 || sx > canvas.width + 50 || sy + h < -40 || sy > canvas.height + 40) return;
@@ -680,7 +682,7 @@
 		Env.objective = objectiveFor(Env.currentRoom);
 		const el = document.getElementById('dungeonObjective');
 		if(!el) return;
-		if(!IS_DUNGEON || !Env.currentRoom || !Env.objective){
+		if(true || !IS_DUNGEON || !Env.currentRoom || !Env.objective){
 			if(el.style.display !== 'none') el.style.display = 'none';
 			Env._objHud = '';
 			return;

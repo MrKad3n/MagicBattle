@@ -11,7 +11,7 @@
 		/* ---------- MYTHIC (preserved) ---------- */
 		lightstep_blade: I({
 			name: 'Lightstep Blade', type: 'staff', icon: '⚔️', rarity: 'mythic', dungeon: 'special',
-			stats: { magicPower: 25, magicControl: 12, manaRegen: 30 },
+			stats: { magicPower: 25, magicControl: 12, manaRegen: 30, strength: 10 },
 			desc: 'A blade of severed light from Seraphel. Warriors gain Backstep anchors on melee attacks — press B to warp back.',
 			effectText: 'Mythic Seraphel relic. Warriors leave Backstep anchors on melee attacks. Its power feeds straight into every rune you cast.',
 			effects: [], tags: ['mythic', 'special'], gemSlots: 2, variantPool: []
@@ -42,7 +42,7 @@
 		}),
 		scorched_apprentice_robes: I({
 			name: 'Scorched Apprentice Robes', type: 'robe', icon: '👘', rarity: 'common', dungeon: 'fire',
-			stats: { magicPower: 4, magicControl: 3, magicDefence: 2 },
+			stats: { magicPower: 4, magicControl: 3, magicDefence: 2, strength: 2 },
 			desc: 'A balanced starter piece for players who want a little of everything.',
 			effectText: 'None.',
 			effects: [], tags: ['fire', 'robe'], gemSlots: 2,
@@ -50,7 +50,7 @@
 		}),
 		coalheart_charm: I({
 			name: 'Coalheart Charm', type: 'relic', icon: '🪨', rarity: 'common', dungeon: 'fire',
-			stats: { manaRegen: 5, magicDefence: 2 },
+			stats: { manaRegen: 5, magicDefence: 2, strength: 2 },
 			desc: 'Simple sustain-oriented gear.',
 			effectText: 'None.',
 			effects: [], tags: ['fire', 'relic', 'sustain'], gemSlots: 2,
@@ -67,7 +67,7 @@
 		}),
 		magmaweave_mantle: I({
 			name: 'Magmaweave Mantle', type: 'robe', icon: '🧥', rarity: 'uncommon', dungeon: 'fire',
-			stats: { magicDefence: 6, magicPower: 5, magicControl: 4 },
+			stats: { magicDefence: 6, magicPower: 5, magicControl: 4, strength: 4 },
 			desc: 'A small taste of Fire\'s risk/reward identity.',
 			effectText: 'While below 50% HP, your rune spells deal +8% damage.',
 			effects: [{ type: 'lowHpDamage', hpPct: 0.5, damage: 0.08 }],
@@ -76,7 +76,7 @@
 		}),
 		emberheart_ring: I({
 			name: 'Emberheart Ring', type: 'relic', icon: '💍', rarity: 'uncommon', dungeon: 'fire',
-			stats: { manaRegen: 8, magicPower: 3 },
+			stats: { manaRegen: 8, magicPower: 3, strength: 3 },
 			desc: 'Fire elemental builds get better sustain without making the item universally powerful.',
 			effectText: 'Enemies that die while Burning (Thermal heat) restore 6 energy.',
 			effects: [{ type: 'manaOnBurningKill', mana: 6 }],
@@ -94,7 +94,7 @@
 		}),
 		ashen_warcloak: I({
 			name: 'Ashen Warcloak', type: 'robe', icon: '🧣', rarity: 'rare', dungeon: 'fire',
-			stats: { magicPower: 9, magicDefence: 9, magicControl: 5 },
+			stats: { magicPower: 9, magicDefence: 9, magicControl: 5, strength: 8 },
 			desc: 'A panic-button item rather than a constant DPS boost.',
 			effectText: 'Last Ember: When you fall below 25% HP, your next spell within 5 seconds costs no energy. Cooldown: 30 seconds.',
 			effects: [{ type: 'lastEmber', hpPct: 0.25, windowSec: 5, cooldownSec: 30 }],
@@ -121,7 +121,7 @@
 		}),
 		infernal_heartplate: I({
 			name: 'Infernal Heartplate', type: 'robe', icon: '❤️‍🔥', rarity: 'epic', dungeon: 'fire',
-			stats: { magicDefence: 13, magicPower: 13, magicControl: 7 },
+			stats: { magicDefence: 13, magicPower: 13, magicControl: 7, strength: 12 },
 			desc: 'Get hit, then immediately retaliate.',
 			effectText: 'Blood for Fire: Taking damage empowers your next spell by +20% (all of its hits). Cooldown: 5 seconds.',
 			effects: [{ type: 'retaliateCharge', damage: 0.20, cooldownSec: 5 }],
@@ -139,7 +139,7 @@
 		}),
 		heart_of_the_caldera: I({
 			name: 'Heart of the Caldera', type: 'staff', icon: '🌋', rarity: 'legendary', dungeon: 'fire',
-			stats: { magicPower: 25, magicControl: 12, manaRegen: 15 },
+			stats: { magicPower: 25, magicControl: 12, manaRegen: 15, strength: 9 },
 			desc: 'General offensive build with periodic burst. Eruptions do not need a Thermal spell.',
 			effectText: 'Eruption: Every 8th damaging hit creates a delayed volcanic eruption beneath the target. Deals significant fire damage in a small area and briefly knocks enemies upward.',
 			effects: [{ type: 'nthDamagingErupt', n: 8, kind: 'volcano', delaySec: 0.55, power: 46, radius: 62, knockUp: 30 }],
@@ -148,7 +148,7 @@
 		}),
 		crown_of_the_inferno: I({
 			name: 'Crown of the Inferno', type: 'relic', icon: '👑', rarity: 'legendary', dungeon: 'fire',
-			stats: { magicPower: 20, magicControl: 14, magicDefence: 10 },
+			stats: { magicPower: 20, magicControl: 14, magicDefence: 10, strength: 10 },
 			desc: 'Rewards constant aggression.',
 			effectText: 'Unrelenting Flame: While continuously casting spells, gain one stack of Heat every 2 seconds. Each stack gives +3% spell damage. Maximum 5 stacks. Taking no action for 4 seconds removes all stacks.',
 			effects: [{ type: 'heatStacks', everySec: 2, perStack: 0.03, max: 5, dropSec: 4 }],
@@ -157,7 +157,7 @@
 		}),
 		ashen_pact: I({
 			name: 'Ashen Pact', type: 'relic', icon: '🖤', rarity: 'cursed', dungeon: 'fire',
-			stats: { magicPower: 30, magicControl: 18, manaRegen: 10 },
+			stats: { magicPower: 30, magicControl: 18, manaRegen: 10, strength: 14 },
 			desc: 'Your energy is fuel. Cast, deal damage, recover energy, cast again.',
 			effectText: 'Curse — Your Energy Is Fuel: You no longer regenerate energy normally. Spell damage restores 8% of the damage dealt as energy. Reaching 0 energy drains 4 HP every second until you regain some.',
 			curseText: 'Normal energy regeneration is disabled. At 0 energy you lose HP every second.',
@@ -177,7 +177,7 @@
 		}),
 		frostbound_vestments: I({
 			name: 'Frostbound Vestments', type: 'robe', icon: '🧥', rarity: 'common', dungeon: 'ice',
-			stats: { magicDefence: 5, manaRegen: 3 },
+			stats: { magicDefence: 5, manaRegen: 3, strength: 3 },
 			desc: 'Simple icy protection.',
 			effectText: 'None.',
 			effects: [], tags: ['ice', 'robe'], gemSlots: 2, variantPool: ['defensive']
@@ -254,7 +254,7 @@
 		}),
 		colossus_mantle: I({
 			name: 'Colossus Mantle', type: 'robe', icon: '🏔️', rarity: 'epic', dungeon: 'ice',
-			stats: { magicDefence: 17, magicControl: 8, manaRegen: 7 },
+			stats: { magicDefence: 17, magicControl: 8, manaRegen: 7, strength: 14 },
 			desc: 'Extremely good for difficult content without being universally offensive.',
 			effectText: 'Frozen Resolve: The first time you would fall below 25% HP, gain a shield equal to 20% of max HP. Cooldown: 60 seconds.',
 			effects: [{ type: 'panicShield', hpPct: 0.25, shieldPct: 0.20, cooldownSec: 60 }],
@@ -281,7 +281,7 @@
 		}),
 		absolute_zero_raiment: I({
 			name: 'Absolute Zero Raiment', type: 'robe', icon: '🧊', rarity: 'legendary', dungeon: 'ice',
-			stats: { magicDefence: 21, magicControl: 12, manaRegen: 10 },
+			stats: { magicDefence: 21, magicControl: 12, manaRegen: 10, strength: 16 },
 			desc: 'Niche: deliberate turret/caster builds.',
 			effectText: 'Stillness: If you remain within a small area for 2 seconds, gain 15% damage reduction, +15% Energy Control, and +20% energy regeneration. Moving removes the bonus.',
 			effects: [{ type: 'stillness', stillSec: 2, radius: 36, dr: 0.15, controlPct: 0.15, manaRegenPct: 0.20 }],
@@ -310,7 +310,7 @@
 		}),
 		mosswoven_cloak: I({
 			name: 'Mosswoven Cloak', type: 'robe', icon: '🧥', rarity: 'common', dungeon: 'earth',
-			stats: { magicDefence: 5, magicControl: 3 },
+			stats: { magicDefence: 5, magicControl: 3, strength: 3 },
 			desc: 'Soft moss armor from the deep canopy.',
 			effectText: 'None.',
 			effects: [], tags: ['jungle', 'robe'], gemSlots: 2, variantPool: ['vinebound']
@@ -324,7 +324,7 @@
 		}),
 		thornbranch_staff: I({
 			name: 'Thornbranch Staff', type: 'staff', icon: '🌵', rarity: 'uncommon', dungeon: 'earth',
-			stats: { magicPower: 8, magicControl: 4, manaRegen: 3 },
+			stats: { magicPower: 8, magicControl: 4, manaRegen: 3, strength: 4 },
 			desc: 'Jungle\'s aggressive short-range caster.',
 			effectText: 'Your hits on enemies within 110 px deal +8% damage.',
 			effects: [{ type: 'closeRangeDamage', range: 110, damage: 0.08 }],
@@ -360,7 +360,7 @@
 		}),
 		canopywalker_cloak: I({
 			name: 'Canopywalker Cloak', type: 'robe', icon: '🍃', rarity: 'rare', dungeon: 'earth',
-			stats: { magicDefence: 9, magicControl: 8, manaRegen: 6 },
+			stats: { magicDefence: 9, magicControl: 8, manaRegen: 6, strength: 7 },
 			desc: 'Interesting risk/reward rather than a flat speed increase.',
 			effectText: 'Gain +12% movement speed while above 75% HP. When below 30% HP, instead gain +12% movement speed. The middle health range has no bonus.',
 			effects: [{ type: 'edgeMoveSpeed', highPct: 0.75, lowPct: 0.30, bonus: 0.12 }],
@@ -414,7 +414,7 @@
 		}),
 		mantle_of_the_wild_hunt: I({
 			name: 'Mantle of the Wild Hunt', type: 'robe', icon: '🦌', rarity: 'legendary', dungeon: 'earth',
-			stats: { magicDefence: 18, magicPower: 14, magicControl: 10 },
+			stats: { magicDefence: 18, magicPower: 14, magicControl: 10, strength: 15 },
 			desc: 'Creates a range-switching playstyle.',
 			effectText: 'Predator: After damaging an enemy from more than moderate distance, gain +15% movement speed for 3 seconds. After damaging an enemy from very close range, gain +15% spell damage for 3 seconds. Only one bonus can be active at a time.',
 			effects: [{ type: 'predator', farRange: 220, nearRange: 120, speed: 0.15, damage: 0.15, durationSec: 3 }],

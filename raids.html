@@ -1,13 +1,14 @@
 <!doctype html>
 <html lang="en">
 <head>
+<script src="loading-screen.js?v=1"></script>
 	<meta charset="utf-8" />
 	<meta name="viewport" content="width=device-width,initial-scale=1" />
 	<title>Magic Battle — Raid Bosses</title>
 	<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 	<script src="supabase-config.js?v=3"></script>
 	<script src="cloud-save.js?v=5"></script>
-	<script src="coop-net.js?v=4"></script>
+	<script src="coop-net.js?v=5"></script>
 	<style>
 		:root {
 			--bg-top: #1a0f2e;
@@ -187,6 +188,20 @@
 				<button style="background:linear-gradient(135deg,#3a5a7a,#8ec8ff);color:#fff;" onclick="location.href='dungeon.html?mode=challenger'">👊 Challenge Boss</button>
 				<div class="btn-row"><button class="coop-btn" type="button" onclick="openCoop('challenger')">🤝 Co-op Raid</button></div>
 			</div>
+			<div class="boss-card" style="border-color:rgba(160,140,255,0.55);box-shadow:0 0 28px rgba(150,130,255,0.14);">
+				<div class="boss-icon">🌠</div>
+				<h2 style="color:#b9a8ff;">Survival</h2>
+				<div class="boss-title">The Starfall Sanctum — endless waves</div>
+				<p>Hold the Sanctum against waves that never stop growing. A boss every 5 waves, a checkpoint every 25, and four hidden powers waiting at waves 100, 150, 200 and 250. After 250 the bosses return and the horde keeps getting stronger.</p>
+				<div class="boss-stats">
+					<span>♾️ Endless</span>
+					<span>🚩 Checkpoint / 25</span>
+					<span>🤝 1–4 players</span>
+				</div>
+				<div style="margin-bottom:10px;font-size:13px;color:#cfc6ff;">Start at: <select id="survStart" style="background:#171233;color:#fff;border:1px solid rgba(160,140,255,0.5);border-radius:6px;padding:4px 8px;"></select></div>
+				<button style="background:linear-gradient(135deg,#4a3aa8,#a98cff);color:#fff;" onclick="location.href=survUrl()">🌠 Enter the Sanctum</button>
+				<div class="btn-row"><button class="coop-btn" type="button" onclick="openCoop('survival')">🤝 Co-op Survival</button></div>
+			</div>
 		</section>
 
 		<div class="multiplayer-note">
@@ -220,7 +235,21 @@
 	const COOP_SLOT_NAMES  = ['Blue', 'Green', 'Red', 'Yellow'];
 	let coopSearch = null;
 	let coopMode = null;
-	const RAID_NAMES = { raid:'Void Arbiter', chronoraid:'Chrono Tyrant', zenith:'Zenith', challenger:'Grand Challenger' };
+	const RAID_NAMES = { raid:'Void Arbiter', chronoraid:'Chrono Tyrant', zenith:'Zenith', challenger:'Grand Challenger', survival:'Survival' };
+
+	/* ===== Survival start-wave picker (checkpoint progress is kept by the game in localStorage) ===== */
+	function survProgress(){ try { return Object.assign({ checkpoint:1, best:0 }, JSON.parse(localStorage.getItem('magicBattle_survivalProgress') || '{}')); } catch(e){ return { checkpoint:1, best:0 }; } }
+	function survStartWave(){ const el = document.getElementById('survStart'); return el ? Math.max(1, parseInt(el.value, 10) || 1) : 1; }
+	function survUrl(){ const w = survStartWave(); return 'dungeon.html?mode=survival' + (w > 1 ? '&sw=' + w : ''); }
+	(function(){
+		const el = document.getElementById('survStart'); if(!el) return;
+		const pr = survProgress(), ck = Math.max(1, pr.checkpoint | 0);
+		let h = '';
+		if(ck > 1) h += '<option value="' + ck + '">Checkpoint — wave ' + ck + '</option>';
+		h += '<option value="1">Wave 1</option>';
+		el.innerHTML = h;
+		if(pr.best > 0) el.title = 'Best wave: ' + pr.best;
+	})();
 
 	function escapeHtml(s){
 		return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -275,7 +304,7 @@
 	function hostCoop(){
 		if(!window.CoopNet || !CoopNet.enabled()) return;
 		if(coopSearch){ try{ coopSearch.cancel(); }catch(e){} }
-		coopSearch = CoopNet.hostRoom({ kind:'raid', mode: coopMode }, coopHandlers());
+		coopSearch = CoopNet.hostRoom({ kind:'raid', mode: coopMode, sw: coopMode === 'survival' ? survStartWave() : 1 }, coopHandlers());
 		document.getElementById('coopMain').style.display = 'none';
 		document.getElementById('coopCodeWrap').style.display = 'block';
 		document.getElementById('coopCodeDisplay').textContent = coopSearch.code;

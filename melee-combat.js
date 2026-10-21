@@ -408,9 +408,17 @@
 			this.readInput();
 		},
 
+		/* R art cooldowns (seconds), by how strong each weapon's special is */
+		specialCooldownSec(id){
+			const t = { spear:2, staff:2, gauntlets:6, daggers:4, whip:4, chain:4, scythe:5, sword:6, glaive:7, greatsword:9, hammer:10 };
+			return t[id] || 5;
+		},
+		specialReady(){ return !((this.specialCd && this.specialCd[this.weaponId]) > 0); },
+
 		tickTimers(){
 			if(this.landSquash>0) this.landSquash = Math.max(0, this.landSquash-0.12);
 			if(this.hitstop>0) return;
+			if(this.specialCd){ for(const k in this.specialCd) if(this.specialCd[k]>0) this.specialCd[k]--; }
 			if(this.dash.cd>0) this.dash.cd--;
 			if(this.parry.cd>0) this.parry.cd--;
 			if(this.buffer>0) this.buffer--;
@@ -450,7 +458,7 @@
 			const wpn = this.weapon();
 			if(!this.armed){ this.charge = 0; }
 			else if(wpn.chargeSpecial){
-				const holding = !!keys['r'] && this.hitstun<=0 && this.hitstop<=0 && !this.atk && this.parry.t<=0 && this.dash.t<=0;
+				const holding = !!keys['r'] && this.specialReady() && this.hitstun<=0 && this.hitstop<=0 && !this.atk && this.parry.t<=0 && this.dash.t<=0;
 				if(holding) this.charge = Math.min(22, (this.charge||0)+1);
 				else if(this._rWas && this.charge>0 && this.hitstop<=0 && this.hitstun<=0){
 					const stored = this.charge;
@@ -587,6 +595,10 @@
 			}
 			if(motion==='hook'){
 				player.vx = ax * 1.2;
+				return true;
+			}
+			if(motion==='grabSlam'){
+				player.vx = this.atk.grab ? player.vx*0.2 : f * (this.phase==='startup' ? 4.5 : 1.5);
 				return true;
 			}
 			if(motion==='whip'){
@@ -769,6 +781,17 @@
 			else key = 'g1';
 			const base = moves[key];
 			if(!base) return;
+			const isArt = key==='special' || key==='specialAir';
+			if(isArt){
+				if(!this.specialReady()){
+					const left = (this.specialCd[this.weaponId]||0) / 60;
+					if(!this._cdNoteAt || performance.now()-this._cdNoteAt > 900){ this._cdNoteAt = performance.now(); if(typeof notify==='function') notify(base.name+' ready in '+left.toFixed(1)+'s'); }
+					this.buffer = 0; this.bufferKind = 'combo'; this.charge = 0;
+					return;
+				}
+				(this.specialCd || (this.specialCd = {}))[this.weaponId] = Math.round(this.specialCooldownSec(this.weaponId)*60);
+				this.specialCdMax = this.specialCd[this.weaponId];
+			}
 			const def = this.modifyAttack(base);
 			if(opts && opts.charge && def.chargeable){
 				const u = Math.max(0.42, Math.min(1, opts.charge/22));
@@ -780,7 +803,14 @@
 				def._charge = u;
 			}
 			this.charge = 0;
-			const aim = this.sampleAim();
+			let aim = this.sampleAim();
+			let cursor = null;
+			if(this.weapon().style==='whip' || this.weapon().style==='chain'){
+				cursor = this.whipCursor();
+				const ox = player.x+player.w/2, oy = player.y+player.h*0.42;
+				const L = Math.hypot(cursor.x-ox, cursor.y-oy) || 1;
+				aim = { x:(cursor.x-ox)/L, y:(cursor.y-oy)/L };
+			}
 			if(Math.abs(aim.x)>0.16) player.facing = aim.x>0 ? 1 : -1;
 			this.atk = {
 				id: attackSerial++,
@@ -792,6 +822,7 @@
 				hit: new Set(),
 				pulse: 0,
 				hopped: false,
+				cursor: cursor,
 				aim: aim
 			};
 			this.phase = 'startup';
@@ -829,6 +860,7 @@
 
 		endAttack(){
 			const atk = this.atk;
+			if(atk && atk.grab) this.releaseGrab(atk);
 			this.atk = null;
 			this.phase = '';
 			if(atk) emit('attackEnd', { attack:atk.def, confirmed:atk.confirmed, missed:atk.missed });
@@ -957,6 +989,7 @@
 				this.resolveState();
 				return;
 			}
+			if(this.atk && this.atk.grab) this.tickGrab();
 			if(this.atk){
 				if(this.atk.def.aerial && player.onGround && this.phase!=='startup'){
 					this.hitscan();
@@ -1018,12 +1051,18 @@
 					this.atk.hit = new Set();
 				}
 			}
-			const box = this.strikeBox(def);
+			if(def.motion==='grabSlam'){
+				if(this.atk.grab) return;
+				if(this.atk.t - def.startup > 9){ this.atk.t = def.startup + def.active; return; }      // nothing seized: straight to recovery
+			}
+			const boxes = this.strikeBoxes(def);      // two pieces when the weapon is passing through a portal
 			const list = this.targets();
 			for(let i=0;i<list.length;i++){
 				const en = list[i];
 				if(!en || en.dead || this.atk.hit.has(en)) continue;
-				if(!overlap(box, en)) continue;
+				let touch = false;
+				for(let b=0;b<boxes.length;b++) if(overlap(boxes[b], en)){ touch = true; break; }
+				if(!touch) continue;
 				this.atk.hit.add(en);
 				this.connect(en);
 			}
@@ -1280,7 +1319,7 @@
 			const aim = this.hitAimVector(def);
 			const tx = Math.abs(aim.x)>0.02 ? (rect.w*0.5)/Math.abs(aim.x) : 1e9;
 			const ty = Math.abs(aim.y)>0.02 ? (rect.h*0.5)/Math.abs(aim.y) : 1e9;
-			const reach = Math.min(tx, ty)*0.78;
+			const reach = this.whipPoint() ? 0 : Math.min(tx, ty)*0.78;      // a whip's tip is the cursor point itself
 			const cx = rect.x+rect.w/2, cy = rect.y+rect.h/2;
 			const thick = Math.min(rect.w, rect.h)*(def.sweep ? 0.62 : 0);
 			const count = def.sweep ? 5 : 1;
@@ -1321,9 +1360,14 @@
 			// a Spatial-reinforced weapon strikes through a portal at the cursor
 			const portal = !noPortal && this.portalStrike ? this.portalStrike() : null;
 			if(portal){ cx = portal.x; cy = portal.y; }
+			const whipAt = !portal ? this.whipPoint() : null;      // the whip lashes where the cursor is (within its reach)
+			if(whipAt){ cx = whipAt.x; cy = whipAt.y; }
 			let long = Math.max(18, hb.w||36);
 			let thick = Math.max(14, hb.h||24);
-			if(def.pin){
+			if(whipAt){
+				long = Math.max(44, (hb.w||60)*0.7);
+				thick = Math.max(26, (hb.h||20)*1.5);
+			}else if(def.pin){
 				long = Math.max(36, hb.w||64);
 				thick = Math.max(28, hb.h||40);
 			}else if(def.sweep){
@@ -1407,6 +1451,7 @@
 			this.hitstop = Math.max(this.hitstop, def.hitstop||0);
 			en._meleeFreeze = Math.max(en._meleeFreeze||0, def.hitstop||0);
 			if(def.attackType==='launcher' && reaction==='launch') this.bonusJump = 1;
+			if(def.motion==='grabSlam') this.beginGrab(en, reaction);
 			emit('attackHit', { event:ev, reaction:reaction, target:en });
 			if(def.poiseDamage>=4 || def.attackType==='heavy') emit('heavyHit', { event:ev, target:en });
 			if(reaction==='stagger') emit('enemyStagger', { target:en, event:ev });
@@ -1837,6 +1882,10 @@
 			if(this.weapon() && this.weapon().magicItem) o.hideWeapon = true;      // drawn by the magic, as the compressed energy itself
 			const portal = !o.hideWeapon && style && style !== 'whip' && style !== 'chain' && style !== 'gauntlets' && this.portalStrike ? this.portalStrike() : null;
 			if(portal && portal.active) o.portal = { x: portal.x - camera.x, y: portal.y - camera.y };
+			else if(style && !o.hideWeapon && style !== 'gauntlets'){
+				const cut = this.portalCut();
+				if(cut) o.portalCut = { cx: cut.cx - camera.x, cy: cut.cy - camera.y, ex: cut.cx + cut.ox - camera.x, ey: cut.cy + cut.oy - camera.y };
+			}
 			if(style === 'whip' || style === 'chain'){
 				const self = this;
 				o.weaponDraw = function(c){ if(style === 'whip') self.drawWhip(c); else self.drawChain(c); };
@@ -1847,7 +1896,10 @@
 				this._rigHand = res.hand;
 				this._rigTip = style ? res.tip : null;
 				this._rigPortalIn = res.portalIn || null;
-				if(res.tip){
+				if(!res.tip && (style==='whip' || style==='chain') && this.atk && this._rigHand && this.atk.cursor){
+					const ext = this.flexExtend().ext, hx = this._rigHand.x + camera.x, hy = this._rigHand.y + camera.y;
+					this.rememberTip(hx + (this.atk.cursor.x-hx)*ext, hy + (this.atk.cursor.y-hy)*ext, this.phase==='active');
+				} else if(res.tip){
 					const hot = this.phase==='active' || this.phase==='startup' || this.phase==='cancel';
 					const tp = res.portalTip || res.tip;
 					if(!!res.portalTip !== !!this._trailPortal){ this.trail.length = 0; this._trailPortal = !!res.portalTip; }      // no streak between hand and portal
@@ -1864,6 +1916,15 @@
 			else{
 			this.paintTrail(ctx);
 			this.paintSpecialFx(ctx);
+			if(this._slamRing){
+				const r = this._slamRing; r.t++;
+				if(r.t>18) this._slamRing = null;
+				else{
+					const u = r.t/18;
+					ctx.save(); ctx.strokeStyle = 'rgba(255,214,140,'+(0.85*(1-u))+')'; ctx.lineWidth = 6*(1-u)+1;
+					ctx.beginPath(); ctx.ellipse(r.x-camera.x, r.y-camera.y-4, r.r*u, r.r*u*0.28, 0, 0, Math.PI*2); ctx.stroke(); ctx.restore();
+				}
+			}
 			if(this.active && this.debug) this.paintDebug(ctx);
 			this.paintHud(ctx);
 			}
@@ -2203,28 +2264,39 @@
 
 		paintHud(ctx){
 			if(typeof canvas==='undefined') return;
+			const W = canvas.width, H = canvas.height;
+			const rr = (x,y,w,h,r)=>{ ctx.beginPath(); if(ctx.roundRect) ctx.roundRect(x,y,w,h,r); else ctx.rect(x,y,w,h); };
 			ctx.save();
-			ctx.font = '12px Arial, sans-serif';
 			ctx.textAlign = 'left';
 			const armed = this.armed;
-			const label = (this.inDojo ? 'Training yard  ·  ' : '') + (armed ? '⚔ ' + this.weapon().name : '✦ Spell ready');
-			const help = armed ? 'Click / J combo   W/S + click direction   R special   Shift dash   Q / right-click parry'
-				: 'Click cast   Shift dash   Q / right-click parry   Slots 1-0 switch spell / weapon';
-			const w = Math.min(canvas.width - 24, Math.max(ctx.measureText(help).width, ctx.measureText(label).width) + 28);
-			ctx.fillStyle = 'rgba(8,10,18,0.55)';
-			ctx.fillRect(12, canvas.height-56, w, 42);
-			ctx.fillStyle = armed ? '#ffe6b0' : '#cfe8ff';
-			ctx.fillText(label, 20, canvas.height-38);
-			ctx.fillStyle = '#aab6d4';
-			ctx.fillText(help, 20, canvas.height-21);
-			const cd = this.dash.cd / (DASH.cooldown+DASH.duration);
-			ctx.fillStyle = 'rgba(255,255,255,0.2)';
-			ctx.fillRect(canvas.width-140, canvas.height-36, 110, 8);
-			ctx.fillStyle = cd>0 ? '#8aa0c8' : '#d7ecff';
-			ctx.fillRect(canvas.width-140, canvas.height-36, 110*(1-Math.min(1, cd)), 8);
-			ctx.fillStyle = '#d7ecff';
-			ctx.textAlign = 'right';
-			ctx.fillText('Dash', canvas.width-146, canvas.height-28);
+			// bottom-right ability chips (sit under the status panel)
+			const chip = (cx, key, name, frac, text, col, ready)=>{
+				const cw = 118, chh = 28;
+				ctx.fillStyle = 'rgba(10,12,22,0.62)'; rr(cx, H - chh - 14, cw, chh, 8); ctx.fill();
+				ctx.save(); rr(cx, H - chh - 14, cw, chh, 8); ctx.clip();
+				ctx.fillStyle = ready ? col : 'rgba(255,255,255,0.22)';
+				ctx.globalAlpha = ready ? 0.34 : 0.5;
+				ctx.fillRect(cx, H - chh - 14, cw * frac, chh);
+				ctx.globalAlpha = 1; ctx.restore();
+				ctx.strokeStyle = ready ? col : 'rgba(255,255,255,0.14)'; ctx.lineWidth = 1.2;
+				ctx.shadowColor = ready ? col : 'transparent'; ctx.shadowBlur = ready ? 8 : 0;
+				rr(cx+.5, H - chh - 13.5, cw-1, chh-1, 8); ctx.stroke(); ctx.shadowBlur = 0;
+				ctx.fillStyle = ready ? col : '#6c7794'; rr(cx+6, H - chh - 8, 18, 18, 4); ctx.fill();
+				ctx.fillStyle = '#10131f'; ctx.font = 'bold 11px Arial'; ctx.textAlign = 'center';
+				ctx.fillText(key, cx+15, H - chh + 5);
+				ctx.textAlign = 'left'; ctx.font = 'bold 12px Arial';
+				ctx.fillStyle = ready ? '#fff' : '#aeb7cf';
+				ctx.fillText(name, cx+30, H - chh + 1);
+				ctx.font = '10px Arial'; ctx.fillStyle = ready ? col : '#8f98b3';
+				ctx.fillText(text, cx+30, H - chh + 12);
+			};
+			const dcd = Math.min(1, this.dash.cd / (DASH.cooldown+DASH.duration));
+			let cx = W - 16 - 118;
+			chip(cx, '⇧', 'Dash', 1 - dcd, dcd>0 ? 'recharging' : 'ready', '#8fd0ff', dcd<=0);
+			if(armed){
+				const left = (this.specialCd && this.specialCd[this.weaponId]) || 0, max = Math.max(1, Math.round(this.specialCooldownSec(this.weaponId)*60));
+				chip(cx - 126, 'R', 'Special', 1 - Math.min(1, left/max), left>0 ? (left/60).toFixed(1)+'s' : 'ready', '#ffcf7a', left<=0);
+			}
 			ctx.restore();
 		}
 	};
@@ -2725,6 +2797,228 @@
 		ctx.restore();
 	};
 
+
+	/* ---------------- whip: lashes at the cursor, up to a maximum reach ---------------- */
+	const WHIP_RANGE = 360, CHAIN_RANGE = 360, WHIP_MIN = 34;
+	MeleeMode.whipCursor = function(){
+		const px = player.x + player.w/2, py = player.y + player.h*0.42;
+		const f = player.facing || 1;
+		let mx = (typeof mouseScreenX==='number') ? mouseScreenX + camera.x : px + f*120;
+		let my = (typeof mouseScreenY==='number') ? mouseScreenY + camera.y : py;
+		let dx = mx - px, dy = my - py;
+		let d = Math.hypot(dx, dy);
+		if(d < 6){ dx = f; dy = 0; d = 1; }
+		const reach = (this.weapon() && this.weapon().style==='chain') ? CHAIN_RANGE : WHIP_RANGE;
+		const dd = Math.max(WHIP_MIN, Math.min(reach, d));
+		let x = px + dx/d*dd, y = py + dy/d*dd;
+		if(typeof projectilePointBlocked==='function'){          // stops at a wall instead of lashing through it
+			for(let i=12; i>=0 && projectilePointBlocked(x, y); i--){ x = px + (x-px)*i/12; y = py + (y-py)*i/12; }
+		}
+		return { x:x, y:y, range:reach };
+	};
+	/* the point the current whip attack lands on (follows the cursor while winding up, then stays put) */
+	MeleeMode.whipPoint = function(){
+		const atk = this.atk;
+		if(!atk || !this.armed || !atk.cursor) return null;
+		if(this.phase==='startup'){
+			atk.cursor = this.whipCursor();
+			const ox = player.x+player.w/2, oy = player.y+player.h*0.42;
+			const L = Math.hypot(atk.cursor.x-ox, atk.cursor.y-oy) || 1;
+			atk.aim = { x:(atk.cursor.x-ox)/L, y:(atk.cursor.y-oy)/L };
+		}
+		return atk.cursor;
+	};
+
+	/* ---------------- portals: a swinging weapon goes through any portal its blade or hitbox touches ---------------- */
+	MeleeMode.worldPortals = function(){
+		const W = (typeof MAGIC_WORLD!=='undefined') ? MAGIC_WORLD : null;
+		if(!W || !W.bodies || !W.bodies.length) return [];
+		const t = W.time || 0, out = [];
+		for(let i=0;i<W.bodies.length;i++){
+			const b = W.bodies[i], sp = b && b.alive && b.spatial;
+			if(!sp || sp.kind!=='portal' || sp.blocked || sp.masters || sp.home) continue;      // a one-way portal home is not a doorway for a weapon
+			const k = Math.max(0, Math.min(1, (sp.end - t)/1.2)) * Math.max(0, Math.min(1, (t - sp.born)/0.25));
+			if(k < 0.3) continue;
+			const r = (sp.r || 20) * (0.4 + 0.6*k);
+			out.push({ a:{x:b.x, y:b.y}, b:{x:sp.x1, y:sp.y1}, rx:r*0.62, ry:r });
+		}
+		return out;
+	};
+	function ellipseTouchesBox(e, c, box){
+		const nx = Math.max(box.x, Math.min(c.x, box.x+box.w));
+		const ny = Math.max(box.y, Math.min(c.y, box.y+box.h));
+		const dx = (nx-c.x)/e.rx, dy = (ny-c.y)/e.ry;
+		return dx*dx + dy*dy <= 1;
+	}
+	/* first t in [0,1] where the segment H→T enters the ellipse (0 if it starts inside); null if it never does */
+	function segmentEntersEllipse(H, T, e, c){
+		const hx = (H.x-c.x)/e.rx, hy = (H.y-c.y)/e.ry, dx = (T.x-H.x)/e.rx, dy = (T.y-H.y)/e.ry;
+		const A = dx*dx+dy*dy;
+		if(A < 1e-9) return null;
+		if(hx*hx+hy*hy <= 1) return 0;
+		const B = 2*(hx*dx+hy*dy), C = hx*hx+hy*hy-1, disc = B*B-4*A*C;
+		if(disc < 0) return null;
+		const t = (-B - Math.sqrt(disc)) / (2*A);
+		return (t >= 0 && t <= 1) ? t : null;
+	}
+	/* where the swinging weapon crosses into a portal: {cx,cy} the cut point on the blade, {ox,oy} how far the far part is carried, {dx,dy} the blade direction */
+	MeleeMode.portalCut = function(def){
+		if(!this.armed || !this.atk || !this._rigHand) return null;
+		if(this.phase!=='startup' && this.phase!=='active' && this.phase!=='cancel') return null;
+		const portals = this.worldPortals();
+		if(!portals.length) return null;
+		if(this.portalStrike && this.portalStrike()) return null;      // a Spatial-reinforced weapon already strikes through its own portal
+		def = def || this.atk.def;
+		const H = { x:this._rigHand.x + camera.x, y:this._rigHand.y + camera.y };
+		const box = this.strikeBox(def, true);
+		let T;
+		if(this._rigTip) T = { x:this._rigTip.x + camera.x, y:this._rigTip.y + camera.y };
+		else T = { x:box.x + box.w/2, y:box.y + box.h/2 };
+		const dx = T.x-H.x, dy = T.y-H.y, len = Math.hypot(dx, dy);
+		if(len < 4) return null;
+		let best = null;
+		for(let i=0;i<portals.length;i++){
+			const p = portals[i];
+			for(let side=0; side<2; side++){
+				const E = side ? p.b : p.a, X = side ? p.a : p.b;
+				let t = segmentEntersEllipse(H, T, p, E);
+				if(t == null){
+					if(!ellipseTouchesBox(p, E, box)) continue;
+					t = ((E.x-H.x)*dx + (E.y-H.y)*dy) / (len*len);      // the hitbox reaches it even though the blade line misses: cut where the portal is
+				}
+				t = Math.max(0.12, Math.min(0.98, t));
+				if(!best || t < best.t) best = { t:t, cx:H.x + dx*t, cy:H.y + dy*t, ox:X.x-E.x, oy:X.y-E.y, dx:dx/len, dy:dy/len };
+			}
+		}
+		return best;
+	};
+	/* the hit area, split where the weapon is passing through a portal: the near piece stays, the far piece comes out of the exit */
+	MeleeMode.strikeBoxes = function(def){
+		const base = this.strikeBox(def);
+		const list = [base];
+		if(this.phase==='active' && this.whipPoint()){      // the cord itself hits what it passes through
+			const hx = player.x+player.w/2, hy = player.y+player.h*0.42, c = this.atk.cursor;
+			const L = Math.hypot(c.x-hx, c.y-hy), n = Math.floor(L/34);
+			for(let i=1;i<n;i++){ const u = i/n; list.push({ x:hx+(c.x-hx)*u-14, y:hy+(c.y-hy)*u-14, w:28, h:28 }); }
+		}
+		if(this.phase!=='active') return list;
+		const cut = this.portalCut(def);
+		if(!cut) return list;
+		const res = [];
+		for(const bx of list) this.splitBox(bx, cut, res);
+		return res.length ? res : list;
+	};
+	MeleeMode.splitBox = function(base, cut, res){
+		const poly = [{x:base.x,y:base.y},{x:base.x+base.w,y:base.y},{x:base.x+base.w,y:base.y+base.h},{x:base.x,y:base.y+base.h}];
+		const side = (p) => (p.x-cut.cx)*cut.dx + (p.y-cut.cy)*cut.dy;
+		const clip = (keepFar) => {
+			const out = [];
+			for(let i=0;i<poly.length;i++){
+				const a = poly[i], b = poly[(i+1)%poly.length];
+				const sa = side(a)*(keepFar?1:-1), sb = side(b)*(keepFar?1:-1);
+				if(sa >= 0) out.push(a);
+				if((sa >= 0) !== (sb >= 0)){ const u = sa/(sa-sb); out.push({ x:a.x+(b.x-a.x)*u, y:a.y+(b.y-a.y)*u }); }
+			}
+			if(out.length < 3) return null;
+			let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+			for(const p of out){ x0=Math.min(x0,p.x); y0=Math.min(y0,p.y); x1=Math.max(x1,p.x); y1=Math.max(y1,p.y); }
+			return (x1-x0 > 1 && y1-y0 > 1) ? { x:x0, y:y0, w:x1-x0, h:y1-y0 } : null;
+		};
+		const near = clip(false), far = clip(true);
+		if(near) res.push(near);
+		if(far) res.push({ x:far.x+cut.ox, y:far.y+cut.oy, w:far.w, h:far.h });
+	};
+
+
+	/* ---------------- Gauntlets R: seize an enemy, lift it, stun it, slam it into the ground ---------------- */
+	const GRAB = { lift:14, hold:7, slamDmg:84, shockDmg:40, shockR:150, stun:90 };
+	MeleeMode.beginGrab = function(en, reaction){
+		const atk = this.atk; if(!atk || atk.grab) return;
+		const big = this.poiseOf(en) >= 12;      // a boss cannot be lifted: it just eats the full slam where it stands
+		if(big){
+			this.slamDamage(en, GRAB.slamDmg*0.8, 'Seize and Slam');
+			en.stunTimer = Math.max(en.stunTimer||0, 24);
+			this.slamFx(en.x+en.w/2, en.y+en.h, 90);
+			atk.t = atk.def.startup + atk.def.active;
+			return;
+		}
+		en._kbTimer = 0; en._kbVx = 0; en._kbVy = 0; en.vx = 0; en.vy = 0;
+		en.stunTimer = Math.max(en.stunTimer||0, 12);
+		atk.grab = { en:en, t:0, phase:'lift', sx:en.x, sy:en.y, wasFlying: en.flying };
+		atk.confirmed = true;
+		if(typeof dmgNumbers!=='undefined') dmgNumbers.push({x:en.x+en.w/2,y:en.y-18,text:'SEIZED',age:0,color:'#ffd27a'});
+	};
+	MeleeMode.releaseGrab = function(atk){
+		const g = atk && atk.grab; if(!g) return;
+		atk.grab = null;
+		const en = g.en; if(en){ en._meleeHeld = false; if(g.phase!=='done') en.stunTimer = Math.max(en.stunTimer||0, 20); }
+	};
+	MeleeMode.slamDamage = function(en, amount, name){
+		const aim = (this.atk && this.atk.aim) || { x:player.facing||1, y:0 };
+		const ev = { source:player, target:en, amount:amount, direction:player.facing||1, knockback:{x:0,y:0,duration:8}, attackType:'heavy', attackId:this.atk?this.atk.id:0,
+			weaponId:this.weapon().id, poiseDamage:6, tags:['physical','melee'], name:name||'Slam', pull:null, pullPower:0, interrupt:false, bounce:false };
+		for(let i=0;i<this.damageListeners.length;i++){ try{ this.damageListeners[i](ev); }catch(err){ console.error(err); } }
+		this.deal(en, Math.max(0, ev.amount), ev);
+		en.flash = Math.max(en.flash||0, 10);
+		if(typeof dmgNumbers!=='undefined') dmgNumbers.push({x:en.x+en.w/2,y:en.y-10,text:String(Math.round(ev.amount)),age:0,color:'#ffcc66'});
+	};
+	MeleeMode.slamFx = function(x, y, size){
+		if(typeof shakeScreen==='function') shakeScreen(Math.min(18, 8+size/14), 22);
+		if(typeof particles!=='undefined'){
+			for(let i=0;i<26;i++){
+				const a = Math.PI + Math.random()*Math.PI, sp = 2+Math.random()*7;
+				particles.push({ x:x+(Math.random()-0.5)*size, y:y-2, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp*0.8, life:26+Math.random()*18, maxLife:44, r:2+Math.random()*4, color:{ r:200, g:180, b:140 } });
+			}
+		}
+		this._slamRing = { x:x, y:y, t:0, r:GRAB.shockR };
+	};
+	MeleeMode.tickGrab = function(){
+		const atk = this.atk, g = atk && atk.grab; if(!g) return;
+		const en = g.en, f = player.facing||1;
+		if(!en || en.dead){ atk.grab = null; atk.t = atk.def.startup + atk.def.active; return; }
+		g.t++;
+		en._meleeHeld = true; en._kbTimer = 0; en.vx = 0; en.vy = 0;
+		en.stunTimer = Math.max(en.stunTimer||0, 8);
+		const cx = player.x + player.w/2;
+		const feetY = player.y + player.h;
+		const overhead = player.y - en.h - 10;
+		if(g.phase==='lift'){
+			const u = Math.min(1, g.t/GRAB.lift), e = 1-(1-u)*(1-u);
+			const tx = cx + f*10 - en.w/2, ty = (g.sy)*(1-e) + overhead*e;
+			en.x += (tx-en.x)*0.5; en.y += (ty-en.y)*0.5;
+			if(g.t===1 && typeof dmgNumbers!=='undefined') dmgNumbers.push({x:en.x+en.w/2,y:en.y-30,text:'STUNNED',age:0,color:'#aef'});
+			if(g.t>=GRAB.lift){ g.phase='hold'; g.t=0; }
+		}else if(g.phase==='hold'){
+			en.x += ((cx + f*6 - en.w/2) - en.x)*0.5; en.y += (overhead + Math.sin(g.t*1.6)*2 - en.y)*0.5;
+			if(g.t>=GRAB.hold){ g.phase='slam'; g.t=0; g.vy=10; }
+		}else if(g.phase==='slam'){
+			g.vy = Math.min(46, g.vy + 7);
+			const tx = cx + f*(player.w*0.5 + en.w*0.5 + 10) - en.w/2;
+			en.x += (tx-en.x)*0.45;
+			en.y += g.vy;
+			if(en.y + en.h >= feetY || g.t>40){
+				en.y = feetY - en.h;
+				this.slamDamage(en, GRAB.slamDmg, 'Seize and Slam');
+				en.stunTimer = Math.max(en.stunTimer||0, GRAB.stun);
+				en._meleeKind = 'knockdown'; en._meleeTilt = f*0.4;
+				const ex = en.x+en.w/2;
+				const list = this.targets();
+				for(let i=0;i<list.length;i++){
+					const o = list[i]; if(!o || o.dead || o===en) continue;
+					if(Math.hypot(o.x+o.w/2-ex, o.y+o.h-feetY) < GRAB.shockR){
+						this.slamDamage(o, GRAB.shockDmg, 'Slam shock');
+						if(this.poiseOf(o)<12){ o.stunTimer = Math.max(o.stunTimer||0, 40); o._kbVx = Math.sign(o.x+o.w/2-ex||1)*7; o._kbVy = -5; o._kbTimer = 14; }
+					}
+				}
+				this.slamFx(ex, feetY, en.w);
+				this.hitstop = Math.max(this.hitstop, 7);
+				emit('cameraImpulse', { strength:10, kind:'heavy' });
+				g.phase = 'done'; atk.grab = null; en._meleeHeld = false;
+				atk.t = atk.def.startup + atk.def.active;      // into recovery
+			}
+		}
+	};
+
 	MeleeMode.flexExtend = function(){
 		const def = this.atk && this.atk.def;
 		let ext = 0.34;
@@ -2740,42 +3034,57 @@
 		return { tips:tips, ext:ext, sweeping: !!(def && def.sweep) };
 	};
 
+	/* the cord's shape: a wave that runs out along it as it is thrown, then dies down */
+	MeleeMode.cordPoints = function(tip, n, wave){
+		const pts = [];
+		const len = Math.hypot(tip.x, 8 - tip.y) || 1;
+		const nx = -(tip.y-8)/len, ny = (tip.x)/len;
+		const t = (this.frame||0);
+		for(let i=0;i<=n;i++){
+			const u = i/n;
+			const env = Math.sin(u*Math.PI) * wave;
+			const off = env * Math.sin(u*7 - t*0.55) ;
+			pts.push({ x: tip.x*u + nx*off, y: 8 + (tip.y-8)*u + ny*off });
+		}
+		return pts;
+	};
 	MeleeMode.drawWhip = function(ctx){
 		drawPart(ctx, 'weapons', 'whip', null);
 		const flex = this.flexExtend();
 		const tips = flex.tips;
+		const atk = this.atk, hot = this.phase==='active';
+		const age = atk ? Math.max(0, atk.t - atk.def.startup) : 99;
+		const wave = hot ? Math.max(1.5, 14 - age*2.4) : (this.phase==='startup' ? 20*(1-flex.ext+0.15) : (this.phase==='recovery' || this.phase==='cancel' ? 9 : 5));
 		ctx.save();
-		ctx.lineCap = 'round';
-		ctx.strokeStyle = '#e8b15a';
-		ctx.lineWidth = flex.sweeping ? 4.4 : 3.6;
+		ctx.lineCap = 'round'; ctx.lineJoin = 'round';
 		for(let i=0;i<tips.length;i++){
 			const tip = tips[i];
-			ctx.beginPath();
-			ctx.moveTo(0, 8);
-			ctx.quadraticCurveTo(tip.x*0.55, tip.y*0.42, tip.x, tip.y);
-			ctx.stroke();
-		}
-		const mid = tips[(tips.length/2)|0];
-		ctx.strokeStyle = '#fff4d2';
-		ctx.lineWidth = 1.6;
-		ctx.beginPath();
-		ctx.moveTo(0, 10);
-		ctx.lineTo(mid.x, mid.y);
-		ctx.stroke();
-		if(this.phase==='active' || flex.ext>0.9){
-			ctx.fillStyle = '#fff6d0';
-			ctx.strokeStyle = '#ffe27a';
-			ctx.lineWidth = 2.4;
-			const mark = flex.sweeping ? 12 : 14;
-			ctx.beginPath();
-			ctx.arc(mid.x, mid.y, mark, 0, Math.PI*2);
-			ctx.fill();
-			ctx.beginPath();
-			ctx.moveTo(mid.x-mark*1.5, mid.y);
-			ctx.lineTo(mid.x+mark*1.5, mid.y);
-			ctx.moveTo(mid.x, mid.y-mark*1.5);
-			ctx.lineTo(mid.x, mid.y+mark*1.5);
-			ctx.stroke();
+			const n = Math.max(10, Math.min(26, Math.round(Math.hypot(tip.x, tip.y)/12)));
+			const pts = this.cordPoints(tip, n, wave);
+			if(hot){          // glow while it flies
+				ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = 'rgba(255,214,140,0.32)'; ctx.lineWidth = 9;
+				ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); for(let k=1;k<pts.length;k++) ctx.lineTo(pts[k].x, pts[k].y); ctx.stroke(); ctx.restore();
+			}
+			for(let k=1;k<pts.length;k++){          // tapered braid: thick at the grip, a thin tail at the end
+				const u = k/pts.length;
+				ctx.strokeStyle = k%2 ? '#7a4a20' : '#a8692e';
+				ctx.lineWidth = 5.2 - 3.4*u;
+				ctx.beginPath(); ctx.moveTo(pts[k-1].x, pts[k-1].y); ctx.lineTo(pts[k].x, pts[k].y); ctx.stroke();
+			}
+			ctx.strokeStyle = 'rgba(255,236,190,0.75)'; ctx.lineWidth = 1.1;
+			ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y-1); for(let k=1;k<pts.length;k++) ctx.lineTo(pts[k].x, pts[k].y-0.8); ctx.stroke();
+			const e = pts[pts.length-1];
+			ctx.fillStyle = '#3a2210'; ctx.beginPath(); ctx.arc(e.x, e.y, 3.2, 0, Math.PI*2); ctx.fill();          // the popper knot
+			if(hot && age < 7){          // the crack: a flash, a ring and spokes where it lands
+				const u = age/7, r = 10 + u*34;
+				ctx.save(); ctx.globalCompositeOperation = 'lighter';
+				ctx.globalAlpha = 1-u; ctx.strokeStyle = '#fff6d0'; ctx.lineWidth = 3*(1-u)+0.8;
+				ctx.beginPath(); ctx.arc(e.x, e.y, r, 0, Math.PI*2); ctx.stroke();
+				for(let a=0;a<8;a++){ const ang = a*Math.PI/4 + 0.3; ctx.beginPath(); ctx.moveTo(e.x+Math.cos(ang)*r*0.5, e.y+Math.sin(ang)*r*0.5); ctx.lineTo(e.x+Math.cos(ang)*r*1.25, e.y+Math.sin(ang)*r*1.25); ctx.stroke(); }
+				const g = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, 22); g.addColorStop(0, 'rgba(255,248,220,0.9)'); g.addColorStop(1, 'rgba(255,200,100,0)');
+				ctx.fillStyle = g; ctx.beginPath(); ctx.arc(e.x, e.y, 22, 0, Math.PI*2); ctx.fill();
+				ctx.restore();
+			}
 		}
 		ctx.restore();
 	};
@@ -2783,50 +3092,51 @@
 	MeleeMode.drawChain = function(ctx){
 		const flex = this.flexExtend();
 		const tips = flex.sweeping ? [flex.tips[0], flex.tips[(flex.tips.length/2)|0], flex.tips[flex.tips.length-1]] : flex.tips;
+		const atk = this.atk, hot = this.phase==='active';
+		const age = atk ? Math.max(0, atk.t - atk.def.startup) : 99;
+		const t = (this.frame||0);
+		// heavy: the chain hangs and swings a lot while winding up, snaps taut as it lands, then slumps
+		const sag = hot ? Math.max(2, 16 - age*2.2) : (this.phase==='startup' ? 22*(1-flex.ext+0.25) : 12 + Math.sin(t*0.4)*3);
+		ctx.save();
+		ctx.lineCap = 'round'; ctx.lineJoin = 'round';
 		for(let f=0; f<tips.length; f++){
 			const tip = tips[f];
 			const len = Math.max(18, Math.hypot(tip.x, tip.y));
-			let px = 0, py = 6;
-			const n = Math.max(8, Math.min(26, Math.round(len/18)));
-			const sag = flex.sweeping ? 8 : 4+Math.sin((this.frame||0)*0.5)*2;
-			for(let i=1;i<=n;i++){
+			const n = Math.max(8, Math.min(28, Math.round(len/13)));
+			const pts = [];
+			for(let i=0;i<=n;i++){
 				const u = i/n;
-				const x = tip.x*u + Math.sin(u*Math.PI)*sag;
-				const y = 6+(tip.y-6)*u;
-				ctx.save();
-				ctx.translate((px+x)/2, (py+y)/2);
-				ctx.rotate(Math.atan2(x-px, y-py));
-				drawPart(ctx, 'weapons', 'link', null);
-				ctx.restore();
-				px = x; py = y;
+				pts.push({ x: tip.x*u + Math.sin(u*Math.PI)*sag*(tip.y>0?1:-1)*0.6 + Math.sin(u*5 - t*0.4)*(hot?0.5:2.2)*Math.sin(u*Math.PI), y: 6 + (tip.y-6)*u + Math.sin(u*Math.PI)*sag*0.55 });
 			}
-			ctx.save();
-			ctx.translate(px, py);
-			ctx.rotate(Math.atan2(tip.x, tip.y));
-			ctx.translate(0, -16);
-			ctx.scale(1.7, 1.7);
-			drawPart(ctx, 'weapons', 'chain', null);
+			if(hot){
+				ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = 'rgba(200,225,255,0.28)'; ctx.lineWidth = 11;
+				ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); for(let k=1;k<pts.length;k++) ctx.lineTo(pts[k].x, pts[k].y); ctx.stroke(); ctx.restore();
+			}
+			for(let k=1;k<pts.length;k++){          // alternating links: one seen flat, the next on edge
+				const a = pts[k-1], b = pts[k], mx = (a.x+b.x)/2, my = (a.y+b.y)/2, ang = Math.atan2(b.y-a.y, b.x-a.x);
+				ctx.save(); ctx.translate(mx, my); ctx.rotate(ang);
+				const flat = k%2===0, L = 8.6, Wd = flat ? 4.8 : 2.2;
+				ctx.fillStyle = flat ? '#cfd8e4' : '#8d99a8'; ctx.strokeStyle = '#47515f'; ctx.lineWidth = 1.2;
+				ctx.beginPath(); ctx.ellipse(0, 0, L, Wd, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+				if(flat){ ctx.fillStyle = '#4a5463'; ctx.beginPath(); ctx.ellipse(0, 0, L*0.5, Wd*0.45, 0, 0, Math.PI*2); ctx.fill(); }
+				ctx.restore();
+			}
+			const e = pts[pts.length-1], p0 = pts[pts.length-2], ang = Math.atan2(e.y-p0.y, e.x-p0.x);
+			ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(ang);          // the blade head: a barbed spike
+			const grd = ctx.createLinearGradient(0, -7, 0, 7); grd.addColorStop(0, '#f5f9ff'); grd.addColorStop(0.5, '#b9c6d6'); grd.addColorStop(1, '#6f7c8d');
+			ctx.fillStyle = grd; ctx.strokeStyle = '#2f3846'; ctx.lineWidth = 1.4;
+			ctx.beginPath(); ctx.moveTo(30, 0); ctx.lineTo(8, -8); ctx.lineTo(-4, -4); ctx.lineTo(-4, 4); ctx.lineTo(8, 8); ctx.closePath(); ctx.fill(); ctx.stroke();
+			ctx.beginPath(); ctx.moveTo(-2, -4); ctx.lineTo(-10, -12); ctx.lineTo(4, -6); ctx.moveTo(-2, 4); ctx.lineTo(-10, 12); ctx.lineTo(4, 6); ctx.stroke();
 			ctx.restore();
+			if(hot && age < 9){          // a heavy impact: a shock ring and dust at the head
+				const u = age/9;
+				ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 1-u; ctx.strokeStyle = '#e6f2ff'; ctx.lineWidth = 4*(1-u)+1;
+				ctx.beginPath(); ctx.arc(e.x, e.y, 14+u*44, 0, Math.PI*2); ctx.stroke();
+				ctx.beginPath(); ctx.arc(e.x, e.y, 8+u*24, 0, Math.PI*2); ctx.stroke();
+				ctx.restore();
+			}
 		}
-		if(this.phase==='active' || flex.ext>0.9){
-			const mid = tips[(tips.length/2)|0];
-			ctx.save();
-			ctx.translate(mid.x, mid.y);
-			ctx.fillStyle = '#f4f7fb';
-			ctx.strokeStyle = '#d5deea';
-			ctx.lineWidth = 2.6;
-			const mark = flex.sweeping ? 14 : 15;
-			ctx.beginPath();
-			ctx.arc(0, 0, mark, 0, Math.PI*2);
-			ctx.fill();
-			ctx.beginPath();
-			ctx.moveTo(-mark*1.5, 0);
-			ctx.lineTo(mark*1.5, 0);
-			ctx.moveTo(0, -mark*1.5);
-			ctx.lineTo(0, mark*1.5);
-			ctx.stroke();
-			ctx.restore();
-		}
+		ctx.restore();
 	};
 
 	MeleeMode.paintSpecialFx = function(ctx){

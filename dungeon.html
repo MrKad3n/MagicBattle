@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+<script src="loading-screen.js?v=1"></script>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Magic Battle — Dungeon</title>
@@ -60,23 +61,31 @@ canvas{display:block}
 .hb-dot{width:8px;height:8px;border-radius:50%;margin-bottom:2px}
 .hb-name{font-size:9px;color:#bbb;max-width:48px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .hb-mana{font-size:9px;color:#3498db}\n.hb-ult{border-color:rgba(255,170,0,.5);background:rgba(255,170,0,.15)}\n.hb-ult.active{border-color:#ffaa00;background:rgba(255,170,0,.3)}
-#manaWrap{position:fixed;bottom:80px;right:16px;width:220px;z-index:10;pointer-events:none}
-#manaBarBg{width:100%;height:12px;background:rgba(0,0,0,.5);border:1px solid rgba(52,152,219,.4);border-radius:6px;overflow:hidden}
-#manaBarFill{height:100%;background:linear-gradient(90deg,#2980b9,#3498db);border-radius:6px;transition:width .1s}
-#manaText{text-align:center;font-size:11px;color:#5dade2;text-shadow:1px 1px 2px #000;margin-top:2px}
-#totalManaWrap{position:fixed;bottom:142px;right:16px;width:190px;z-index:10;pointer-events:none}
-#totalManaBarBg{width:100%;height:10px;background:rgba(0,0,0,.5);border:1px solid rgba(255,170,0,.4);border-radius:5px;overflow:hidden}
-#totalManaBarFill{height:100%;background:linear-gradient(90deg,#cc8800,#ffaa00);border-radius:5px;transition:width .15s}
-#totalManaText{text-align:center;font-size:10px;color:#ffcc44;text-shadow:1px 1px 2px #000;margin-top:1px}
-#healthWrap{position:fixed;bottom:110px;right:16px;width:220px;z-index:10;pointer-events:none}
-#healthBarBg{width:100%;height:14px;background:rgba(0,0,0,.5);border:1px solid rgba(231,76,60,.4);border-radius:6px;overflow:hidden}
-#healthBarFill{height:100%;background:linear-gradient(90deg,#c0392b,#e74c3c);border-radius:6px;transition:width .15s}
-#healthText{text-align:center;font-size:11px;color:#f1948a;text-shadow:1px 1px 2px #000;margin-top:2px}
-#rankWrap{position:fixed;bottom:170px;right:16px;width:220px;z-index:10;pointer-events:none}
-#rankLabel{font-size:12px;font-weight:bold;text-shadow:1px 1px 2px #000;margin-bottom:2px;text-align:center}
-#rankXpBg{width:100%;height:8px;background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.2);border-radius:4px;overflow:hidden}
-#rankXpFill{height:100%;background:linear-gradient(90deg,#6c5ce7,#a29bfe);border-radius:4px;transition:width .2s}
-#rankXpText{text-align:center;font-size:9px;color:#a29bfe;text-shadow:1px 1px 2px #000;margin-top:1px}
+/* === STATUS PANEL (rank / health / mana / ultimate charge) === */
+#statusPanel{position:fixed;left:20px;bottom:34px;width:300px;z-index:10;pointer-events:none;display:flex;flex-direction:column;gap:9px;filter:drop-shadow(0 4px 10px rgba(0,0,0,.65))}
+#statusPanel .sp-row{display:flex;align-items:center;position:relative}
+#statusPanel .sp-ic{position:absolute;left:-14px;top:50%;transform:translateY(-50%);z-index:3;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:15px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#3a3050,#0d0a18 70%);border:2px solid #d9b95f;box-shadow:0 0 0 2px rgba(0,0,0,.7),0 0 12px rgba(217,185,95,.35),inset 0 0 8px rgba(0,0,0,.8)}
+#statusPanel .sp-bar{position:relative;flex:1;margin-left:14px;height:22px;background:#07050e;border:2px solid #d9b95f;border-left-color:#f3dc92;border-bottom-color:#a8872f;transform:skewX(-16deg);overflow:hidden;box-shadow:0 0 0 1px rgba(0,0,0,.8),inset 0 3px 6px rgba(0,0,0,.85)}
+#statusPanel .sp-bar.thin{height:12px;border-width:1.5px;margin-left:14px;width:84%;flex:none}
+#statusPanel .sp-ghost{position:absolute;left:0;top:0;bottom:0;background:rgba(255,236,200,.7);transition:width .8s ease .35s}
+#statusPanel .sp-fill{position:absolute;left:0;top:0;bottom:0;transition:width .14s ease-out;box-shadow:2px 0 10px rgba(255,255,255,.45)}
+#statusPanel .sp-fill::after{content:"";position:absolute;left:0;right:0;top:0;height:48%;background:linear-gradient(rgba(255,255,255,.5),rgba(255,255,255,.03))}
+#statusPanel .sp-fill::before{content:"";position:absolute;left:0;right:0;bottom:0;height:22%;background:rgba(0,0,0,.25)}
+#statusPanel .sp-ticks{position:absolute;inset:0;background:repeating-linear-gradient(90deg,transparent 0,transparent calc(10% - 1px),rgba(0,0,0,.4) calc(10% - 1px),rgba(0,0,0,.4) 10%);pointer-events:none}
+#statusPanel .sp-txt{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;transform:skewX(16deg);font:bold 12px/1 Georgia,serif;color:#fff;text-shadow:0 1px 3px #000,0 0 5px #000;letter-spacing:.6px}
+#statusPanel .sp-bar.thin .sp-txt{font-size:9px}
+#healthBarFill{background:linear-gradient(90deg,#8a1c1c,#e0392d 60%,#ff6f5a)}
+#manaBarFill{background:linear-gradient(90deg,#1a4f9a,#2f8cf0 60%,#7fd4ff)}
+#totalManaBarFill{background:linear-gradient(90deg,#b86f00,#ffaa00 70%,#ffe08a);transition:width .15s}
+#healthWrap.low #healthBarFill{animation:spLow .7s ease-in-out infinite alternate}
+@keyframes spLow{from{filter:brightness(1)}to{filter:brightness(1.7) saturate(1.3)}}
+#healthWrap.low .sp-bar{border-color:#ff5a46;box-shadow:0 0 0 1px #000,inset 0 3px 6px rgba(0,0,0,.85),0 0 14px rgba(255,60,40,.7)}
+#rankWrap{display:block;margin:0 0 1px 14px}
+#rankHead{display:flex;align-items:baseline;gap:10px}
+#rankLabel{font:bold 13px Georgia,serif;text-shadow:0 1px 3px #000,0 0 8px rgba(0,0,0,.9);letter-spacing:.8px;text-transform:uppercase}
+#rankXpText{font:10px Arial,sans-serif;color:#cfc8ff;text-shadow:0 1px 2px #000;margin-left:auto}
+#rankXpBg{position:relative;width:100%;height:4px;margin-top:3px;background:rgba(0,0,0,.7);border-radius:2px;overflow:hidden;box-shadow:0 0 0 1px rgba(217,185,95,.45)}
+#rankXpFill{height:100%;background:linear-gradient(90deg,#6c5ce7,#d0c8ff);transition:width .2s}
 #dungeonName{position:fixed;top:14px;left:50%;transform:translateX(-50%);color:#fff;font:bold 16px Arial,sans-serif;text-shadow:2px 2px 4px #000;z-index:10;pointer-events:none}
 #dungeonMeter{position:fixed;top:48px;left:14px;z-index:11;display:none;pointer-events:none}
 #dungeonObjective{position:fixed;top:52px;left:50%;transform:translateX(-50%);z-index:11;display:none;pointer-events:none;text-align:center;min-width:280px}
@@ -138,7 +147,7 @@ body.ai-chat-open #hud{pointer-events:none;opacity:0.45}
 #invCloseBtn:hover{background:#6c5ce7}
 
 /* === NOTIFICATION === */
-#notification{position:fixed;top:70px;left:50%;transform:translateX(-50%);background:rgba(241,196,15,0.9);color:#000;padding:10px 24px;border-radius:8px;font-size:14px;font-weight:bold;z-index:20;opacity:0;transition:opacity 0.4s;pointer-events:none}
+#notification{position:fixed;top:150px;left:50%;transform:translateX(-50%);background:rgba(241,196,15,0.9);color:#000;padding:10px 24px;border-radius:8px;font-size:14px;font-weight:bold;z-index:20;opacity:0;transition:opacity 0.4s;pointer-events:none}
 
 #scrollShopOverlay{position:fixed;inset:0;z-index:80;display:none;background:rgba(0,0,0,0.72);align-items:center;justify-content:center}
 #scrollShopOverlay.open{display:flex}
@@ -214,22 +223,23 @@ body.ai-chat-open #hud{pointer-events:none;opacity:0.45}
 <div id="dungeonObjective"></div>
 <div id="dungeonChoice"></div>
 <canvas id="game"></canvas>
-<div id="healthWrap">
-	<div id="healthBarBg"><div id="healthBarFill" style="width:100%"></div></div>
-	<div id="healthText">100 / 100</div>
-</div>
-<div id="manaWrap">
-	<div id="manaBarBg"><div id="manaBarFill" style="width:100%"></div></div>
-	<div id="manaText">100 / 100</div>
-</div>
-<div id="totalManaWrap">
-	<div id="totalManaBarBg"><div id="totalManaBarFill" style="width:0%"></div></div>
-	<div id="totalManaText">⚡ Total Mana: 0</div>
-</div>
-<div id="rankWrap">
-	<div id="rankLabel">🔰 Novice</div>
-	<div id="rankXpBg"><div id="rankXpFill" style="width:0%"></div></div>
-	<div id="rankXpText">0 / 50 XP</div>
+<div id="statusPanel">
+	<div id="rankWrap">
+		<div id="rankHead"><span id="rankLabel">🔰 Novice</span><span id="rankXpText">0 / 50 XP</span></div>
+		<div id="rankXpBg"><div id="rankXpFill" style="width:0%"></div></div>
+	</div>
+	<div id="healthWrap" class="sp-row">
+		<span class="sp-ic">❤️</span>
+		<div id="healthBarBg" class="sp-bar"><div id="healthBarGhost" class="sp-ghost" style="width:100%"></div><div id="healthBarFill" class="sp-fill" style="width:100%"></div><div class="sp-ticks"></div><div id="healthText" class="sp-txt">100 / 100</div></div>
+	</div>
+	<div id="manaWrap" class="sp-row">
+		<span class="sp-ic">💧</span>
+		<div id="manaBarBg" class="sp-bar"><div id="manaBarFill" class="sp-fill" style="width:100%"></div><div class="sp-ticks"></div><div id="manaText" class="sp-txt">100 / 100</div></div>
+	</div>
+	<div id="totalManaWrap" class="sp-row">
+		<span class="sp-ic">⚡</span>
+		<div id="totalManaBarBg" class="sp-bar thin"><div id="totalManaBarFill" class="sp-fill" style="width:0%"></div><div id="totalManaText" class="sp-txt">Total Mana: 0</div></div>
+	</div>
 </div>
 <div id="damageStoreWrap" style="position:fixed;top:110px;left:12px;font-size:11px;color:#ffcc00;text-shadow:0 0 4px #000;display:none">
 	<span id="damageStoreText">⚔️ Stored: 0</span>
@@ -366,16 +376,17 @@ body.ai-chat-open #hud{pointer-events:none;opacity:0.45}
 <script src="npc-profiles.js"></script>
 <script src="scrolls.js?v=2"></script>
 <script src="spell-cost.js?v=14"></script>
-<script src="magic-engine.js?v=61"></script>
+<script src="magic-engine.js?v=64"></script>
 <script src="magic-techniques.js?v=43"></script>
 <script src="rune-mages.js?v=13"></script>
 <script src="grand-arcanist-discovered.js?v=1"></script>
 <script src="grand-arcanist.js?v=2"></script>
 <script src="pvp-arena.js?v=5"></script>
-<script src="gear-data.js?v=5"></script>
-<script src="gear-system.js?v=10"></script>
+<script src="survival-arena.js?v=2"></script>
+<script src="gear-data.js?v=6"></script>
+<script src="gear-system.js?v=11"></script>
 <script src="nightmare-system.js?v=1"></script>
-<script src="fire-dungeon-templates.js?v=33"></script>
+<script src="fire-dungeon-templates.js?v=34"></script>
 <script src="fire-dungeon-world.js?v=56"></script>
 <script src="fire-art.js?v=16"></script>
 <script src="ice-dungeon-templates.js?v=11"></script>
@@ -2532,6 +2543,8 @@ const COLOSSEUM_CONFIG = {
 	infiniteMana: false,
 	platforms: [],
 };
+/* SURVIVAL (endless co-op waves) — arena geometry + painting live in survival-arena.js */
+const SURVIVAL_CONFIG = window.SurvivalArena ? SurvivalArena.CONFIG : { name:'Survival', worldW:5200, worldH:2400, groundY:2000, groundThick:60, bgColor:'#120c24', bgColor2:'#2a1850', playerStart:{x:2581,y:1938}, platforms:[] };
 // Flat backdrop texture for the colosseum
 const colosseumBgImg = new Image();
 colosseumBgImg.src = 'images/backgrounds/colosseum-bg.png';
@@ -4018,6 +4031,11 @@ const CHALLENGER_RAID_CONFIG = {
 	},
 };
 let CHALLENGER_BOTTOM_Y = 2700;
+if(GAME_MODE === 'survival'){   // wave 250 plays inside the Starfall Sanctum (see survival-arena.js BOUNDS): same walls, floor and ceiling
+	Object.assign(CHALLENGER_RAID_CONFIG, { arenaLeft: 300, arenaRight: 4900, arenaTop: 680, arenaBottom: 2000, ceilY: 680, groundY: 2000, voidY: 2600 });
+	Object.assign(CHALLENGER_RAID_CONFIG.boss, { x: 2480, y: 1868 });
+	CHALLENGER_BOTTOM_Y = 2000;
+}
 
 /* =============================================================
    CHRONO TYRANT RAID CONFIG — Sky Arena Boss Fight
@@ -4176,9 +4194,10 @@ const IS_STORMISLANDS = GAME_MODE === 'stormislands';
 const IS_BLACKSANDS = GAME_MODE === 'blacksands';
 const IS_ARCANERUINS = GAME_MODE === 'arcaneruins';
 const IS_CHRONORAID = GAME_MODE === 'chronoraid';
-const IS_ZENITH = GAME_MODE === 'zenith';
-const IS_CHALLENGER = GAME_MODE === 'challenger';
+let IS_ZENITH = GAME_MODE === 'zenith';
+let IS_CHALLENGER = GAME_MODE === 'challenger';
 const IS_COLOSSEUM = GAME_MODE === 'colosseum';
+const IS_SURVIVAL = GAME_MODE === 'survival';
 const IS_COOP = !!COOP_MATCH && !IS_COLOSSEUM;
 const COOP_HOST = COOP_SLOT === 0;
 // Guests never run enemy/boss AI — the host simulates and broadcasts it.
@@ -4463,7 +4482,7 @@ const CoopSync = {
 		this.eventQueue.push({ type, data });
 	},
 };
-const IS_DUNGEON = !IS_SANDBOX && !IS_RAID && !IS_OPENWORLD && !IS_CITY && !IS_SYLVARIS && !IS_OBSERVATORY && !IS_DRAGONGRAVEYARD && !IS_STORMISLANDS && !IS_BLACKSANDS && !IS_ARCANERUINS && !IS_CHRONORAID && !IS_ZENITH && !IS_CHALLENGER && !IS_COLOSSEUM;
+const IS_DUNGEON = !IS_SANDBOX && !IS_RAID && !IS_OPENWORLD && !IS_CITY && !IS_SYLVARIS && !IS_OBSERVATORY && !IS_DRAGONGRAVEYARD && !IS_STORMISLANDS && !IS_BLACKSANDS && !IS_ARCANERUINS && !IS_CHRONORAID && !IS_ZENITH && !IS_CHALLENGER && !IS_COLOSSEUM && !IS_SURVIVAL;
 (function(){
 	const b=document.getElementById('bossTestBtn');
 	if(b&&IS_DUNGEON) b.style.display='inline-block';
@@ -4485,7 +4504,7 @@ function modeVal(sb, rd, ow, city, def){
 }
 
 // Create dungeon object (real dungeon for dungeon mode, stub for other modes)
-const _cfg = IS_COLOSSEUM ? COLOSSEUM_CONFIG : IS_CHALLENGER ? CHALLENGER_RAID_CONFIG : IS_ZENITH ? ZENITH_RAID_CONFIG : IS_CHRONORAID ? CHRONO_RAID_CONFIG : IS_ARCANERUINS ? ARCANERUINS_CONFIG : IS_BLACKSANDS ? BLACKSANDS_CONFIG : IS_STORMISLANDS ? STORMISLANDS_CONFIG : IS_DRAGONGRAVEYARD ? DRAGONGRAVEYARD_CONFIG : IS_OBSERVATORY ? OBSERVATORY_CONFIG : IS_SYLVARIS ? SYLVARIS_CONFIG : IS_CITY ? CITY_CONFIG : IS_OPENWORLD ? OPENWORLD_CONFIG : IS_RAID ? RAID_CONFIG : IS_SANDBOX ? SANDBOX_CONFIG : null;
+const _cfg = IS_SURVIVAL ? SURVIVAL_CONFIG : IS_COLOSSEUM ? COLOSSEUM_CONFIG : IS_CHALLENGER ? CHALLENGER_RAID_CONFIG : IS_ZENITH ? ZENITH_RAID_CONFIG : IS_CHRONORAID ? CHRONO_RAID_CONFIG : IS_ARCANERUINS ? ARCANERUINS_CONFIG : IS_BLACKSANDS ? BLACKSANDS_CONFIG : IS_STORMISLANDS ? STORMISLANDS_CONFIG : IS_DRAGONGRAVEYARD ? DRAGONGRAVEYARD_CONFIG : IS_OBSERVATORY ? OBSERVATORY_CONFIG : IS_SYLVARIS ? SYLVARIS_CONFIG : IS_CITY ? CITY_CONFIG : IS_OPENWORLD ? OPENWORLD_CONFIG : IS_RAID ? RAID_CONFIG : IS_SANDBOX ? SANDBOX_CONFIG : null;
 if(IS_DUNGEON && DUNGEON_TYPE === 'earth'){
 	if(typeof generateJungleLivingWilds !== 'function'){
 		throw new Error('The Living Wilds generator is unavailable; refusing to load the retired Earth dungeon.');
@@ -4509,6 +4528,13 @@ const dungeon = IS_DUNGEON ? (DUNGEONS[DUNGEON_TYPE] || DUNGEONS.fire) : {
 	spawnX: _cfg ? _cfg.playerStart.x : 200,
 	spawnY: _cfg ? _cfg.playerStart.y : 2200,
 };
+// Survival: one big boss room, so the dungeon boss kits (Ignaroth, Kryonax, Frostbound Knight …) have the room and floor they expect
+if(IS_SURVIVAL && window.SurvivalArena){
+	const _b = SurvivalArena.BOUNDS;
+	dungeon.rooms = [{ id: 0, kind: 'boss', x: _b.left, y: _b.ceil, w: _b.right - _b.left, h: _b.floor + 40 - _b.ceil, authoredArena: false }];
+	dungeon.platforms = [{ roomId: 0, x: _b.left, y: _b.floor, w: _b.right - _b.left, h: 400, arenaSection: 'core', central: true }]
+		.concat(SurvivalArena.LEDGES.map(l => ({ roomId: 0, x: l.x, y: l.y, w: l.w, h: 22, oneway: true })));
+}
 window.dungeon = dungeon;
 const diffLabel = DIFFICULTY === 'normal' ? 'Medium' : (DIFFICULTY.charAt(0).toUpperCase() + DIFFICULTY.slice(1));
 const diffColors = { easy:'#44dd88', normal:'#66aaff', hard:'#ff5555', nightmare:'#e070ff' };
@@ -4553,6 +4579,9 @@ if(IS_SANDBOX){
 } else if(IS_CHALLENGER){
 	document.getElementById('dungeonName').style.display = 'none'; // Title lives on the canvas boss HP bar
 	document.getElementById('backBtn').href = 'raids.html';
+} else if(IS_SURVIVAL){
+	document.getElementById('dungeonName').style.display = 'none'; // the wave plate on the canvas is the title
+	document.getElementById('backBtn').href = 'raids.html';
 } else if(IS_COLOSSEUM){
 	{ const _q = new URLSearchParams(location.search), _pm = _q.get('pm'), _n = +_q.get('n') || 2;
 	  const _lbl = !PVP_MATCH ? 'PvP Practice' : _pm === 'teams' ? 'PvP 2v2' : (_pm === 'ffa' || _n > 2) ? 'PvP Free-for-all' : 'PvP Duel';
@@ -4581,6 +4610,12 @@ if(IS_SANDBOX){
 	sandboxPlatforms = [
 		{ x:0, y:SANDBOX_CONFIG.groundY, w:WORLD_W, h:SANDBOX_CONFIG.groundThick }, // Main ground
 		...SANDBOX_CONFIG.platforms,
+		{ x:-50, y:0, w:50, h:WORLD_H },
+		{ x:WORLD_W, y:0, w:50, h:WORLD_H },
+	];
+} else if(IS_SURVIVAL){
+	sandboxPlatforms = window.SurvivalArena ? SurvivalArena.platforms() : [
+		{ x:0, y:SURVIVAL_CONFIG.groundY, w:WORLD_W, h:400 },
 		{ x:-50, y:0, w:50, h:WORLD_H },
 		{ x:WORLD_W, y:0, w:50, h:WORLD_H },
 	];
@@ -4722,6 +4757,15 @@ if(IS_DUNGEON && dungeon){
 	for(let r = 0; r < MAP_ROWS; r++){
 		for(let c = 0; c < MAP_COLS; c++){
 			tileMap[r][c] = r < groundRow ? 1 : 0; // air above, solid below
+		}
+	}
+	// Survival: the arena is a sealed room as far as tile queries go (boss kits and AI read these)
+	if(IS_SURVIVAL && window.SurvivalArena){
+		const _b = SurvivalArena.BOUNDS, _ceilRow = Math.ceil(_b.ceil / TILE);
+		for(let r = 0; r < MAP_ROWS; r++){
+			for(let c = 0; c < MAP_COLS; c++){
+				if(r < _ceilRow || (c + 1) * TILE <= _b.left || c * TILE >= _b.right) tileMap[r][c] = 0;
+			}
 		}
 	}
 	// Fill pyramid body with solid tiles so tilemap collision works inside the pyramid
@@ -4913,7 +4957,7 @@ function phaseSpeedPx(speed, isUlt, vowMult){
 
 // Platform collision for open-sky modes
 function checkPlatformCollision(x, y, w, h){
-	if(!IS_SANDBOX && !IS_RAID && !IS_OPENWORLD && !IS_CITY && !IS_SYLVARIS && !IS_OBSERVATORY && !IS_DRAGONGRAVEYARD && !IS_STORMISLANDS && !IS_BLACKSANDS && !IS_ARCANERUINS && !IS_CHRONORAID && !IS_ZENITH && !IS_CHALLENGER && !IS_COLOSSEUM) return null;
+	if(!IS_SANDBOX && !IS_RAID && !IS_OPENWORLD && !IS_CITY && !IS_SYLVARIS && !IS_OBSERVATORY && !IS_DRAGONGRAVEYARD && !IS_STORMISLANDS && !IS_BLACKSANDS && !IS_ARCANERUINS && !IS_CHRONORAID && !IS_ZENITH && !IS_CHALLENGER && !IS_COLOSSEUM && !IS_SURVIVAL) return null;
 	for(const p of sandboxPlatforms){
 		if(x + w > p.x && x < p.x + p.w && y + h > p.y && y < p.y + p.h){
 			return p;
@@ -4924,7 +4968,7 @@ function checkPlatformCollision(x, y, w, h){
 
 // One-way platform check (landing from above)
 function checkPlatformLanding(x, y, w, h, vy){
-	if(!IS_SANDBOX && !IS_RAID && !IS_OPENWORLD && !IS_CITY && !IS_SYLVARIS && !IS_OBSERVATORY && !IS_DRAGONGRAVEYARD && !IS_BLACKSANDS && !IS_ARCANERUINS && !IS_CHRONORAID && !IS_ZENITH && !IS_CHALLENGER && !IS_COLOSSEUM) return null;
+	if(!IS_SANDBOX && !IS_RAID && !IS_OPENWORLD && !IS_CITY && !IS_SYLVARIS && !IS_OBSERVATORY && !IS_DRAGONGRAVEYARD && !IS_BLACKSANDS && !IS_ARCANERUINS && !IS_CHRONORAID && !IS_ZENITH && !IS_CHALLENGER && !IS_COLOSSEUM && !IS_SURVIVAL) return null;
 	for(const p of sandboxPlatforms){
 		// Only collide if falling and feet are above/at platform top
 		if(vy >= 0 && x + w > p.x && x < p.x + p.w){
@@ -5013,7 +5057,9 @@ function shakeScreen(intensity, duration){
 	camera.shakeDur = duration;
 }
 function updateCamera(){
-	if(IS_COLOSSEUM && window.PvpArena && PvpArena.camera()){
+	if(IS_SURVIVAL && window.SurvivalArena && SurvivalArena.camera()){
+		// fixed Starfall Sanctum framing
+	} else if(IS_COLOSSEUM && window.PvpArena && PvpArena.camera()){
 		// the PvP map follows you in both directions, kept inside the arena
 	} else if(IS_COLOSSEUM){
 		// Horizontal follow only — pin the floor to a fixed screen line so jumps
@@ -5165,7 +5211,7 @@ addEventListener('keydown', e => {
 				let _ar=null;
 				if(kittenBoss&&kittenBoss.phase==='active') _ar=KITTEN_ARENA_RECT;
 				else if(bossState.phase==='active'&&BOSS_ROOM_RECT) _ar=BOSS_ROOM_RECT;
-				else if(seraphelFight.phase==='active') _ar={x:seraphelFight.arenaLeft,y:seraphelFight.arenaY,w:seraphelFight.arenaRight-seraphelFight.arenaLeft,h:1800};
+				else if(seraphelFight.phase==='active') _ar=IS_SURVIVAL?KITTEN_ARENA_RECT:{x:seraphelFight.arenaLeft,y:seraphelFight.arenaY,w:seraphelFight.arenaRight-seraphelFight.arenaLeft,h:1800};
 				else if(leviathanState.phase==='active'||leviathanState.phase==='enraged') _ar=LEV_ARENA;
 				else if(deepRootBossState.phase==='active') _ar=DEEP_ROOT_ARENA;
 				else if(volcanoBossState.phase==='active') _ar={x:9000,y:4050,w:2200,h:800};
@@ -5201,7 +5247,7 @@ addEventListener('keydown', e => {
 					let _ar=null;
 					if(kittenBoss&&kittenBoss.phase==='active') _ar=KITTEN_ARENA_RECT;
 					else if(bossState.phase==='active'&&BOSS_ROOM_RECT) _ar=BOSS_ROOM_RECT;
-					else if(seraphelFight.phase==='active') _ar={x:seraphelFight.arenaLeft,y:seraphelFight.arenaY,w:seraphelFight.arenaRight-seraphelFight.arenaLeft,h:1800};
+					else if(seraphelFight.phase==='active') _ar=IS_SURVIVAL?KITTEN_ARENA_RECT:{x:seraphelFight.arenaLeft,y:seraphelFight.arenaY,w:seraphelFight.arenaRight-seraphelFight.arenaLeft,h:1800};
 					else if(leviathanState.phase==='active'||leviathanState.phase==='enraged') _ar=LEV_ARENA;
 					else if(deepRootBossState.phase==='active') _ar=DEEP_ROOT_ARENA;
 					else if(volcanoBossState.phase==='active') _ar={x:9000,y:4050,w:2200,h:800};
@@ -5316,7 +5362,8 @@ function releaseHeldProjectiles(){
    PLAYER
    ============================================================= */
 // Get spawn point based on game mode
-const playerSpawn = IS_COLOSSEUM ? COLOSSEUM_CONFIG.playerStart
+const playerSpawn = IS_SURVIVAL ? (window.SurvivalArena ? SurvivalArena.spawnFor(typeof COOP_SLOT!=='undefined'?COOP_SLOT:0) : SURVIVAL_CONFIG.playerStart)
+	: IS_COLOSSEUM ? COLOSSEUM_CONFIG.playerStart
 	: IS_SANDBOX ? SANDBOX_CONFIG.playerStart 
 	: IS_RAID ? RAID_CONFIG.playerStart
 	: IS_OPENWORLD ? OPENWORLD_CONFIG.playerStart
@@ -5419,7 +5466,9 @@ let health = maxHealth;
 function updateHealthHUD(){
 	const pct = Math.max(0, Math.min(100, (health / maxHealth) * 100));
 	document.getElementById('healthBarFill').style.width = pct + '%';
+	document.getElementById('healthBarGhost').style.width = pct + '%';
 	document.getElementById('healthText').textContent = `${Math.ceil(health)} / ${maxHealth}`;
+	document.getElementById('healthWrap').classList.toggle('low', pct > 0 && pct < 25);
 }
 updateHealthHUD();
 
@@ -6768,7 +6817,7 @@ const seraphelFight = {
    INFERNAL KITTEN — SECRET FIRE DUNGEON BOSS
    ============================================================= */
 const _fk = (IS_DUNGEON && DUNGEON_TYPE === 'fire' && DUNGEONS.fire && DUNGEONS.fire._kitten) ? DUNGEONS.fire._kitten : null;
-const KITTEN_ARENA_RECT  = _fk ? _fk.arena : { x:2400, y:0, w:1800, h:1680 };
+const KITTEN_ARENA_RECT  = _fk ? _fk.arena : (IS_SURVIVAL && window.SurvivalArena) ? { x: SurvivalArena.BOUNDS.left, y: SurvivalArena.BOUNDS.ceil, w: SurvivalArena.BOUNDS.right - SurvivalArena.BOUNDS.left, h: SurvivalArena.BOUNDS.floor + 40 - SurvivalArena.BOUNDS.ceil } : { x:2400, y:0, w:1800, h:1680 };
 const KITTEN_CORRIDOR     = _fk ? _fk.corridor : { x:80, y:0, w:2400, h:200 };
 const KITTEN_SHAFT        = _fk ? _fk.shaft : { x:80, y:0, w:120, h:1320 };
 // Chain door: a visible gate at the entrance of the kitten shaft (top of start room ceiling)
@@ -6784,7 +6833,7 @@ const KITTEN_CHAIN_DOOR = (IS_DUNGEON && DUNGEON_TYPE === 'fire') ? {
 } : null;
 const KITTEN_LOCK_WALL    = _fk ? _fk.lockWall : { x:2400, y:0, w:40, h:200 };
 const KITTEN_SECRET_CORRIDORS = [KITTEN_SHAFT, KITTEN_CORRIDOR, KITTEN_ARENA_RECT];
-const kittenBoss = (IS_DUNGEON && DUNGEON_TYPE === 'fire') ? {
+const kittenBoss = ((IS_DUNGEON && DUNGEON_TYPE === 'fire') || IS_SURVIVAL) ? {
 	phase: 'hidden',   // 'hidden' | 'revealed' | 'cutscene' | 'active' | 'defeated'
 	timer: 0,
 	cutsceneDuration: 210, // 3.5 seconds
@@ -10888,7 +10937,7 @@ function updateTotalManaHUD(){
 		const fill = document.getElementById('totalManaBarFill');
 		const text = document.getElementById('totalManaText');
 		if(fill) fill.style.width = '100%';
-		if(text) text.textContent = '⚡ Total Mana: ∞';
+		if(text) text.textContent = 'Total Mana: ∞';
 		return;
 	}
 	const spells = playerData.spells || [];
@@ -10896,7 +10945,7 @@ function updateTotalManaHUD(){
 	const ultCost = ultSpell ? displayedSpellMana(ultSpell, dungeonManaOpts(9, ultSpell)) : 999999;
 	const pct = ultCost > 0 ? Math.max(0, Math.min(100, (totalMana / ultCost) * 100)) : 0;
 	document.getElementById('totalManaBarFill').style.width = pct + '%';
-	document.getElementById('totalManaText').textContent = `⚡ Total Mana: ${Math.floor(totalMana)}` + (ultSpell ? ` / ${ultCost}` : '');
+	document.getElementById('totalManaText').textContent = `Total Mana: ${Math.floor(totalMana)}` + (ultSpell ? ` / ${ultCost}` : '');
 }
 updateTotalManaHUD();
 
@@ -12828,7 +12877,7 @@ const raidIndicators = [];
 const zenithIndicators = [];
 
 // ─── Zenith Boss Object ───
-const zenithBoss = IS_ZENITH ? {
+function _mkZenithBoss(){ return {
 	x: ZENITH_RAID_CONFIG.boss.x, y: ZENITH_RAID_CONFIG.boss.y,
 	w: ZENITH_RAID_CONFIG.boss.w, h: ZENITH_RAID_CONFIG.boss.h,
 	hp: ZENITH_RAID_CONFIG.boss.hp, maxHp: ZENITH_RAID_CONFIG.boss.hp,
@@ -12860,9 +12909,10 @@ const zenithBoss = IS_ZENITH ? {
 	inIntro: true, introTimer: 0,
 	// Phase-transition crack/explode animation
 	crackAnim: 0,
-} : null;
+}; }
+let zenithBoss = IS_ZENITH ? _mkZenithBoss() : null;
 
-const challengerBoss = IS_CHALLENGER ? {
+function _mkChallengerBoss(){ return {
 	x: CHALLENGER_RAID_CONFIG.boss.x, y: CHALLENGER_RAID_CONFIG.boss.y,
 	w: CHALLENGER_RAID_CONFIG.boss.w, h: CHALLENGER_RAID_CONFIG.boss.h,
 	hp: CHALLENGER_RAID_CONFIG.boss.hp, maxHp: CHALLENGER_RAID_CONFIG.boss.hp,
@@ -12892,7 +12942,8 @@ const challengerBoss = IS_CHALLENGER ? {
 	planets: { orange: true, ice: true, gas: true },
 	planetTake: { orange: 0, ice: 0, gas: 0 },
 	planetSpawn: { orange: 0, ice: 0, gas: 0 },
-} : null;
+}; }
+let challengerBoss = IS_CHALLENGER ? _mkChallengerBoss() : null;
 
 
 function showRaidWarning(text, duration){
@@ -13337,6 +13388,7 @@ function blindDurationFrames(power){
 	return Math.max(1, frames);
 }
 function enemyDetectRange(en){
+	if(en&&en._surv&&!((en.blindTimer||0)>0)) return 9000;      // Survival: everything hunts you from the first frame
 	let r=en&&en.typeDef?(en.typeDef.detectRange||0):0;
 	if(en&&en.typeDef&&!en.typeDef.isBoss) r*=1.8;
 	if((en.blindTimer||0)>0||(en._amVisionReduce||0)>0) r*=0.25;
@@ -13466,6 +13518,7 @@ function getAllTargets(){
 	else if(IS_CHRONORAID && chronoBoss && !chronoBoss.dead) list = [chronoBoss, ...enemies.filter(e => !e.dead)];
 	else if(IS_ZENITH && zenithBoss && !zenithBoss.dead) list = [zenithBoss];
 	else if(IS_CHALLENGER && challengerBoss && !challengerBoss.dead) list = [challengerBoss];
+	else if(IS_SURVIVAL) list = enemies.filter(e => !e.dead);
 	else if(IS_COLOSSEUM) list = (window.RuneMages && RuneMages.list.length) ? RuneMages.targets() : [];      // practice sparring partners (the online opponent is added by pvp-arena.js)
 	else if(IS_CITY) list = [...enemies.filter(e => !e.dead && Math.abs(e.x - player.x) < 2600), ...dummies.filter(d => !d.dead), ...slimes.filter(s => !s.dead)];
 	else if(IS_OPENWORLD) list = [...dummies.filter(d => !d.dead), ...slimes.filter(s => !s.dead)];
@@ -13512,7 +13565,7 @@ function getTargetHitRect(target){
 		r = { x: target.x, y: target.y, w: target.w, h: target.h };
 	} else if(IS_CHALLENGER && target === challengerBoss){
 		r = { x: target.x, y: target.y, w: target.w, h: target.h };
-	} else if(IS_OPENWORLD || IS_CITY || IS_SYLVARIS || IS_OBSERVATORY || IS_DRAGONGRAVEYARD || IS_STORMISLANDS || IS_BLACKSANDS || IS_ARCANERUINS){
+	} else if(IS_SURVIVAL || IS_OPENWORLD || IS_CITY || IS_SYLVARIS || IS_OBSERVATORY || IS_DRAGONGRAVEYARD || IS_STORMISLANDS || IS_BLACKSANDS || IS_ARCANERUINS){
 		r = { x: target.x, y: target.y, w: target.w, h: target.h };
 	} else {
 		r = getVisualHitRect(target);
@@ -13591,7 +13644,7 @@ function magicConstructCollide(ent, px, py){
 function moveEntityTileBase(ent){
 	if(typeof MeleeMode !== 'undefined' && MeleeMode.hijackMove(ent)) return;
 	// Open-sky modes (sandbox/raid/openworld/colosseum) use platform collision instead of tilemap
-	if(IS_SANDBOX || IS_RAID || IS_OPENWORLD || IS_CITY || IS_OBSERVATORY || IS_DRAGONGRAVEYARD || IS_ARCANERUINS || IS_CHRONORAID || IS_ZENITH || IS_CHALLENGER || IS_COLOSSEUM){
+	if(IS_SANDBOX || IS_RAID || IS_OPENWORLD || IS_CITY || IS_OBSERVATORY || IS_DRAGONGRAVEYARD || IS_ARCANERUINS || IS_CHRONORAID || IS_ZENITH || IS_CHALLENGER || IS_COLOSSEUM || IS_SURVIVAL){
 		moveEntitySandbox(ent);
 		return;
 	}
@@ -15149,6 +15202,22 @@ function castMagicSpell(spell, slot){
 	let cost = rep.upfront != null ? rep.upfront : rep.cost;
 	cost = Math.round(cost * runeManaMult(slot));
 	if(GR) cost = GR.modifyManaCost(cost, { spell, slot });
+	/* Max Output: a spell stronger than your output ceiling can only be forced out with Total Mana — 5 × the excess.
+	   Its regular energy cost only covers the part that fits inside your Max Output. */
+	let _overOut = 0, _overTotal = 0;
+	{
+		const peakOut = rep.peakOutput || 0, maxOut = prof.maxOutput || 0;
+		if(peakOut > maxOut && maxOut > 0){
+			_overOut = peakOut - maxOut;
+			_overTotal = Math.ceil(_overOut * 5);
+			if(totalMana < _overTotal){
+				dmgNumbers.push({x:player.x+player.w/2,y:player.y-30,text:'Over Max Output ('+peakOut+' / '+maxOut+') — needs '+_overTotal+' Total Mana',age:0,color:'#ff5d7a'});
+				return;
+			}
+			cost = Math.round(cost * maxOut / peakOut);
+			prof.maxOutput = peakOut + 1;      // this cast is allowed to reach its full output
+		}
+	}
 	let blood = null;
 	if(mana < cost){
 		if(GR){ const b = GR.bloodPay(cost, mana, health, maxHealth); if(b.used) blood = b; }
@@ -15181,6 +15250,10 @@ function castMagicSpell(spell, slot){
 	else mana -= cost;
 	if(typeof rosterKitOnManaSpent === 'function') rosterKitOnManaSpent(cost);
 	totalMana += cost * 2;
+	if(_overTotal > 0){
+		totalMana = Math.max(0, totalMana - _overTotal);
+		dmgNumbers.push({x:player.x+player.w/2,y:player.y-52,text:'Overdrive +'+Math.round(_overOut)+' output  −'+_overTotal+' Total Mana',age:0,color:'#ffb347'});
+	}
 	updateTotalManaHUD();
 	player.hasCast = true;
 	const _vb = getVowBoostsForSlot(slot);
@@ -21238,7 +21311,7 @@ function updateProjectiles(){
 		/* wall collision — tilemap for dungeons, ground/platforms for open-sky modes */
 		const skipWall=p.shape==='nova'||p.shape==='vortex'||p.effects.includes('phaseThrough')||p._fromDomain||p.behavior==='stationary'||p.behavior==='selfCast'||p.behavior==='underfoot'||p.behavior==='aroundSelf'||p.behavior==='ground'||(p.behavior==='orbit'&&p.age<p.orbitDur);
 		/* Ground/platform collision in open-sky modes */
-		if(!skipWall&&!p.hasHit&&!p.isSolidPlatform&&(IS_SANDBOX||IS_RAID||IS_CHRONORAID||IS_ZENITH||IS_CHALLENGER||IS_COLOSSEUM||IS_OPENWORLD||IS_CITY||IS_OBSERVATORY||IS_DRAGONGRAVEYARD||(IS_BLACKSANDS&&p.y<=BLACKSANDS_CONFIG.groundY&&!isInBlackSandsTunnelPoint(p.x,p.y))||(IS_SYLVARIS&&p.y<=SYLVARIS_CONFIG.groundY)||(IS_STORMISLANDS&&p.y<=STORMISLANDS_CONFIG.groundY))){
+		if(!skipWall&&!p.hasHit&&!p.isSolidPlatform&&(IS_SANDBOX||IS_RAID||IS_CHRONORAID||IS_ZENITH||IS_CHALLENGER||IS_COLOSSEUM||IS_SURVIVAL||IS_OPENWORLD||IS_CITY||IS_OBSERVATORY||IS_DRAGONGRAVEYARD||(IS_BLACKSANDS&&p.y<=BLACKSANDS_CONFIG.groundY&&!isInBlackSandsTunnelPoint(p.x,p.y))||(IS_SYLVARIS&&p.y<=SYLVARIS_CONFIG.groundY)||(IS_STORMISLANDS&&p.y<=STORMISLANDS_CONFIG.groundY))){
 			let groundHit=false;
 			let groundHitNormalY=0; // -1=bounce up (floor/platform), 1=bounce down (ceiling)
 			// Ground collision
@@ -22311,6 +22384,8 @@ function updateEnemyProjectiles(){
    DAMAGE PLAYER
    ============================================================= */
 function damagePlayer(amount,effects,fxPower){
+	// Survival: incoming damage grows with the wave (applied where the blow is dealt; a forwarded ally hit already carries it)
+	if(IS_SURVIVAL && window.SurvivalMode && !window.__survRemoteHit) amount *= SurvivalMode.incomingMult();
 	// co-op host: an enemy acting against an ally right now — the blow is theirs, sent to their client
 	if(_coopAimAlly){ coopForwardHit(_coopAimAlly, amount, effects); return; }
 	if(typeof MeleeMode !== 'undefined' && MeleeMode.isInvulnerable()) return;
@@ -22372,7 +22447,8 @@ function damagePlayer(amount,effects,fxPower){
 	if(health<=0){
 		health=0;
 		player.iFrames=Math.max(player.iFrames,120);
-		respawnPlayer();
+		if(IS_SURVIVAL && window.SurvivalMode && SurvivalMode.onPlayerDown()){ /* down until the next wave */ }
+		else respawnPlayer();
 	}
 	updateHealthHUD();
 }
@@ -24706,6 +24782,7 @@ function openHubShop(npc){
 		if(stats.magicControl) statBits.push('Control +' + stats.magicControl);
 		if(stats.manaRegen) statBits.push('Mana Regen +' + stats.manaRegen);
 		if(stats.magicDefence) statBits.push('Defence +' + stats.magicDefence);
+		if(stats.strength) statBits.push('Strength +' + stats.strength);
 		const row = document.createElement('div');
 		row.className = 'scroll-shop-row';
 		row.innerHTML =
@@ -24864,7 +24941,10 @@ window.addEventListener('message', function(ev){
 
 
 /* Notification system */
+/* boss / objective callouts never pop up over the boss health bar */
+const _NOTIFY_BOSS_RE = /boss|warped|defeat|awaken|guardian|warden|ignaroth|frostbound|knight falls|colossus|survive the|the way opens/i;
 function notify(msg){
+	if(typeof IS_DUNGEON !== 'undefined' && IS_DUNGEON && _NOTIFY_BOSS_RE.test(String(msg))) return;
 	notifyMsg = msg;
 	notifyTimer = 180;
 	const el = document.getElementById('notification');
@@ -26532,12 +26612,13 @@ const ZENITH_EFFECT_POOL = ['burn','freeze','poison','stun','phaseThrough','phas
 const ZENITH_BEHAVIOR_POOL = ['straight','homing','zigzag','lob','rain','stationary'];
 
 // ── Player behavior tracker ──────────────────────────────
-const zenithPlayerTracker = IS_ZENITH ? {
+function _mkZenithTracker(){ return {
 	wallBlocks:0, dispelled:0, shieldHits:0, healEvents:0,
 	dodgeLeft:0, dodgeRight:0, dodgeUp:0, hitsTaken:0,
 	_prevHeal: typeof health !== 'undefined' ? health : 100,
 	reflects:0, // tracks how many times the player has reflected Zenith's attacks
-} : null;
+}; }
+let zenithPlayerTracker = IS_ZENITH ? _mkZenithTracker() : null;
 
 // ── Phase 2 attack templates (deep-copied onto zenithBoss.p2Attacks at P2 transition) ─
 const ZENITH_P2_TEMPLATES = [
@@ -27747,7 +27828,7 @@ function updateZenithBoss(){
 	}
 
 	// Phase 2: Platforms move under boss command toward the player to disrupt positioning
-	if(zenithBoss.mainPhase >= 2 && sandboxPlatforms){
+	if(zenithBoss.mainPhase >= 2 && sandboxPlatforms && !IS_SURVIVAL){
 		const _pMX = player.x + player.w/2;
 		const _pMY = player.y;
 		for(let _pmi = 0; _pmi < sandboxPlatforms.length; _pmi++){
@@ -27792,7 +27873,7 @@ function updateZenithBoss(){
 
 // ── Victory ───────────────────────────────────────────────
 function showZenithVictory(){
-	if(!IS_ZENITH) return;
+	if(!IS_ZENITH || IS_SURVIVAL) return;
 	try {
 		let inv = JSON.parse(localStorage.getItem('magicBattle_inventory')||'[]');
 		if(!inv.find(i => i.id === 'prime_convergence')){
@@ -28012,7 +28093,7 @@ function updateEnemies(){
 			if(en._shatterColor){
 				spawnShatterShards(en.x+en.w/2,en.y+en.h/2,en._shatterColor,en._shatterPower/0.15,en._shatterPhW||1,en._shatterPhH||1,true,en);
 			}
-			if(en.typeDef.isBoss && en.type === 'babyDragon'){
+			if(en.typeDef.isBoss && en.type === 'babyDragon' && !IS_SURVIVAL){
 				// Baby dragon death — phase 2 revival or final defeat
 				if(!graveyardBossState.phase2Active){
 					// Phase 1 death → let dragon stay dead for 5 seconds, then start cutscene
@@ -28033,7 +28114,7 @@ function updateEnemies(){
 					for(let v=0;v<30;v++) particles.push({x:en.x+Math.random()*en.w,y:en.y+Math.random()*en.h,vx:(Math.random()-0.5)*8,vy:(Math.random()-0.5)*8-3,life:60+Math.random()*40,color:deathColors[v%4]});
 					graveyardBossState.phase = 'defeated';
 				}
-			} else if(en.typeDef.isBoss && en.type === 'fireColossus'){
+			} else if(en.typeDef.isBoss && en.type === 'fireColossus' && !IS_SURVIVAL){
 				// Fire Colossus (Pyraxis) defeated — Storm Islands boss
 				dmgNumbers.push({x:en.x+en.w/2,y:en.y-30,text:'🔥 PYRAXIS DEFEATED!',age:0,color:'#ffdd00'});
 				const deathColors = ['#ff4400','#ffaa00','#ffdd00','#ff6600'];
@@ -28247,9 +28328,9 @@ function updateEnemies(){
 		}
 
 		// Bosses always see the player in their room (no LoS requirement)
-		const bossAlwaysSees = en.typeDef.isBoss && bossState.phase === 'active';
+		const bossAlwaysSees = en.typeDef.isBoss && (bossState.phase === 'active' || en._surv);
 		// Elder treant: only attacks after player enters boss chamber (cutscene triggers 'active')
-		const caveBossBlocked = en.type === 'elderTreant' && !en._worldFoe && !(IS_DUNGEON && DUNGEON_TYPE === 'earth' && dungeon && dungeon._jungle) && caveBossState.phase !== 'active';
+		const caveBossBlocked = en.type === 'elderTreant' && !en._worldFoe && !en._surv && !(IS_DUNGEON && DUNGEON_TYPE === 'earth' && dungeon && dungeon._jungle) && caveBossState.phase !== 'active';
 		const jungleMiniBossBlocked = !!en._jungleDormant;
 		const canSee=!caveBossBlocked&&!jungleMiniBossBlocked&&(bossAlwaysSees||(en.typeDef.isBoss?(playerDist<enemyDetectRange(en)):(playerDist<enemyDetectRange(en)&&hasLineOfSight(en.x+en.w/2,en.y+en.h/2,player.x+player.w/2,player.y+player.h/2))));
 
@@ -28278,7 +28359,7 @@ function updateEnemies(){
 			// Seraphel: drift toward player Y within cathedral arena bounds
 			if(en.type === 'seraphel'){
 				const targetY = player.y + player.h/2 - en.h/2 - 60;
-				const clampedTarget = Math.max(100, Math.min(targetY, 550));
+				const clampedTarget = en._surv ? Math.max(780, Math.min(targetY, 1500)) : Math.max(100, Math.min(targetY, 550));
 				en.baseY += (clampedTarget - en.baseY) * 0.02;
 			}
 			if(en._worldFoe && !en._cave && typeof EmberfallWorld !== 'undefined'){
@@ -28433,8 +28514,9 @@ function updateEnemies(){
 					else if(playerDist < preferredDist - 60) en.vx = -dirX * spd * 0.8;
 					else en.vx = Math.sin(en._strafeTimer * 0.035) * spd * 1.1;
 					// Clamp to cathedral arena bounds
-					if(en.x < 11100) en.vx = Math.abs(en.vx);
-					if(en.x + en.w > 14800) en.vx = -Math.abs(en.vx);
+					const _sl = en._surv ? SurvivalArena.BOUNDS.left : 11100, _sr = en._surv ? SurvivalArena.BOUNDS.right : 14800;
+					if(en.x < _sl) en.vx = Math.abs(en.vx);
+					if(en.x + en.w > _sr) en.vx = -Math.abs(en.vx);
 				} else {
 					const preferredDist = 350;
 					if(playerDist > preferredDist + 30) en.vx = dirX * spd;
@@ -28789,7 +28871,7 @@ function updateSeraphelFight(){
 	if(sf.phase === 'active'){
 		if(!seraphel){
 			// Grant Lightstep Blade on first kill
-			if(!sf.rewarded){
+			if(!sf.rewarded && !IS_SURVIVAL){
 				sf.rewarded = true;
 				const existing = playerData.inventory.find(e => e.itemId === 'lightstep_blade');
 				if(existing) existing.qty += 1;
@@ -28856,7 +28938,7 @@ function updateSeraphelFight(){
 				sf.dialogText = '';
 				sf.dialogAlpha = 0;
 				health = 0;
-				respawnPlayer();
+				if(IS_SURVIVAL && window.SurvivalMode && SurvivalMode.onPlayerDown()){} else respawnPlayer();
 				dmgNumbers.push({x:player.x+player.w/2, y:player.y-30, text:'SLAIN', age:0, color:'#ff0000'});
 			}
 		} else {
@@ -29194,7 +29276,7 @@ function update(){
 	/* Infernal Kitten — check trigger & update */
 	checkKittenTrigger();
 	_coopBossDmg = IS_COOP;
-	updateKittenBoss();
+	{ const _s = (IS_SURVIVAL && kittenBoss && kittenBoss.entity && !kittenBoss.entity.dead) ? coopAimBegin(kittenBoss.entity) : null; try { updateKittenBoss(); } finally { if(_s) coopAimEnd(_s); } }
 	_coopBossDmg = false;
 
 	/* Fire dungeon puzzles */
@@ -29361,7 +29443,7 @@ function update(){
 		const _ultSpeedMult = 1 + (player._ultSpeedBonus||0);
 		const _transformSpeedMult = player.transformActive ? (player.transformBuffsActive?.speedMult||1) : 1;
 		const _gravSlow = (typeof IS_CHALLENGER !== 'undefined' && IS_CHALLENGER && challengerBoss && challengerBoss.gravityField) ? 0.8 : 1;
-		const gearSpd=(typeof GearRuntime !== 'undefined') ? GearRuntime.moveSpeedMult() : 1;
+		const gearSpd=((typeof GearRuntime !== 'undefined') ? GearRuntime.moveSpeedMult() : 1)*(1+Math.min(0.25,((stats&&stats.strength)||0)*0.003));      // Strength: a little faster
 		const currentSpeed=player.speed*(playerBuffs.speedTimer>0?playerBuffs.speedMult:1)*spdM*vowSpdMult*vowMvPenalty*domSameSpdMult*domVowSpdMult*_ultSpeedMult*_transformSpeedMult*_gravSlow*gearSpd;
 		const vowJmpMult=1+vowJumpBonus*0.08;
 		const currentJump=player.jumpPow*(playerBuffs.jumpTimer>0?playerBuffs.jumpMult:1)*vowJmpMult;
@@ -30544,6 +30626,7 @@ function update(){
 	if(typeof updateChallengerBoss === 'function') updateChallengerBoss();
 	_coopBossDmg = false;
 	if(typeof MeleeMode !== 'undefined') MeleeMode.lateUpdate();
+	if(IS_SURVIVAL && window.SurvivalMode) SurvivalMode.tick();
 	updateEnemies();
 	if((IS_SANDBOX || IS_COLOSSEUM) && window.RuneMages) RuneMages.update();
 	if(typeof updateFireDungeonWorld === 'function') updateFireDungeonWorld();
@@ -30554,7 +30637,7 @@ function update(){
 	if(typeof updateLateWorld === 'function') updateLateWorld();
 	if(typeof updateRosterWorld === 'function') updateRosterWorld();
 	_coopBossDmg = IS_COOP;
-	updateSeraphelFight();
+	{ const _sen = IS_SURVIVAL ? enemies.find(e => e.type === 'seraphel' && !e.dead) : null; const _s = _sen ? coopAimBegin(_sen) : null; try { updateSeraphelFight(); } finally { if(_s) coopAimEnd(_s); } }
 	_coopBossDmg = false;
 	updateGravityWells();
 	updateGroundFlames();
@@ -30705,7 +30788,10 @@ function render(){
 	ctx.translate(camera.shakeX, camera.shakeY);
 
 	/* Background fill */
-	if(IS_COLOSSEUM && window.PvpArena && PvpArena.drawBack(ctx)){
+	const _survBg = !!(IS_SURVIVAL && window.SurvivalArena && SurvivalArena.drawBack(ctx));
+	if(_survBg && !IS_ZENITH && !IS_CHALLENGER){
+		// Starfall Sanctum: sky, parallax, set dressing, platforms
+	} else if(IS_COLOSSEUM && window.PvpArena && PvpArena.drawBack(ctx)){
 		// the PvP map: sky, parallax, decor, lava / icicles / bolts, platforms
 	} else if(IS_COLOSSEUM){
 		// Warm sandstone base in case the texture hasn't loaded yet
@@ -31739,7 +31825,7 @@ function render(){
 		//  ZENITH — Intergalactic Gold & Quartz Arena Rendering
 		// ═══════════════════════════════════════════════════════
 		const _zt = Date.now();
-
+		if(!_survBg){
 		// ── Deep space void background ──
 		const zGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
 		zGrad.addColorStop(0, '#000008');
@@ -31967,6 +32053,7 @@ function render(){
 			ctx.globalAlpha = 1;
 		}
 
+		} // end !_survBg (Survival draws its own Sanctum)
 		// Zenith indicators (telegraph zones)
 		for(const ind of zenithIndicators){
 			const ix2 = ind.x - camera.x, iy2 = ind.y - camera.y;
@@ -36653,7 +36740,7 @@ function render(){
 	}
 
 	/* Render tilemap (only visible tiles) - skip for sandbox/raid/openworld/chronoraid/colosseum/challenger */
-	if(!IS_SANDBOX && !IS_RAID && !IS_OPENWORLD && !IS_CITY && !IS_OBSERVATORY && !IS_DRAGONGRAVEYARD && !IS_ARCANERUINS && !IS_CHRONORAID && !IS_ZENITH && !IS_CHALLENGER && !IS_COLOSSEUM){
+	if(!IS_SANDBOX && !IS_RAID && !IS_OPENWORLD && !IS_CITY && !IS_OBSERVATORY && !IS_DRAGONGRAVEYARD && !IS_ARCANERUINS && !IS_CHRONORAID && !IS_ZENITH && !IS_CHALLENGER && !IS_COLOSSEUM && !IS_SURVIVAL){
 		const sylvarisGroundRow = IS_SYLVARIS ? Math.floor(SYLVARIS_CONFIG.groundY / TILE) : IS_STORMISLANDS ? Math.floor(STORMISLANDS_CONFIG.groundY / TILE) : IS_BLACKSANDS ? Math.floor(BLACKSANDS_CONFIG.groundY / TILE) : 0;
 		const startCol=Math.max(0,Math.floor(camera.x/TILE));
 		const endCol=Math.min(MAP_COLS-1,Math.ceil((camera.x+canvas.width)/TILE));
@@ -39355,6 +39442,7 @@ break;}
 
 	if(IS_CITY && typeof EmberfallCity !== 'undefined' && EmberfallCity.drawForeground && !captainDuel.active) EmberfallCity.drawForeground(ctx, camera, canvas);
 	if(IS_COLOSSEUM && window.PvpArena) PvpArena.drawFront(ctx);
+	if(IS_SURVIVAL && window.SurvivalArena) SurvivalArena.drawFront(ctx);
 	if(typeof DungeonVision !== 'undefined' && DungeonVision.draw) DungeonVision.draw(ctx);
 
 	/* VISIBILITY VOW SACRIFICE — fog-of-war overlay */
@@ -39381,6 +39469,7 @@ break;}
 	ctx.restore();
 
 	if(IS_CHALLENGER && typeof drawChallengerHud === 'function') drawChallengerHud();
+	if(IS_SURVIVAL && window.SurvivalMode) SurvivalMode.draw(ctx);
 
 	/* Necromancer summon selection overlay — drawn after everything */
 	renderNecroSelectOverlay();
@@ -41752,69 +41841,83 @@ function drawEnemy(en){
 }
 
 /* Separated HP bar / name so sprite-rendered enemies can call it too */
+/* ---- shared boss health bar: name plate with ornaments, glossy bar, trailing damage ghost, phase ticks ----
+   o: { key, x, y, w, h, name, sub, hp, max, c1, c2, accent, nameColor, ticks:[0..1], text } — c is a screen-space context */
+const _bossBarGhost = new Map();
+function _bbRound(c, x, y, w, h, r){ c.beginPath(); if(c.roundRect) c.roundRect(x, y, w, h, r); else c.rect(x, y, w, h); }
+function _bbFmt(n){ n = Math.max(0, Math.ceil(n)); return n >= 1e6 ? (n/1e6).toFixed(2)+'M' : n >= 1e5 ? (n/1e3).toFixed(1)+'K' : n.toLocaleString(); }
+function drawBossBar(c, o){
+	const h = o.h || 22, w = o.w, x = o.x, y = o.y;
+	const pct = Math.max(0, Math.min(1, o.hp / Math.max(1, o.max)));
+	let g = _bossBarGhost.get(o.key);
+	if(g == null || g < pct) g = pct; else g += (pct - g) * 0.05;
+	_bossBarGhost.set(o.key, g);
+	const accent = o.accent || '#ff6a4a';
+	c.save();
+	c.textAlign = 'center';
+	// name plate: a diamond either side, hairlines running out to the bar edges
+	c.font = 'bold 15px Georgia, "Times New Roman", serif';
+	const nw = c.measureText(o.name).width, cx = x + w/2, ny = y - 11;
+	const lg = c.createLinearGradient(x, 0, cx - nw/2 - 26, 0); lg.addColorStop(0, 'rgba(255,255,255,0)'); lg.addColorStop(1, accent);
+	const rg = c.createLinearGradient(cx + nw/2 + 26, 0, x + w, 0); rg.addColorStop(0, accent); rg.addColorStop(1, 'rgba(255,255,255,0)');
+	c.lineWidth = 1.5; c.strokeStyle = lg; c.beginPath(); c.moveTo(x, ny - 5); c.lineTo(cx - nw/2 - 26, ny - 5); c.stroke();
+	c.strokeStyle = rg; c.beginPath(); c.moveTo(cx + nw/2 + 26, ny - 5); c.lineTo(x + w, ny - 5); c.stroke();
+	c.fillStyle = accent;
+	for(const dx of [-nw/2 - 16, nw/2 + 16]){ c.beginPath(); c.moveTo(cx+dx, ny-10); c.lineTo(cx+dx+5, ny-5); c.lineTo(cx+dx, ny); c.lineTo(cx+dx-5, ny-5); c.closePath(); c.fill(); }
+	c.shadowColor = 'rgba(0,0,0,.9)'; c.shadowBlur = 6; c.shadowOffsetY = 1;
+	c.fillStyle = o.nameColor || '#fff4e6'; c.fillText(o.name, cx, ny);
+	c.shadowBlur = 0; c.shadowOffsetY = 0;
+	// frame + well
+	c.fillStyle = 'rgba(6,4,12,.82)'; _bbRound(c, x - 3, y - 3, w + 6, h + 6, 8); c.fill();
+	c.save(); _bbRound(c, x, y, w, h, 6); c.clip();
+	c.fillStyle = '#1a1220'; c.fillRect(x, y, w, h);
+	if(g > pct + 0.002){ c.fillStyle = 'rgba(255,240,220,.62)'; c.fillRect(x, y, w * g, h); }       // the part just lost
+	if(pct > 0){
+		const fg = c.createLinearGradient(x, 0, x + w, 0); fg.addColorStop(0, o.c1 || '#b0301a'); fg.addColorStop(1, o.c2 || '#ff7a3a');
+		c.fillStyle = fg; c.fillRect(x, y, w * pct, h);
+		const gl = c.createLinearGradient(0, y, 0, y + h); gl.addColorStop(0, 'rgba(255,255,255,.38)'); gl.addColorStop(0.5, 'rgba(255,255,255,.04)'); gl.addColorStop(1, 'rgba(0,0,0,.28)');
+		c.fillStyle = gl; c.fillRect(x, y, w * pct, h);
+		c.fillStyle = 'rgba(255,255,255,.75)'; c.fillRect(Math.max(x, x + w * pct - 2), y, 2, h);      // bright leading edge
+	}
+	c.fillStyle = 'rgba(0,0,0,.4)';
+	for(const t of (o.ticks || [])) c.fillRect(x + w * t - 1, y, 2, h);
+	c.restore();
+	c.lineWidth = 1.6; c.strokeStyle = accent; c.shadowColor = accent; c.shadowBlur = 9;
+	_bbRound(c, x, y, w, h, 6); c.stroke(); c.shadowBlur = 0;
+	c.font = 'bold 12px Arial'; c.fillStyle = '#fff'; c.shadowColor = 'rgba(0,0,0,.95)'; c.shadowBlur = 4;
+	c.fillText(o.text || (_bbFmt(o.hp) + ' / ' + _bbFmt(o.max)), cx, y + h/2 + 4.5);
+	c.shadowBlur = 0;
+	if(o.sub){ c.font = '600 10px Arial'; c.fillStyle = accent; c.fillText(String(o.sub).toUpperCase(), cx, y + h + 15); }
+	c.restore();
+}
+
 function drawEnemyHpBar(en){
 	const ex=en.x-camera.x, ey=en.y-camera.y;
 	const t = en.typeDef;
 
 	// HP bar (boss gets special large bar)
-	if(en.typeDef.isBoss){
+	if(en.typeDef.isBoss && IS_SURVIVAL){
+		// Survival: the wave HUD draws boss health
+	} else if(en.typeDef.isBoss){
 		// Large boss HP bar at top of screen (screen-fixed)
 		ctx.save();
 		ctx.setTransform(1,0,0,1,0,0); // reset to screen coords
-		const barW = 620;
-		const barH = 26;
-		const barX = (canvas.width - barW) / 2;
-		const barY = 68;
+		const barW = Math.min(640, canvas.width - 60);
 		const hpPct = Math.max(0, en.hp / en.maxHp);
 		const phase2 = en.bossPhase === 2;
 		const isIceBoss = en.type === 'frostColossus';
 		const isEarthBoss = en.type === 'earthColossus';
 		const isSeraphel = en.type === 'seraphel';
-
-		// Bar background
-		ctx.fillStyle = 'rgba(0,0,0,0.7)';
-		ctx.fillRect(barX - 2, barY - 2, barW + 4, barH + 4);
-		// HP fill
-		const hpGrad = ctx.createLinearGradient(barX, barY, barX + barW * hpPct, barY);
-		if(isSeraphel){
-			hpGrad.addColorStop(0, phase2 ? '#cc6622' : '#c4a030');
-			hpGrad.addColorStop(1, phase2 ? '#ff8844' : '#ffd666');
-		} else if(isIceBoss){
-			hpGrad.addColorStop(0, phase2 ? '#0044cc' : '#2266aa');
-			hpGrad.addColorStop(1, phase2 ? '#4488ff' : '#4488ff');
-		} else if(isEarthBoss){
-			hpGrad.addColorStop(0, phase2 ? '#256743' : '#315a35');
-			hpGrad.addColorStop(1, phase2 ? '#a9e76f' : '#70ad58');
-		} else {
-			hpGrad.addColorStop(0, phase2 ? '#ff2200' : '#cc3300');
-			hpGrad.addColorStop(1, phase2 ? '#ff6600' : '#ff4400');
-		}
-		ctx.fillStyle = hpGrad;
-		ctx.fillRect(barX, barY, barW * hpPct, barH);
-		// Phase markers
-		ctx.fillStyle = 'rgba(255,255,255,0.3)';
-		if(isEarthBoss){
-			ctx.fillRect(barX + barW * 0.65 - 1, barY, 2, barH);
-			ctx.fillRect(barX + barW * 0.30 - 1, barY, 2, barH);
-		} else {
-			ctx.fillRect(barX + barW * 0.5 - 1, barY, 2, barH);
-		}
-		// Boss name
-		ctx.font = 'bold 14px Arial';
+		let c1, c2;
+		if(isSeraphel){ c1 = phase2 ? '#cc6622' : '#c4a030'; c2 = phase2 ? '#ff8844' : '#ffd666'; }
+		else if(isIceBoss){ c1 = phase2 ? '#0044cc' : '#2266aa'; c2 = '#4488ff'; }
+		else if(isEarthBoss){ c1 = phase2 ? '#256743' : '#315a35'; c2 = phase2 ? '#a9e76f' : '#70ad58'; }
+		else { c1 = phase2 ? '#ff2200' : '#cc3300'; c2 = phase2 ? '#ff6600' : '#ff4400'; }
 		const nameColor = isSeraphel ? (phase2 ? '#ff8844' : '#ffd666') : isIceBoss ? (phase2 ? '#4488ff' : '#88bbff') : isEarthBoss ? (en.bossPhase >= 3 ? '#e8ff9a' : phase2 ? '#b9f27a' : '#91d76a') : (phase2 ? '#ff6644' : '#ffcc88');
-		ctx.fillStyle = nameColor;
-		ctx.textAlign = 'center';
 		const phaseSuffix2 = isSeraphel ? ' — DIVINE COLLAPSE' : isIceBoss ? ' — UNLEASHED' : isEarthBoss ? (en.bossPhase >= 3 ? ' — HEART OF THE WORLDROOT' : (en._vc && en._vc.mode === 'rebirth') ? ' — ROOTED REBIRTH' : phase2 ? ' — THE WORLDROOT AWAKENS' : '') : ' — ENRAGED';
-		ctx.fillText(t.name + (isEarthBoss ? phaseSuffix2 : (phase2 ? phaseSuffix2 : '')), barX + barW/2, barY - 8);
-		// HP text
-		ctx.font = '11px Arial';
-		ctx.fillStyle = '#fff';
-		ctx.fillText(Math.ceil(en.hp) + ' / ' + en.maxHp, barX + barW/2, barY + barH/2 + 4);
-		// Border
 		const borderColor = isSeraphel ? (phase2 ? '#ff8844' : '#c4a030') : isIceBoss ? (phase2 ? '#4488ff' : '#224488') : isEarthBoss ? (en.bossPhase >= 3 ? '#e8ff9a' : phase2 ? '#a9e76f' : '#477c45') : (phase2 ? '#ff4400' : '#884400');
-		ctx.strokeStyle = borderColor;
-		ctx.lineWidth = 2;
-		ctx.strokeRect(barX, barY, barW, barH);
+		drawBossBar(ctx, { key: en, x: (canvas.width - barW) / 2, y: 100, w: barW, h: 24, name: t.name, sub: (isEarthBoss || phase2) ? phaseSuffix2.replace(/^ — /,'') : '',
+			hp: en.hp, max: en.maxHp, c1: c1, c2: c2, accent: borderColor, nameColor: nameColor, ticks: isEarthBoss ? [0.30, 0.65] : [0.5], text: Math.ceil(en.hp).toLocaleString() + ' / ' + Math.round(en.maxHp).toLocaleString() });
 		ctx.restore();
 	} else if(en.hp<en.maxHp || (en._nm && en._nm.armor > 0)){
 		const barW=en.w+10;
@@ -42411,9 +42514,9 @@ function updateDebugPanel(){
 	document.getElementById('debugContent').textContent=txt;
 }
 </script>
-<script src="player-rig.js?v=4"></script>
+<script src="player-rig.js?v=5"></script>
 <script src="melee-weapons.js?v=2"></script>
-<script src="melee-combat.js?v=42"></script>
+<script src="melee-combat.js?v=45"></script>
 <script>
 /* Reinforcement → the physical/combat properties that already exist (no separate "magic melee" system) */
 (function(){
@@ -42426,7 +42529,8 @@ function updateDebugPanel(){
 		if(!MAGIC_WORLD || ev.source !== player) return;
 		const wk = WK(ev.weaponId);
 		const heavy = R(wk, 'heavyWeapon'), light = R(wk, 'lightWeapon');      // Gravity on the weapon: heavier / lighter
-		const dmgMul = (1 + R(player, 'meleeDamage') + R(wk, 'impact')) * (1 + heavy * 0.9) * (1 - light * 0.75);      // also outweighs the plain impact any weapon reinforcement gives
+		const strMul = 1 + ((typeof stats !== 'undefined' && stats && stats.strength) || 0) * 0.04;      // Strength: +4% melee damage per point (uncapped)
+		const dmgMul = (1 + R(player, 'meleeDamage') + R(wk, 'impact')) * (1 + heavy * 0.9) * (1 - light * 0.75) * strMul;      // also outweighs the plain impact any weapon reinforcement gives
 		const kbMul = 1 + R(wk, 'forceTransfer');
 		ev.amount *= dmgMul;
 		if(ev.knockback){ ev.knockback.x *= kbMul; ev.knockback.y *= kbMul; }
@@ -42920,8 +43024,9 @@ function updateDebugPanel(){
 })();
 </script>
 <script src="fire-dungeon-kit.js?v=5"></script>
-<script src="ignaroth-kit.js?v=5"></script>
-<script src="frostbound-knight-kit.js?v=7"></script>
+<script src="ignaroth-rig.js?v=1"></script>
+<script src="ignaroth-kit.js?v=10"></script>
+<script src="frostbound-knight-kit.js?v=8"></script>
 <script src="ice-dungeon-kit.js?v=4"></script>
 <script src="kryonax-kit.js?v=3"></script>
 <script src="earth-dungeon-kit.js?v=3"></script>
@@ -42941,16 +43046,18 @@ function updateDebugPanel(){
 <script src="dungeon-interact-art.js?v=7"></script>
 <script src="chest-loot.js?v=4"></script>
 <script src="dungeon-fluid.js?v=23"></script>
+<script src="fire-lava.js?v=1"></script>
 <script src="fire-puzzle-kit.js?v=5"></script>
 <script src="ice-puzzle-kit.js?v=4"></script>
 <script src="fire-setpiece.js?v=4"></script>
 <script src="special-rooms.js?v=6"></script>
-<script src="dungeon-env.js?v=55"></script>
+<script src="dungeon-env.js?v=57"></script>
 <script src="dungeon-vision.js?v=11"></script>
 <script src="dungeon-skin.js?v=2"></script>
 <script src="where-map.js?v=2"></script>
 <script src="tutorial-coach.js?v=1"></script>
-<script src="challenger-raid.js?v=34"></script>
+<script src="challenger-raid.js?v=37"></script>
+<script src="survival-mode.js?v=4"></script>
 <script>
 const DUNGEON_MAP_KEY = 'magicBattle_showDungeonMap';
 const DUNGEON_MAP_VIEW = 10;
@@ -43285,7 +43392,7 @@ loop();
 <script src="supabase-config.js?v=3"></script>
 <script src="cloud-save.js?v=6"></script>
 <script src="pvp-net.js?v=10"></script>
-<script src="coop-net.js?v=4"></script>
+<script src="coop-net.js?v=5"></script>
 <script>
 /* ===== Colosseum PvP: maps, rune spells, melee and netcode live in pvp-arena.js ===== */
 if(typeof IS_COLOSSEUM !== 'undefined' && IS_COLOSSEUM && window.PvpArena) PvpArena.boot();
@@ -43403,6 +43510,7 @@ if(typeof IS_COLOSSEUM !== 'undefined' && IS_COLOSSEUM && window.PvpArena) PvpAr
 	/* ---- guest: apply a world snapshot from the host ---- */
 	function applyWorld(w){
 		if(!w || COOP_HOST) return;
+		if(w.sv && window.SurvivalMode) SurvivalMode.applySnap(w.sv);
 		if(w.boss){
 			var boss = getCoopBoss();
 			if(boss){
@@ -43458,7 +43566,7 @@ if(typeof IS_COLOSSEUM !== 'undefined' && IS_COLOSSEUM && window.PvpArena) PvpAr
 					en.bossCharging = !!e.ch;
 					if(e.at) en.attackAnimTimer = e.at;
 				}
-				if(e.d && !en.dead){ en.dead = true; en.deathTimer = 0; en.hp = 0; }
+				if(e.d && !en.dead){ en.dead = true; en.deathTimer = 0; en.hp = 0; if(IS_SURVIVAL){ try { rollEnemyDrops(en); } catch(_e){} } }
 				// Only revive on a real host respawn — reviving straight away would
 				// undo a local kill the host has not processed yet and drop loot twice.
 				else if(!e.d && en.dead && en.deathTimer > 150){ en.dead = false; en.deathTimer = 0; }
@@ -43491,8 +43599,9 @@ if(typeof IS_COLOSSEUM !== 'undefined' && IS_COLOSSEUM && window.PvpArena) PvpAr
 				else if(ev.type === 'ind') addRaidIndicator(d.x, d.y, d.w, d.h, d.d, d.c, d.t);
 				else if(ev.type === 'hit'){
 					// an enemy the host runs went after YOU: the damage is applied here, with your own defences and i-frames
-					if(net && d.to === net.id){ CoopSync.applying = false; const _b = _coopBossDmg; _coopBossDmg = !!d.b; try { damagePlayer(d.d, d.e || []); } finally { _coopBossDmg = _b; CoopSync.applying = true; } }
+					if(net && d.to === net.id){ CoopSync.applying = false; const _b = _coopBossDmg; _coopBossDmg = !!d.b; window.__survRemoteHit = true; try { damagePlayer(d.d, d.e || []); } finally { window.__survRemoteHit = false; _coopBossDmg = _b; CoopSync.applying = true; } }
 				}
+				else if(ev.type === 'surv'){ if(window.SurvivalMode) SurvivalMode.onNet(d); }
 				else if(ev.type === 'knockup'){
 					if(typeof knockUpChallengerPlayers === 'function') knockUpChallengerPlayers(d.m || 1, true);
 				}
@@ -43556,6 +43665,7 @@ if(typeof IS_COLOSSEUM !== 'undefined' && IS_COLOSSEUM && window.PvpArena) PvpAr
 	/* ---- host: build a compact world snapshot ---- */
 	function buildWorldSnapshot(){
 		var out = {};
+		if(window.SurvivalMode && IS_SURVIVAL) out.sv = SurvivalMode.snap();
 		var boss = getCoopBoss();
 		if(boss){
 			out.boss = {

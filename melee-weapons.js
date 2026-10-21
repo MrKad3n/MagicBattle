@@ -187,16 +187,16 @@
 	const gauntlets = weapon({
 		id:'gauntlets', name:'Gauntlets', style:'gauntlets', air:1.15, steer:0.86, color:'#ffe08a',
 		moves:{
-			g1: A({id:'g1', name:'Jab', next:'g2', ground:1, poise:1, su:2, ac:2, ca:5, re:4, miss:1, dmg:12, stop:1, stun:6, kx:3, ky:-0.2, wind:0, lunge:2.4, turn:1, steer:0.95, ox:14, oy:-4, w:20, h:16, fx:'punch', poses:PUNCH}),
-			g2: A({id:'g2', name:'Cross', next:'g3', ground:1, poise:2, su:3, ac:3, ca:5, re:5, miss:2, dmg:16, stop:2, stun:8, kx:5, ky:-1, wind:0.2, lunge:4.6, steer:0.9, ox:16, oy:-2, w:24, h:18, fx:'punch', poses:PUNCH}),
-			g3: A({id:'g3', name:'Heavy Strike', ground:1, type:'heavy', poise:5, su:6, ac:4, ca:5, re:10, miss:4, dmg:30, stop:4, stun:14, kx:9, ky:-2, kd:14, wind:-0.6, lunge:5, chain:0, ox:16, oy:-2, w:28, h:22, fx:'punch', poses:PUNCH}),
-			nair: A({id:'nair', name:'Forward Punch', next:'nair2', aerial:1, type:'air', poise:2, su:2, ac:3, ca:5, re:5, dmg:14, stop:1, kx:4, ky:-0.4, wind:0, lunge:2.2, turn:1, steer:1, ox:14, oy:-2, w:22, h:16, fx:'punch', poses:PUNCH}),
-			nair2: A({id:'nair2', name:'Air Cross', aerial:1, type:'air', poise:2, su:3, ac:3, ca:4, re:6, dmg:16, stop:2, kx:5, wind:0, lunge:2, steer:1, chain:0, ox:14, oy:4, w:24, h:18, fx:'punch', poses:PUNCH}),
-			launcher: A({id:'launcher', name:'Rising Strike', ground:1, type:'launcher', poise:3, su:4, ac:4, ca:6, re:8, dmg:18, stop:3, kx:2, ky:-15, kd:14, wind:-0.2, lunge:1.5, turn:1, chain:0, ox:12, oy:-24, w:24, h:40, fx:'upper', poses:UPPER}),
-			up: A({id:'up', name:'Rising Punch', aerial:1, type:'launcher', poise:3, su:3, ac:4, ca:5, re:7, dmg:16, stop:3, kx:1.5, ky:-13, wind:0, lunge:0.8, turn:1, jump:0, chain:0, ox:10, oy:-26, w:22, h:36, fx:'upper', poses:UPPER}),
-			heavy: A({id:'heavy', name:'Heavy Strike', ground:1, type:'heavy', poise:5, su:5, ac:4, ca:5, re:9, dmg:28, stop:4, stun:13, kx:8, ky:-1.5, wind:-0.5, lunge:4.5, ox:16, oy:0, w:26, h:20, fx:'punch', poses:PUNCH}),
-			down: A({id:'down', name:'Downward Strike', aerial:1, type:'downward', poise:3, su:3, ac:5, ca:4, re:7, dmg:22, stop:3, kx:2, ky:9, plunge:8, jump:0, chain:0, bounce:1, ox:6, oy:16, w:26, h:28, fx:'overhead', poses:DOWN}),
-			special: A({id:'special', name:'Rising Strike', ground:1, type:'launcher', poise:4, su:4, ac:8, ca:6, re:8, dmg:24, stop:4, kx:4, ky:-18, kd:16, wind:-0.2, lunge:2, chain:0, motion:'rise', ox:16, oy:-8, w:36, h:52, fx:'upper', poses:UPPER})
+			g1: A({id:'g1', name:'Jab', next:'g2', ground:1, poise:2, su:2, ac:2, ca:3, re:3, miss:1, dmg:26, stop:1, stun:6, kx:3, ky:-0.2, wind:0, lunge:2.4, turn:1, steer:0.95, ox:14, oy:-4, w:20, h:16, fx:'punch', poses:PUNCH}),
+			g2: A({id:'g2', name:'Cross', next:'g3', ground:1, poise:2, su:2, ac:3, ca:3, re:4, miss:1, dmg:34, stop:2, stun:8, kx:5, ky:-1, wind:0.2, lunge:4.6, steer:0.9, ox:16, oy:-2, w:24, h:18, fx:'punch', poses:PUNCH}),
+			g3: A({id:'g3', name:'Heavy Strike', ground:1, type:'heavy', poise:5, su:4, ac:4, ca:4, re:8, miss:3, dmg:62, stop:4, stun:14, kx:9, ky:-2, kd:14, wind:-0.6, lunge:5, chain:0, ox:16, oy:-2, w:28, h:22, fx:'punch', poses:PUNCH}),
+			nair: A({id:'nair', name:'Forward Punch', next:'nair2', aerial:1, type:'air', poise:2, su:2, ac:3, ca:3, re:4, dmg:28, stop:1, kx:4, ky:-0.4, wind:0, lunge:2.2, turn:1, steer:1, ox:14, oy:-2, w:22, h:16, fx:'punch', poses:PUNCH}),
+			nair2: A({id:'nair2', name:'Air Cross', aerial:1, type:'air', poise:2, su:2, ac:3, ca:3, re:5, dmg:34, stop:2, kx:5, wind:0, lunge:2, steer:1, chain:0, ox:14, oy:4, w:24, h:18, fx:'punch', poses:PUNCH}),
+			launcher: A({id:'launcher', name:'Rising Strike', ground:1, type:'launcher', poise:3, su:3, ac:4, ca:5, re:7, dmg:36, stop:3, kx:2, ky:-15, kd:14, wind:-0.2, lunge:1.5, turn:1, chain:0, ox:12, oy:-24, w:24, h:40, fx:'upper', poses:UPPER}),
+			up: A({id:'up', name:'Rising Punch', aerial:1, type:'launcher', poise:3, su:3, ac:4, ca:4, re:6, dmg:32, stop:3, kx:1.5, ky:-13, wind:0, lunge:0.8, turn:1, jump:0, chain:0, ox:10, oy:-26, w:22, h:36, fx:'upper', poses:UPPER}),
+			heavy: A({id:'heavy', name:'Heavy Strike', ground:1, type:'heavy', poise:5, su:4, ac:4, ca:4, re:8, dmg:58, stop:4, stun:13, kx:8, ky:-1.5, wind:-0.5, lunge:4.5, ox:16, oy:0, w:26, h:20, fx:'punch', poses:PUNCH}),
+			down: A({id:'down', name:'Downward Strike', aerial:1, type:'downward', poise:3, su:3, ac:5, ca:4, re:6, dmg:44, stop:3, kx:2, ky:9, plunge:8, jump:0, chain:0, bounce:1, ox:6, oy:16, w:26, h:28, fx:'overhead', poses:DOWN}),
+			special: A({id:'special', name:'Seize and Slam', ground:1, type:'heavy', poise:6, su:4, ac:70, ca:4, re:14, miss:12, dmg:30, stop:5, stun:20, kx:0, ky:0, wind:0, lunge:3, jump:0, dash:0, chain:0, motion:'grabSlam', ox:36, oy:-2, w:64, h:58, fx:'punch', poses:PUNCH})
 		}
 	});
 
@@ -267,16 +267,16 @@
 	const chain = weapon({
 		id:'chain', name:'Chain Blade', style:'chain', air:0.7, steer:0.22, color:'#d5deea',
 		moves:{
-			g1: A({id:'g1', name:'Chain Slash', next:'g2', ground:1, poise:2, su:6, ac:6, ca:6, re:9, dmg:24, stop:2, kx:7, ky:-1.4, wind:-0.7, lunge:1.2, ox:40, oy:-2, w:64, h:28, fx:'chain', poses:WIDE}),
-			g2: A({id:'g2', name:'Extended Strike', next:'g3', ground:1, poise:2, su:7, ac:5, ca:6, re:10, dmg:26, stop:3, kx:8, ky:-1, wind:-0.8, lunge:1, ox:62, oy:-2, w:78, h:20, fx:'chain', poses:THRUST}),
-			g3: A({id:'g3', name:'Recoil Slash', ground:1, poise:2, su:6, ac:12, ca:5, re:12, miss:4, dmg:18, stop:2, kx:6, ky:-1, wind:0.4, lunge:0.6, pulses:2, every:5, chain:0, ox:28, oy:0, w:90, h:32, fx:'chain', poses:SPIN}),
-			nair: A({id:'nair', name:'Air Chain', next:'nair2', aerial:1, type:'air', poise:2, su:5, ac:6, ca:5, re:8, dmg:20, kx:6, ky:-1, wind:0, lunge:0.8, ox:36, oy:-4, w:66, h:24, fx:'chain', poses:WIDE}),
-			nair2: A({id:'nair2', name:'Air Recoil', aerial:1, type:'air', poise:2, su:5, ac:10, ca:4, re:8, dmg:16, kx:5, wind:0, lunge:0.4, pulses:2, every:4, chain:0, ox:24, oy:4, w:80, h:28, fx:'chain', poses:SPIN}),
-			launcher: A({id:'launcher', name:'Rising Chain', ground:1, type:'launcher', poise:2, su:6, ac:5, ca:5, re:9, dmg:18, stop:2, kx:2, ky:-12, wind:-0.3, lunge:0.4, chain:0, ox:18, oy:-22, w:50, h:40, fx:'upper', poses:UPPER}),
-			up: A({id:'up', name:'Air Rising Chain', aerial:1, type:'launcher', poise:2, su:5, ac:5, ca:4, re:8, dmg:16, kx:1.5, ky:-11, wind:0, lunge:0.3, jump:0, chain:0, ox:12, oy:-24, w:48, h:36, fx:'upper', poses:UPPER}),
-			heavy: A({id:'heavy', name:'Low Chain', ground:1, poise:2, su:6, ac:5, ca:5, re:10, dmg:20, kx:7, ky:1, wind:-0.4, lunge:0.5, ox:30, oy:12, w:70, h:18, fx:'chain', poses:WIDE}),
-			down: A({id:'down', name:'Falling Chain', aerial:1, type:'downward', poise:2, su:5, ac:6, ca:4, re:8, dmg:22, kx:3, ky:6, plunge:5, jump:0, chain:0, ox:6, oy:16, w:64, h:30, fx:'chain', poses:DOWN}),
-			special: A({id:'special', name:'Grapple', ground:1, poise:1, su:7, ac:10, ca:6, re:12, dmg:10, stop:2, kx:3, ky:-1, wind:0, lunge:0.2, pull:'grapple', pullPower:14, motion:'grapple', ox:64, oy:0, w:36, h:24, fx:'chain', poses:THRUST})
+			g1: A({id:'g1', name:'Chain Slash', next:'g2', ground:1, poise:3, su:10, ac:7, ca:7, re:14, dmg:46, stop:4, stun:10, kx:11, ky:-1.4, wind:-0.7, lunge:1.2, ox:40, oy:-2, w:64, h:28, fx:'chain', poses:WIDE}),
+			g2: A({id:'g2', name:'Extended Strike', next:'g3', ground:1, poise:3, su:11, ac:6, ca:7, re:15, dmg:52, stop:4, stun:12, kx:12, ky:-1, wind:-0.8, lunge:1, ox:62, oy:-2, w:78, h:20, fx:'chain', poses:THRUST}),
+			g3: A({id:'g3', name:'Recoil Slash', ground:1, poise:3, su:10, ac:16, ca:6, re:18, miss:6, dmg:34, stop:3, kx:9, ky:-1, wind:0.4, lunge:0.6, pulses:2, every:5, chain:0, ox:28, oy:0, w:90, h:32, fx:'chain', poses:SPIN}),
+			nair: A({id:'nair', name:'Air Chain', next:'nair2', aerial:1, type:'air', poise:3, su:8, ac:7, ca:6, re:11, dmg:38, stop:3, kx:9, ky:-1, wind:0, lunge:0.8, ox:36, oy:-4, w:66, h:24, fx:'chain', poses:WIDE}),
+			nair2: A({id:'nair2', name:'Air Recoil', aerial:1, type:'air', poise:3, su:8, ac:13, ca:5, re:11, dmg:30, kx:8, wind:0, lunge:0.4, pulses:2, every:4, chain:0, ox:24, oy:4, w:80, h:28, fx:'chain', poses:SPIN}),
+			launcher: A({id:'launcher', name:'Rising Chain', ground:1, type:'launcher', poise:3, su:9, ac:6, ca:6, re:13, dmg:34, stop:2, kx:2, ky:-12, wind:-0.3, lunge:0.4, chain:0, ox:18, oy:-22, w:50, h:40, fx:'upper', poses:UPPER}),
+			up: A({id:'up', name:'Air Rising Chain', aerial:1, type:'launcher', poise:3, su:8, ac:6, ca:5, re:11, dmg:30, kx:1.5, ky:-11, wind:0, lunge:0.3, jump:0, chain:0, ox:12, oy:-24, w:48, h:36, fx:'upper', poses:UPPER}),
+			heavy: A({id:'heavy', name:'Low Chain', ground:1, poise:3, su:9, ac:6, ca:6, re:14, dmg:40, stop:3, kx:7, ky:1, wind:-0.4, lunge:0.5, ox:30, oy:12, w:70, h:18, fx:'chain', poses:WIDE}),
+			down: A({id:'down', name:'Falling Chain', aerial:1, type:'downward', poise:3, su:8, ac:7, ca:5, re:11, dmg:42, stop:4, kx:3, ky:6, plunge:5, jump:0, chain:0, ox:6, oy:16, w:64, h:30, fx:'chain', poses:DOWN}),
+			special: A({id:'special', name:'Grapple', ground:1, poise:2, su:10, ac:12, ca:7, re:16, dmg:20, stun:12, stop:2, kx:3, ky:-1, wind:0, lunge:0.2, pull:'grapple', pullPower:14, motion:'grapple', ox:64, oy:0, w:36, h:24, fx:'chain', poses:THRUST})
 		}
 	});
 

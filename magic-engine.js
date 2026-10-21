@@ -95,13 +95,13 @@
 		},
 		/* reinforcement balance */
 		reinforce: {
-			K: 55,                   // strength = 1 − e^(−(energy × density × efficiency) / K)
+			K: 36,                   // strength = 1 − e^(−(energy × density × efficiency) / K)
 			upkeepFrac: 0.008,       // energy used per second (fraction) …
 			upkeepFlat: 0.12,        // … plus a flat amount
-			baseEfficiency: 0.6, efficiencyFromControl: 0.4, controlScale: 15,
+			baseEfficiency: 0.7, efficiencyFromControl: 0.3, controlScale: 15,
 			techWeight: 1,           // how much technique intensity adds to a property
-			caps: { meleeDamage: 1.0, impact: 1.2, forceTransfer: 1.5, reach: 0.4, damageResist: 0.6, knockbackResist: 0.85,
-				moveForce: 0.7, jumpForce: 0.6, stability: 0.8, elementResist: 0.7, spellStability: 0.85, spellImpact: 0.8, illumination: 1,
+			caps: { meleeDamage: 2.0, impact: 2.0, forceTransfer: 2.0, reach: 0.5, damageResist: 0.7, knockbackResist: 0.92,
+				moveForce: 0.95, jumpForce: 0.85, stability: 0.9, elementResist: 0.85, spellStability: 0.95, spellImpact: 1.1, illumination: 1,
 				burnOnHit: 1, chillOnHit: 1, dazzleOnHit: 1, bindOnHit: 1, pullOnHit: 1, portalStrike: 1,
 				heavyGravity: 1, lowGravity: 0.9,
 				heavyWeapon: 1, lightWeapon: 1 }          // host: heavy → slower swings (×1+0.7h) and more damage (×1+0.9h); light → faster (÷1+0.7l), less damage (×1−0.75l)        // the host scales its gravity by 1 + heavy×1.4 − low×0.75
@@ -490,15 +490,15 @@
 		}
 	};
 	// yourself: mostly toughness (you take less damage); it still helps running, jumping and striking, but only up to a lower maximum
-	Reinforcement.registerTarget('self',   { label:'yourself', props:{ damageResist:0.45, knockbackResist:0.45, stability:0.35, meleeDamage:0.2, moveForce:0.08, jumpForce:0.07 },
-		kindCaps:{ meleeDamage:0.25, moveForce:0.15, jumpForce:0.12 } });
+	Reinforcement.registerTarget('self',   { label:'yourself', props:{ damageResist:0.62, knockbackResist:0.6, stability:0.45, meleeDamage:0.3, moveForce:0.12, jumpForce:0.1 },
+		kindCaps:{ meleeDamage:0.8, moveForce:0.15, jumpForce:0.12 } });
 	// legs: run faster and jump higher · arms: your swings hit harder (techniques act as they do on yourself)
-	Reinforcement.registerTarget('legs',   { label:'your legs', props:{ moveForce:0.55, jumpForce:0.55, stability:0.1 }, techAs:'self' });
-	Reinforcement.registerTarget('arms',   { label:'your arms', props:{ meleeDamage:0.75, impact:0.1 }, techAs:'self' });
-	Reinforcement.registerTarget('ally',   { label:'an ally', props:{ damageResist:0.3, knockbackResist:0.4, meleeDamage:0.25, moveForce:0.08, stability:0.3 } });
-	Reinforcement.registerTarget('weapon', { label:'your weapon', props:{ impact:0.45, forceTransfer:0.35, stability:0.3 } });
-	Reinforcement.registerTarget('spell',  { label:'an active spell', props:{ spellStability:0.6, spellImpact:0.35 } });
-	Reinforcement.registerTarget('energy', { label:'energy', props:{ spellStability:0.6, spellImpact:0.35 } });
+	Reinforcement.registerTarget('legs',   { label:'your legs', props:{ moveForce:0.75, jumpForce:0.75, stability:0.14 }, techAs:'self' });
+	Reinforcement.registerTarget('arms',   { label:'your arms', props:{ meleeDamage:1.05, impact:0.16 }, techAs:'self' });
+	Reinforcement.registerTarget('ally',   { label:'an ally', props:{ damageResist:0.42, knockbackResist:0.55, meleeDamage:0.35, moveForce:0.12, stability:0.4 } });
+	Reinforcement.registerTarget('weapon', { label:'your weapon', props:{ impact:0.65, forceTransfer:0.5, stability:0.4 } });
+	Reinforcement.registerTarget('spell',  { label:'an active spell', props:{ spellStability:0.8, spellImpact:0.55 } });
+	Reinforcement.registerTarget('energy', { label:'energy', props:{ spellStability:0.8, spellImpact:0.55 } });
 	// a construct: the energy is poured into its material — it holds together better (integrity, up to a limit) and lasts a little longer
 	Reinforcement.registerTarget('construct', { label:'a construct', props:{ integrity:1 } });
 
@@ -512,7 +512,7 @@
 		const mp = src.magicProfile || {};
 		return {
 			maxEnergy: Math.max(10, Math.round(num(src.maxMana, 1500))),
-			maxOutput: Math.max(20, Math.round(num(src.maxOutput, 60 + powerStat * 6))),
+			maxOutput: Math.max(20, Math.round(num(src.maxOutput, 60 + powerStat * 6 + powerStat * powerStat * 0.15))),      // grows faster the higher your Magic Power
 			energyControl: control,
 			runeCapacity: clamp(Math.round(num(src.runeCapacity, 10 + control * 3)), 2, CONFIG.maxRunes),
 			zoneRadiusMax: zoneRadiusLimit(control),
@@ -2944,7 +2944,7 @@
 		report.upfront = Math.round(report.upfront);
 		report.channel = Math.round(report.channel);
 		report.efficiencyLoss = Math.round(report.efficiencyLoss);
-		if(report.peakOutput > profile.maxOutput) push(report.warnings, { node:def.rootId, code:'OUTPUT', text:'Estimated output ' + report.peakOutput + ' exceeds Max Output ' + profile.maxOutput + ' — energy will be clamped while casting', level:'warn' });
+		if(report.peakOutput > profile.maxOutput) push(report.warnings, { node:def.rootId, code:'OUTPUT', text:'Estimated output ' + report.peakOutput + ' exceeds Max Output ' + profile.maxOutput + ' — casting it costs ' + (report.peakOutput - profile.maxOutput) * 5 + ' Total Mana (5 × the excess)', level:'warn' });
 		if(report.upfront > profile.maxEnergy) error(def.rootId, 'RESERVE', 'Costs ' + report.cost + ' energy — more than your maximum reserve (' + profile.maxEnergy + ')');
 		const ae = Techniques.validateAllocations(profile);
 		for(const t of ae) error(def.rootId, 'TECH_POINTS', t);

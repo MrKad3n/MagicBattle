@@ -63,7 +63,7 @@
 			return 'dungeon.html?type=' + encodeURIComponent(game.type) +
 				'&diff=' + encodeURIComponent(game.diff || 'normal') + tail;
 		}
-		return 'dungeon.html?mode=' + encodeURIComponent((game && game.mode) || 'raid') + tail;
+		return 'dungeon.html?mode=' + encodeURIComponent((game && game.mode) || 'raid') + (game && game.sw > 1 ? '&sw=' + (game.sw | 0) : '') + tail;
 	}
 
 	/* ---------------- LOBBY (host + join share one implementation) ----------------

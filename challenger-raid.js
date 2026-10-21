@@ -3,7 +3,9 @@
    Custom attack FX only. Never uses shared raid projectile shapes.
    ============================================================= */
 (function(){
-	if(typeof IS_CHALLENGER === 'undefined' || !IS_CHALLENGER) return;
+	// Loads in Survival too (the wave-250 fight raises IS_CHALLENGER only while it runs).
+	const SURV = typeof IS_SURVIVAL !== 'undefined' && IS_SURVIVAL;
+	if(typeof IS_CHALLENGER === 'undefined' || !(IS_CHALLENGER || SURV)) return;
 
 	const FLOOR = CHALLENGER_RAID_CONFIG.arenaBottom;
 	const VOID_Y = CHALLENGER_RAID_CONFIG.voidY || 3120;
@@ -22,6 +24,7 @@
 	const ATK_GAP = 45; // ~0.75s between attacks at 60fps
 
 	function F(n){ return Math.round(n * T); }
+	function INTRO_X(){ return 1980 + (A_L + A_R) / 2 - 2500; }
 
 	function loadImg(src){
 		const im = new Image();
@@ -190,6 +193,7 @@
 
 	const hits = [];
 	window.__challengerHits = hits;
+	window.resetChallengerFx = function(){ hits.length = 0; };
 
 	function ready(img){ return img && img.complete && img.naturalWidth > 0; }
 
@@ -733,14 +737,14 @@
 		const b = challengerBoss;
 		if(b.phase >= 3) return 'mortal';
 		if(b.phase === 2){
-			const pool = ['cataclysm', 'starfall', 'thousand', 'onehit', 'mortal', 'blitz'];
+			const pool = SURV ? ['starfall', 'thousand', 'onehit', 'mortal', 'blitz'] : ['cataclysm', 'starfall', 'thousand', 'onehit', 'mortal', 'blitz'];   // Survival: no slab-throwing, the room is never broken
 			let n = pool[Math.floor(Math.random() * pool.length)];
 			if(n === b.lastAttack) n = pool[(pool.indexOf(n) + 1) % pool.length];
 			return n;
 		}
 		const air = (floorAt(player.x + player.w / 2) - (player.y + player.h)) > 180;
 		if(air && Math.random() < 0.45) return 'uppercut';
-		const pool = ['planetbreaker', 'meteorpunch', 'gravitystep', 'flashstep', 'mortal', 'worldbreaker', 'blitz'];
+		const pool = SURV ? ['planetbreaker', 'meteorpunch', 'gravitystep', 'flashstep', 'mortal', 'blitz'] : ['planetbreaker', 'meteorpunch', 'gravitystep', 'flashstep', 'mortal', 'worldbreaker', 'blitz'];
 		let n = pool[Math.floor(Math.random() * pool.length)];
 		if(n === b.lastAttack) n = pool[(pool.indexOf(n) + 1) % pool.length];
 		return n;
@@ -1856,7 +1860,7 @@
 			}
 		}
 		if(b.inIntro && b.introTimer < F(130)){
-			b._introWalkSpd = Math.abs(1980 - b.x) * 0.04;
+			b._introWalkSpd = Math.abs(INTRO_X() - b.x) * 0.04;
 		}
 		const actDef = ACT[b.act] || ACT.idle;
 		const frameHold = actFrameHold(b);
@@ -1888,7 +1892,7 @@
 			b.facing = -1;
 			if(b.introTimer < F(130)){
 				setAct('walk');
-				b.x += (1980 - b.x) * 0.04;
+				b.x += (INTRO_X() - b.x) * 0.04;
 			} else if(b.introTimer === F(140)){
 				setAct('neckCrack');
 				b.vx = 0;
@@ -1929,7 +1933,7 @@
 			if(b.phaseCut === 1){
 				if(b.phaseCutT === 1) setAct('armorOff');
 				if(b.phaseCutT === F(8)){ setAct('smileSpeak'); say('Enough testing.', 1800); }
-				if(b.phaseCutT === F(50)){ setAct('limitSlam'); shatterArena(); }
+				if(b.phaseCutT === F(50)){ setAct('limitSlam'); if(!SURV) shatterArena(); else { shakeScreen(18, 30); if(window.SurvivalArena) SurvivalArena.flash && SurvivalArena.flash(); } }
 				if(b.phaseCutT === F(90)){ setAct('nowFight'); say('Now... fight me.', 2000); }
 				if(b.phaseCutT > F(165)){ b.phaseCut = 0; b.globalCd = F(32); setAct('idleAura'); }
 			} else {
@@ -2164,6 +2168,7 @@
 		const b = challengerBoss;
 		const t = Date.now();
 
+		if(!SURV){   // Survival paints the Sanctum itself
 		ctx.drawImage(ensureSkyPlate(), 0, 0, canvas.width, canvas.height);
 
 		const parX = -(camera.x * 0.012);
@@ -2301,6 +2306,7 @@
 			ctx.restore();
 		}
 
+		}
 		if(typeof raidIndicators !== 'undefined'){
 			for(const ind of raidIndicators){
 				const progress = ind.age / ind.maxAge;
@@ -2442,33 +2448,15 @@
 		const b = challengerBoss;
 		ctx.save();
 		ctx.setTransform(1, 0, 0, 1, 0, 0);
-		const barW = 640, barH = 22;
-		const barX = (canvas.width - barW) / 2;
-		const barY = 52;
-		const hpPct = Math.max(0, b.hp / b.maxHp);
-		ctx.fillStyle = 'rgba(0,0,0,0.78)';
-		ctx.fillRect(barX - 4, barY - 18, barW + 8, 56);
-		ctx.strokeStyle = 'rgba(180,220,255,0.55)';
-		ctx.lineWidth = 2;
-		ctx.strokeRect(barX - 4, barY - 18, barW + 8, 56);
-		ctx.fillStyle = '#1a1010';
-		ctx.fillRect(barX, barY, barW, barH);
-		const col = b.phase >= 3 ? '#e8e8e8' : b.phase >= 2 ? '#5ad4ff' : '#9ad0ff';
-		const grd = ctx.createLinearGradient(barX, barY, barX + barW * hpPct, barY);
-		grd.addColorStop(0, col);
-		grd.addColorStop(1, '#ffffff');
-		ctx.fillStyle = grd;
-		ctx.fillRect(barX, barY, barW * hpPct, barH);
-		ctx.strokeStyle = '#c8e8ff';
-		ctx.strokeRect(barX, barY, barW, barH);
-		ctx.fillStyle = '#fff';
-		ctx.font = 'bold 13px Arial';
-		ctx.textAlign = 'center';
+		const barW = Math.min(640, canvas.width - 60);
 		const phaseName = b.inIntro ? 'Approaching' : (b.phase === 1 ? 'Show Me Your Strength' : b.phase === 2 ? 'Now I Fight' : 'Final Exchange');
-		ctx.fillText('The Grand Challenger   ' + Math.round(b.hp) + ' / ' + b.maxHp, canvas.width / 2, barY - 4);
-		ctx.font = '11px Arial';
-		ctx.fillStyle = '#c8d8e8';
-		ctx.fillText(phaseName + (b.markedPlayer && !b.dead ? '   •   MORTAL CHALLENGE' : ''), canvas.width / 2, barY + barH + 14);
+		const col = b.phase >= 3 ? '#cfd6de' : b.phase >= 2 ? '#2fb6e8' : '#5a9fd8';
+		const sub = phaseName + (b.markedPlayer && !b.dead ? '  •  Mortal Challenge' : '');
+		if(typeof drawBossBar === 'function'){
+			drawBossBar(ctx, { key: 'challenger', x: (canvas.width - barW) / 2, y: 62, w: barW, h: 24, name: 'The Grand Challenger', sub,
+				hp: b.hp, max: b.maxHp, c1: col, c2: '#ffffff', accent: '#9ad8ff', nameColor: '#eaf6ff', ticks: [1/3, 2/3],
+				text: Math.round(b.hp).toLocaleString() + ' / ' + Math.round(b.maxHp).toLocaleString() });
+		}
 		ctx.restore();
 	};
 
@@ -2584,7 +2572,7 @@
 	}
 
 	window.showChallengerVictory = function(){
-		if(!IS_CHALLENGER) return;
+		if(!IS_CHALLENGER || SURV) return;
 		const overlay = document.createElement('div');
 		overlay.id = 'victoryOverlay';
 		overlay.style.cssText = 'position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Arial,sans-serif;color:#fff;background:rgba(0,0,0,0.78);';

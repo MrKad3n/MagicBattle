@@ -465,13 +465,34 @@
 			const d = dirOf(W.a), len = geo.len + shift;
 			return { x: W.x + d.x * len, y: W.y + d.y * len };
 		}
-		if(extra && extra.portal && !extra.draw){
-			// Spatial portal strike: the near half stays in your hand, the far half comes out of the exit portal
+		if(extra && extra.draw && extra.cut){
+			// a flexible weapon (whip / chain) through a world portal: what is past the portal plane is drawn at the exit
+			ctx.restore();
+			const d = dirOf(W.a), nx = -d.y, ny = d.x, B = 1400, c = extra.cut;
+			const half = (sg) => {
+				ctx.beginPath();
+				ctx.moveTo(c.mx + nx * B, c.my + ny * B); ctx.lineTo(c.mx - nx * B, c.my - ny * B);
+				ctx.lineTo(c.mx - nx * B + sg * d.x * B, c.my - ny * B + sg * d.y * B); ctx.lineTo(c.mx + nx * B + sg * d.x * B, c.my + ny * B + sg * d.y * B);
+				ctx.closePath(); ctx.clip();
+			};
+			const run = () => { ctx.translate(W.x, W.y); ctx.rotate(W.a); extra.draw(ctx); };
+			ctx.save(); half(-1); run(); ctx.restore();
+			ctx.save(); ctx.translate(c.ox, c.oy); half(1); run(); ctx.restore();
+			return null;
+		}
+		if((extra && (extra.portal || extra.cut)) && !extra.draw){
+			// Spatial portal strike: the near half stays in your hand, the far half comes out of the exit portal.
+			// (A world portal does the same, but the cut is wherever the blade first enters it.)
 			ctx.restore();
 			const d = dirOf(W.a), nx = -d.y, ny = d.x;
-			const m = Math.max(shift + geo.len * 0.5, (geo.len + shift) * 0.3);
-			const mx = W.x + d.x * m, my = W.y + d.y * m, B = 600;
-			const ox = extra.portal.x - mx, oy = extra.portal.y - my;
+			let mx, my, ox, oy;
+			if(extra.cut){ mx = extra.cut.mx; my = extra.cut.my; ox = extra.cut.ox; oy = extra.cut.oy; }
+			else {
+				const m = Math.max(shift + geo.len * 0.5, (geo.len + shift) * 0.3);
+				mx = W.x + d.x * m; my = W.y + d.y * m;
+				ox = extra.portal.x - mx; oy = extra.portal.y - my;
+			}
+			const B = 600;
 			const half = (sg) => {
 				ctx.beginPath();
 				ctx.moveTo(mx + nx * B, my + ny * B); ctx.lineTo(mx - nx * B, my - ny * B);
@@ -592,7 +613,13 @@
 		// weapon then front arm over it (fist wraps the grip)
 		let tip = null;
 		const portalLocal = o.portal ? { x: (o.portal.x - feetX) / (f * squash * vis), y: (o.portal.y - feetY) / (stretch * vis) } : null;
-		if(P.weapon) tip = drawWeapon(ctx, style, P.weapon, false, o.hideWeapon ? { hide: true } : (o.weaponDraw ? { draw: o.weaponDraw } : (portalLocal ? { portal: portalLocal } : null)));
+		let cutLocal = null;
+		if(o.portalCut && !portalLocal){
+			const cvt = (x, y) => ({ x: (x - feetX) / (f * squash * vis), y: (y - feetY) / (stretch * vis) });
+			const a = cvt(o.portalCut.cx, o.portalCut.cy), b = cvt(o.portalCut.ex, o.portalCut.ey);
+			cutLocal = { mx: a.x, my: a.y, ox: b.x - a.x, oy: b.y - a.y };
+		}
+		if(P.weapon) tip = drawWeapon(ctx, style, P.weapon, false, o.hideWeapon ? { hide: true } : (o.weaponDraw ? { draw: o.weaponDraw, cut: cutLocal } : (portalLocal ? { portal: portalLocal } : (cutLocal ? { cut: cutLocal } : null))));
 		if(P.armB.grip) drawArm(ctx, P.armB, tint, false, backHandPart, true);
 		drawArm(ctx, P.armF, tint, false, style === 'gauntlets' && !o.hideWeapon ? 'gauntlet' : 'hand', !!(style && style !== 'gauntlets'));
 		// spell glow in the casting hand

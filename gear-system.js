@@ -264,6 +264,7 @@
 			.replace('magicControl', 'Magic Control')
 			.replace('magicDefence', 'Magic Defence')
 			.replace('manaRegen', 'Mana Regen')
+			.replace('strength', 'Strength')
 			.replace('magic', 'Magic ')
 			.replace('mana', 'Mana ')
 			.replace(/([A-Z])/g, ' $1')
@@ -332,7 +333,7 @@
 	}
 
 	const STAT_COLORS = {
-		magicPower: '#ff6b3d', magicControl: '#6ea8ff', magicDefence: '#3dcc7a', manaRegen: '#5ee0d4'
+		magicPower: '#ff6b3d', magicControl: '#6ea8ff', magicDefence: '#3dcc7a', manaRegen: '#5ee0d4', strength: '#ff9d3d'
 	};
 	const LOCATIONS = {
 		fire: { name: 'The Infernal Depths', scene: 'fire', blurb: 'Dropped in the Infernal Depths.' },

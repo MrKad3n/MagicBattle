@@ -706,7 +706,6 @@
 				P('static', 3360, 640, 260),
 				P('static', 160, 860, 340, { perch:true }),
 				P('static', 3900, 860, 340, { perch:true }),
-				P('static', 2060, 780, 280, { perch:true }),
 			],
 			pillars:[
 				{ x:980, yFromFloor:0, w:72, h:300 },
