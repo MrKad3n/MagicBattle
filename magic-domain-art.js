@@ -1121,7 +1121,7 @@
 		if(D.phase === 'active'){
 			c.globalCompositeOperation = 'source-over'; c.textAlign = 'center'; c.font = titleFont(L, Math.round(clamp(R * 0.09, 12, 22)));
 			c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,.6)'; c.fillStyle = A(L.c2, 0.92);
-			const tt2 = titleCase(L, L.title); c.strokeText(tt2, x, y - R - 12); c.fillText(tt2, x, y - R - 12);
+			const tt2 = titleCase(L, /^jp/.test(L.titleFont || '') && L.title.trim().toLowerCase() === 'domain expansion' ? '領域展開' : L.title); c.strokeText(tt2, x, y - R - 12); c.fillText(tt2, x, y - R - 12);
 		}
 		c.restore();
 	}
@@ -1134,10 +1134,14 @@
 		brush:   (s) => '700 ' + s + 'px "Brush Script MT", "Segoe Script", "Lucida Handwriting", cursive',
 		gothic:  (s) => '700 ' + s + 'px "Old English Text MT", "UnifrakturMaguntia", "Engravers MT", Georgia, serif',
 		mono:    (s) => '700 ' + s + 'px "Courier New", Consolas, monospace',
+		jpmincho:(s) => '800 ' + s + 'px "Yu Mincho", "YuMincho", "Hiragino Mincho ProN", "Noto Serif CJK JP", "Noto Serif JP", "MS Mincho", "Songti SC", serif',
+		jpgothic:(s) => '900 ' + s + 'px "Yu Gothic", "YuGothic", "Hiragino Kaku Gothic ProN", "Noto Sans CJK JP", "Noto Sans JP", "Meiryo", "MS Gothic", sans-serif',
+		jpbrush: (s) => '700 ' + s + 'px "HGSeikaishotaiPRO", "HG行書体", "Yuji Syuku", "Yu Mincho", "Hiragino Mincho ProN", "Noto Serif CJK JP", "MS Mincho", serif',
 		wide:    (s) => '300 ' + s + 'px "Trebuchet MS", "Segoe UI", Verdana, sans-serif'
 	};
 	const titleFont = (L, s) => (FONT_STACK[L.titleFont] || FONT_STACK.serif)(s);
-	const titleCase = (L, s) => ['brush', 'gothic', 'elegant'].includes(L.titleFont) ? s : s.toUpperCase();
+	const isJP = (L) => /^jp/.test(L.titleFont || '');
+	const titleCase = (L, s) => (isJP(L) || ['brush', 'gothic', 'elegant'].includes(L.titleFont)) ? s : s.toUpperCase();
 	function titleColors(L){
 		switch(L.titleColor){
 			case 'white': return { fill: '#ffffff', stroke: 'rgba(0,0,0,.75)', glow: L.c1 };
@@ -1151,8 +1155,9 @@
 	function drawTitle(c, w, h, L, p){
 		const ta = clamp((p - 0.06) / 0.22, 0, 1); if(ta <= 0) return;
 		const sc = 1.18 - 0.18 * easeOut(clamp((p - 0.04) / 0.3, 0, 1));
-		const col = titleColors(L), title = titleCase(L, L.title);
-		const sub = (L.subtitle && L.subtitle.trim()) || (L.title.trim().toLowerCase() === 'domain expansion' ? '' : 'Domain Expansion');
+		const isDefaultTitle = L.title.trim().toLowerCase() === 'domain expansion';
+		const col = titleColors(L), title = titleCase(L, isJP(L) && isDefaultTitle ? '領域展開' : L.title);      // the default name reads 領域展開 in a Japanese font
+		const sub = (L.subtitle && L.subtitle.trim()) || (isDefaultTitle && !isJP(L) ? '' : 'Domain Expansion');
 		const wide = L.titleFont === 'wide';
 		let fs = Math.round(clamp(Math.min(w * 0.075, h * 0.1), 26, 84));
 		c.save(); c.globalAlpha = ta; c.textBaseline = 'middle';

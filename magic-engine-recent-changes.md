@@ -2954,3 +2954,13 @@ More than 24 energies on screen → cached-frame stamps; a spatial grid for meet
 
 ## c77 — Dungeon load time
 - dungeon.html loaded `js.puter.com` with a blocking `<script>` in the head, so a slow or unreachable puter.com stalled the whole page (measured 7 s DOM-ready with a 6 s puter delay, vs 1.3 s now). It is now injected after the page has loaded (puter is only used for optional NPC chat, guarded by `typeof puter`).
+
+## c78 — Over-reserve spells, bigger domain pours, rule fuel, Japanese title fonts
+- **Max mana overflow:** `deriveProfile({ overflow:true })` (set by dungeon.html and the inventory) turns the RESERVE error into a warning. A spell costing more than your whole reserve is cast by paying the reserve and the excess 1:1 from Total Mana (`MagicEngine.overReserve(cost, profile)`); not enough Total Mana → "Over your max mana … needs N Total Mana". Hotbar tooltip and the inventory slot list show "+N total". Sandbox is unchanged (infinite).
+- **Domain "Energy poured in"** max 1,500 → `CONFIG.domainSelfFuelMax` = 20,000 (still costs 1:1; the excess over your reserve rides on Total Mana).
+- **Domain param `ruleFuel`** ("Rules draw energy from"): domain (default) · your energy · your Total Mana · your energy then Total Mana. Applies to Generate runes inside domain rules; new host hook `drainTotal(owner, amount)` (dungeon.html implements it from Total Mana) and `api.drainTotal`.
+- **Japanese title fonts** (Mincho / Gothic / Brush) in the Domain look's Title font; with a Japanese font the default name displays as 領域展開 (subtitle "Domain Expansion").
+- engine v74, magic-domain-look v2, magic-domain-art v3; tools/domain-tests.js +7 checks.
+
+## c79 — Sandbox domains stack
+- In the sandbox (`profile.sandbox`): casting a domain no longer replaces your open one, no burnout is applied when a domain ends (so techniques and the next domain are never blocked), and a zone that holds a live domain is not closed when a new zone opens. Several domains can stand at once. Normal play unchanged. engine v75; tools/domain-tests.js +2 checks.

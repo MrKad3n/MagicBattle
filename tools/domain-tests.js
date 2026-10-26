@@ -453,6 +453,42 @@ function recorder(){
 	ok('Load: 8 foes and 6 laws for 15 s stay cheap and clean up', ms < 4000 && worst < 25, ms + ' ms total · worst frame ' + r1(worst) + ' ms · domains ' + S.W.domains.filter(d => d.alive).length);
 }
 
+/* ------------------------------------------------------------ c78: rule fuel, bigger pours, max-mana overflow, Japanese fonts */
+{
+	const run1 = (ruleFuel) => {
+		const f1 = foe(); const S = world([f1]); let drained = 0, totalDrained = 0;
+		S.host.drainEnergy = (o, a) => { drained += a; return a; }; S.host.drainTotal = (o, a) => { totalDrained += a; return a; };
+		const { D } = open(S, [ L({ event: 'every', period: 0.5, effect: 'cast', cool: 0 }, [ ['generate', { amount: 60 }, { mode: 'instant' }, [ ['redirect', { toward: 'target', speedPct: 90 }] ]] ]) ], { ruleFuel });
+		const z0 = D.z.amount; run(S, 2); return { z0, z1: D.z.amount, drained, totalDrained };
+	};
+	const a = run1('domain'), b = run1('mana'), c = run1('total'), d = run1('both');
+	ok('Rules draw from the domain\'s energy by default', a.z1 < a.z0 - 60 && a.drained === 0 && a.totalDrained === 0, 'zone ' + r1(a.z0) + ' → ' + r1(a.z1));
+	ok('"Your energy" rules spend your mana and spare the zone', b.drained > 100 && b.totalDrained === 0 && b.z0 - b.z1 < a.z0 - a.z1 - 50, 'mana ' + r1(b.drained) + ' · zone lost ' + r1(b.z0 - b.z1));
+	ok('"Total Mana" rules spend Total Mana only', c.totalDrained > 100 && c.drained === 0, 'total ' + r1(c.totalDrained));
+	ok('"Energy, then Total Mana" prefers your energy', d.drained > 100 && d.totalDrained === 0, 'mana ' + r1(d.drained));
+	const big = ME.validate(domainSpell([], { selfFuel: 12000 }), Object.assign(prof(), { maxEnergy: 1e6 }));
+	ok('A domain can be given far more energy (up to ' + ME.CONFIG.domainSelfFuelMax + ')', !big.errors.some(e => e.code === 'PARAM') && ME.CONFIG.domainSelfFuelMax >= 20000, big.errors.map(e => e.code).join(',') || 'valid');
+	const sp = domainSpell([], {}), pr = Object.assign(prof(), { maxEnergy: 300 });
+	const rA = ME.validate(sp, pr), rB = ME.validate(sp, Object.assign({}, pr, { overflow: true }));
+	ok('Over your max mana: refused normally, allowed with Total Mana overflow', rA.errors.some(e => e.code === 'RESERVE') && !rB.errors.some(e => e.code === 'RESERVE') && ME.overReserve(rB.upfront, pr).over > 0, 'cost ' + rB.upfront + ' vs ' + pr.maxEnergy + ' → +' + ME.overReserve(rB.upfront, pr).over + ' Total');
+	const fonts = globalThis.MagicDomainLook.FIELDS.find(f => f.key === 'titleFont').options.map(o => o.value || o.v);
+	ok('Japanese title fonts exist', ['jpmincho', 'jpgothic', 'jpbrush'].every(k => fonts.includes(k)), fonts.join(' '));
+}
+
+{
+	const cast2 = (sb) => {
+		const S = world([foe()]); const p = Object.assign(prof(), { sandbox: sb, maxEnergy: 1e6 });
+		const go = () => S.W.cast(domainSpell([], { cinematic: 'none' }), { profile: p, owner: S.owner, host: S.host });
+		const r1_ = go(); run(S, 0.3); const r2_ = go(); run(S, 0.3);
+		return { second: r2_.ok, err: r2_.error || (r2_.report && r2_.report.errors[0] && r2_.report.errors[0].text), alive: S.W.domains.filter(q => q.alive).length };
+	};
+	const n = cast2(false), y = cast2(true);
+	ok('Sandbox: domains can be cast again and again and stay open together', y.alive === 2 && n.alive <= 1, 'sandbox ' + y.alive + ' open (' + y.second + ' ' + y.err + ') · normal ' + n.alive);
+	const S = world([foe()]); const p = Object.assign(prof(), { sandbox: true, maxEnergy: 1e6 });
+	S.W.cast(domainSpell([], { cinematic: 'none', duration: 3 }), { profile: p, owner: S.owner, host: S.host }); run(S, 5);
+	ok('Sandbox: no burnout after a domain ends', S.W.burnoutLeft(S.owner.id) === 0, 'burnout ' + S.W.burnoutLeft(S.owner.id));
+}
+
 /* ------------------------------------------------------------ report */
 const bad = out.filter(o => !o.pass);
 for(const o of out) console.log((o.pass ? '  ok   ' : '  FAIL ') + o.name + (o.detail ? '  [' + o.detail + ']' : ''));

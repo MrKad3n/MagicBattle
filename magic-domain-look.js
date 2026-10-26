@@ -63,7 +63,7 @@
 		o('lightning', 'Lightning'), o('ripple', 'Ripples'), o('feathers', 'Feathers'), o('eclipse', 'Eclipse'), o('flames', 'Firestorm'), o('glass', 'Shattered glass')
 	];
 	const FREEZE = [ o('grey', 'Grey'), o('sepia', 'Old photograph'), o('invert', 'Negative'), o('tint', 'Tinted'), o('dark', 'Darkness'), o('none', 'Untouched') ];
-	const FONTS = [ o('serif', 'Classic serif'), o('elegant', 'Elegant'), o('bold', 'Heavy'), o('brush', 'Brush'), o('gothic', 'Blackletter'), o('mono', 'Typewriter'), o('wide', 'Wide') ];
+	const FONTS = [ o('serif', 'Classic serif'), o('elegant', 'Elegant'), o('bold', 'Heavy'), o('brush', 'Brush'), o('gothic', 'Blackletter'), o('mono', 'Typewriter'), o('wide', 'Wide'), o('jpmincho', '日本語 — Mincho (serif)'), o('jpgothic', '日本語 — Gothic (bold)'), o('jpbrush', '日本語 — Brush (calligraphy)') ];
 	const LAYOUTS = [ o('center', 'Centred'), o('low', 'Low, cinematic'), o('vertical', 'Vertical, at the side'), o('split', 'Split across the screen') ];
 	const TITLE_COLOR = [ o('auto', 'Domain colour'), o('white', 'White'), o('black', 'Black on light'), o('primary', 'Primary'), o('gold', 'Gold') ];
 	const VEILS = [ o('shell', 'Glowing shell'), o('black', 'Black sphere'), o('mirror', 'Mirror sphere'), o('cocoon', 'Woven cocoon'), o('lattice', 'Hex shell'), o('storm', 'Storm globe') ];

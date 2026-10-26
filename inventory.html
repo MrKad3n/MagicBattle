@@ -731,12 +731,12 @@ select,select option{background:#1c1a30;color:#e8eaff}
 <script src="yuta-spell.js?v=2"></script>
 <script src="scrolls.js?v=4"></script>
 <script src="spell-cost.js?v=14"></script>
-<script src="magic-engine.js?v=73"></script>
+<script src="magic-engine.js?v=75"></script>
 <script src="magic-techniques.js?v=45"></script>
 <script src="magic-vows.js?v=1"></script>
 <script src="magic-domain.js?v=5"></script>
-<script src="magic-domain-look.js?v=1"></script>
-<script src="magic-domain-art.js?v=2"></script>
+<script src="magic-domain-look.js?v=2"></script>
+<script src="magic-domain-art.js?v=3"></script>
 <script src="shape-editor.js?v=3"></script>
 <script src="magic-forge.js?v=26"></script>
 <script src="magic-domain-designer.js?v=1"></script>
@@ -1165,7 +1165,7 @@ function magicProfileFor(){
 	const st = computeStats();
 	let maxMana = MagicEngine.maxManaFromStats(st, 0);
 	try { if(typeof calcVowManaPenalty === 'function') maxMana = MagicEngine.maxManaFromStats(st, calcVowManaPenalty()); } catch(e){}
-	return MagicEngine.deriveProfile({ magicControl: st.magicControl, magicPower: st.magicPower, maxMana, magicProfile: STATE.magicProfile });
+	return MagicEngine.deriveProfile({ magicControl: st.magicControl, magicPower: st.magicPower, maxMana, overflow: true, magicProfile: STATE.magicProfile });
 }
 
 /* =============================================================
@@ -4214,7 +4214,8 @@ function renderSpellSlots(){
 				<span class="sp-num">${isUlt ? '⚡0' : (i+1)}</span>
 				<span class="sp-color" style="background:${bad ? '#ff5d7a' : 'linear-gradient(135deg,#9fe6ff,#8d6bff)'}"></span>
 				<span class="sp-name" style="${bad?'color:var(--red)':''}">${sp.passive ? '∞ ' : ''}${escHtml(sp.name || 'Spell')}</span>
-				${(() => { const oo = (!sp.passive && MagicEngine.overOutput) ? MagicEngine.overOutput(report, magicProfileFor()) : null;
+				${(() => { const orv = (!sp.passive && MagicEngine.overReserve) ? MagicEngine.overReserve(report.cost, magicProfileFor()) : null; if(orv) return `<span class="sp-mana sp-mana-over" title="Over your max mana (${orv.cost} / ${orv.max}): casting it also costs ${orv.over} Total Mana"><span>${orv.max}💧</span><span class="sp-over">+${orv.over} total</span></span>`;
+					const oo = (!sp.passive && MagicEngine.overOutput) ? MagicEngine.overOutput(report, magicProfileFor()) : null;
 					return oo ? `<span class="sp-mana sp-mana-over" title="${report.runeCount} rune${report.runeCount===1?'':'s'} · over your Max Output (${oo.peak} / ${oo.max}): casting it also costs ${oo.total} Total Mana"><span>${Math.round(report.cost * oo.scale)}💧</span><span class="sp-over">+${oo.total} total</span></span>`
 						: `<span class="sp-mana" title="${report.runeCount} rune${report.runeCount===1?'':'s'}">${report.cost}💧</span>`; })()}
 				<button class="kb-btn" data-slot="${i}" title="Click to set keybind for this spell" style="margin-left:auto;padding:1px 6px;font-size:.75em;background:var(--panel2);border:1px solid var(--border);border-radius:4px;cursor:pointer;color:var(--text);flex-shrink:0">${kbKey ? '🔑 '+kbKey : '🔑 —'}</button>

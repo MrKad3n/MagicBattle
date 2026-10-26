@@ -385,12 +385,12 @@ body.ai-chat-open #hud{pointer-events:none;opacity:0.45}
 <script src="mirror-war-spell.js?v=1"></script>
 <script src="scrolls.js?v=4"></script>
 <script src="spell-cost.js?v=14"></script>
-<script src="magic-engine.js?v=73"></script>
+<script src="magic-engine.js?v=75"></script>
 <script src="magic-techniques.js?v=45"></script>
 <script src="magic-vows.js?v=1"></script>
 <script src="magic-domain.js?v=5"></script>
-<script src="magic-domain-look.js?v=1"></script>
-<script src="magic-domain-art.js?v=2"></script>
+<script src="magic-domain-look.js?v=2"></script>
+<script src="magic-domain-art.js?v=3"></script>
 <script src="rune-mages.js?v=13"></script>
 <script src="grand-arcanist-discovered.js?v=1"></script>
 <script src="grand-arcanist.js?v=2"></script>
@@ -11112,7 +11112,8 @@ function renderHotbar(){
 			// over Max Output: the energy cost shrinks to the share that fits, and the excess is paid from Total Mana (shown under it)
 			const _vw = window.__magicWorld, _vcm = (_vw && _vw.vowCostMult) ? _vw.vowCostMult('player', sp) : 1;      // vows only ever make spells cheaper
 			const _shownCost = Math.round((_oo ? rep.cost * _oo.scale : rep.cost) * _vcm);
-			el.title = (rep.ok ? rep.runeCount + ' runes' : '⚠ ' + rep.errors[0].text) + (_oo ? '\nOver your Max Output (' + _oo.peak + ' / ' + _oo.max + '): casting it also costs ' + _oo.total + ' Total Mana' : '');
+			const _or = (!sp.passive && MagicEngine.overReserve) ? MagicEngine.overReserve(_shownCost, _prof) : null;
+			el.title = (rep.ok ? rep.runeCount + ' runes' : '⚠ ' + rep.errors[0].text) + (_or ? '\nOver your max mana (' + _or.cost + ' / ' + _or.max + '): casting it also costs ' + _or.over + ' Total Mana' : '') + (_oo ? '\nOver your Max Output (' + _oo.peak + ' / ' + _oo.max + '): casting it also costs ' + _oo.total + ' Total Mana' : '');
 			el.innerHTML = `<span class="hb-key">${keyLabel}</span>
 				<div class="hb-dot" style="background:${rep.ok ? 'linear-gradient(135deg,#9fe6ff,#8d6bff)' : '#ff5d7a'}"></div>
 				<div class="hb-name" style="${rep.ok ? '' : 'color:#ff8899;text-decoration:line-through'}">${sp.passive ? '∞ ' : ''}${sp.name}</div>
@@ -14839,7 +14840,7 @@ function magicProfileForGame(){
 	return MagicEngine.deriveProfile({
 		magicControl: ctrl, magicPower: stats.magicPower,
 		maxMana: (typeof maxMana === 'number' && isFinite(maxMana)) ? maxMana : 500,
-		sandbox: IS_SANDBOX && !ARCANIST_TRIAL,
+		sandbox: IS_SANDBOX && !ARCANIST_TRIAL, overflow: true,
 		magicProfile: playerData.magicProfile
 	});
 }
@@ -15034,6 +15035,13 @@ const MAGIC_HOST = {
 		if(!isFinite(mana)) return amount;
 		const got = Math.max(0, Math.min(mana, amount));
 		mana -= got;
+		return got;
+	},
+	drainTotal: (owner, amount) => {
+		if(owner && owner.id !== 'player') return 0;
+		if(!isFinite(totalMana)) return amount;
+		const got = Math.max(0, Math.min(totalMana, amount));
+		totalMana -= got; if(typeof updateTotalManaHUD === 'function') updateTotalManaHUD();
 		return got;
 	},
 	getForeignProjectiles: () => enemyProjectiles,
@@ -15360,6 +15368,16 @@ function castMagicSpell(spell, slot){
 			prof.maxOutput = peakOut + 1;      // this cast is allowed to reach its full output
 		}
 	}
+	/* Max mana: a spell costing more than your whole reserve is still castable — the reserve pays what it holds, the excess comes 1:1 from Total Mana */
+	let _overRes = 0;
+	if(isFinite(maxMana) && cost > maxMana){
+		_overRes = Math.ceil(cost - maxMana);
+		if(totalMana < _overRes){
+			dmgNumbers.push({x:player.x+player.w/2,y:player.y-30,text:'Over your max mana ('+cost+' / '+Math.round(maxMana)+') — needs '+_overRes+' Total Mana',age:0,color:'#ff5d7a'});
+			return;
+		}
+		cost = Math.round(maxMana);
+	}
 	// Binding Vows (Deep Reservoir, Unspent Cup): part of your mana is sworn away — a spell may not dip into it
 	{ const _res = window.__vowMods ? window.__vowMods.reserve * maxMana : 0;
 	  if(_res > 0 && mana - cost < _res){ dmgNumbers.push({x:player.x+player.w/2,y:player.y-30,text:'⛓ Vow: keep '+Math.round(_res)+' mana unspent',age:0,color:'#ffd36b'}); return; } }
@@ -15395,6 +15413,10 @@ function castMagicSpell(spell, slot){
 	else mana -= cost;
 	if(typeof rosterKitOnManaSpent === 'function') rosterKitOnManaSpent(cost);
 	totalMana += cost * 2;
+	if(_overRes > 0){
+		totalMana = Math.max(0, totalMana - _overRes);
+		dmgNumbers.push({x:player.x+player.w/2,y:player.y-70,text:'Beyond your reserve  −'+_overRes+' Total Mana',age:0,color:'#ffb347'});
+	}
 	if(_overTotal > 0){
 		totalMana = Math.max(0, totalMana - _overTotal);
 		dmgNumbers.push({x:player.x+player.w/2,y:player.y-52,text:'Overdrive +'+Math.round(_overOut)+' output  −'+_overTotal+' Total Mana',age:0,color:'#ffb347'});

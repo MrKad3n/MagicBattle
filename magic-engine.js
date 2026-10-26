@@ -33,7 +33,7 @@
 		maxBranchesPerInstance: 256,
 		maxChildren: 8,             // runes that can branch off one rune (the Forge has eight sockets: N NE E SE S SW W NW)
 		loopMax: 10, loopFee: 1.5, loopPassCap: 300,      // Loop rune: most repeats, mana per repeat = the repeated runes' cost × this, repeats one spell may make in all
-		domainRadius: 1400, domainCostMult: 3.35,         // every domain is exactly this wide (radius, px) — the zone is resized to it when the domain opens
+		domainRadius: 1400, domainCostMult: 3.35, domainSelfFuelMax: 20000,         // every domain is exactly this wide (radius, px) — the zone is resized to it when the domain opens
 		domainManaPerSec: 14,       // Domain Expansion costs this much mana for every second it lasts
 		domainUpkeep: 0.03,         // share of the zone's starting energy the domain burns each second
 		maxStepsPerFrame: 600,      // rune executions per instance per frame (tree is finite, this is a seatbelt)
@@ -527,7 +527,7 @@
 		const powerStat = Math.max(0, num(src.magicPower, 10));
 		const mp = src.magicProfile || {};
 		return {
-			sandbox: !!src.sandbox,
+			sandbox: !!src.sandbox, overflow: !!src.overflow,
 			maxEnergy: Math.max(10, Math.round(num(src.maxMana, 1500))),
 			maxOutput: Math.max(20, Math.round(num(src.maxOutput, 60 + powerStat * 6 + powerStat * powerStat * 0.15))),      // grows faster the higher your Magic Power
 			energyControl: control,
@@ -686,8 +686,17 @@
 			const want = clamp(num(p.amount, 20), 1, 1000);
 			// inside a Domain rule the energy comes out of the domain's zone (and is stronger with a binding vow)
 			const D = br.ctx.domain && br.ctx.domain.alive ? br.ctx.domain : null;
-			const amount = D ? api.takeFromZone(D.z, want, true) : api.drawBudget(want);
-			if(amount < 1) return api.fail(D ? 'The domain has no energy left' : 'Not enough energy');
+			let amount;
+			if(D){
+				const rf = (D.p && D.p.ruleFuel) || 'domain';
+				if(rf === 'domain') amount = api.takeFromZone(D.z, want, true);
+				else {
+					amount = 0;
+					if(rf !== 'total') amount += api.drainReserve(want);
+					if(amount < want && (rf === 'total' || rf === 'both')) amount += api.drainTotal(want - amount);
+				}
+			} else amount = api.drawBudget(want);
+			if(amount < 1) return api.fail(D ? ((D.p && D.p.ruleFuel) && D.p.ruleFuel !== 'domain' ? 'Not enough ' + (D.p.ruleFuel === 'total' ? 'Total Mana' : 'energy') + ' for the rule' : 'The domain has no energy left') : 'Not enough energy');
 			const allowed = api.outputHeadroom();
 			const finalAmt = Math.min(amount, allowed);
 			if(finalAmt < 1) return api.fail('Max Output reached');
@@ -774,13 +783,15 @@
 			{ key:'vow', label:'Binding vow', type:'select', options:DOMAIN_VOW, default:'none', hint:'A restriction you accept makes every rule stronger.' },
 			{ key:'fuel', label:'Fuel', type:'select', options:[ { value:'zone', label:'What the zone holds (Draw Out into it first)' }, { value:'self', label:'Your own energy, poured in as it opens' } ], default:'zone',
 				hint:'Your own energy: the domain needs no Draw Out — the energy is paid when you cast and poured straight into the zone.' },
-			{ key:'selfFuel', label:'Energy poured in', type:'int', min:120, max:1500, step:10, default:400, unit:'E', show:(p) => p.fuel === 'self' },
+			{ key:'ruleFuel', label:'Rules draw energy from', type:'select', options:[ { value:'domain', label:'The domain\'s own energy' }, { value:'mana', label:'Your energy (mana)' }, { value:'total', label:'Your Total Mana' }, { value:'both', label:'Your energy, then Total Mana' } ], default:'domain',
+				hint:'Rules that Generate energy (your domain attacks) normally spend the domain\'s energy. Choose your own energy or Total Mana instead and the domain keeps its energy for upkeep and its laws. If your own source runs dry the rule fails.' },
+			{ key:'selfFuel', label:'Energy poured in', type:'int', min:120, max:CONFIG.domainSelfFuelMax, step:10, default:400, unit:'E', show:(p) => p.fuel === 'self' },
 			{ key:'opening', label:'As it opens', type:'select', options:[ { value:'none', label:'Nothing extra' }, { value:'overwhelm', label:'Overwhelm — foes inside cannot act for a moment' } ], default:'none',
 				hint:'Overwhelm floods every foe inside the moment the domain opens (about 1–2.5 s, longer with a more refined domain). A foe with a domain of their own (a clash) or an Anti-Magic shield shrugs most of it off.' }
 		],
 		input:{ energy:'required' },
 		perBody:false,
-		cost:(p, kids) => CONFIG.domainCostMult * (60 + 8 * (kids || 0) + (p && p.opening === 'overwhelm' ? 30 : 0) + domainDurationCost(p)) + (p && p.fuel === 'self' ? clamp(num(p.selfFuel, 400), 120, 1500) : 0),
+		cost:(p, kids) => CONFIG.domainCostMult * (60 + 8 * (kids || 0) + (p && p.opening === 'overwhelm' ? 30 : 0) + domainDurationCost(p)) + (p && p.fuel === 'self' ? clamp(num(p.selfFuel, 400), 120, CONFIG.domainSelfFuelMax) : 0),
 		summary:(p) => (p.form === 'open' ? 'open' : 'closed') + ' · ' + num(p.duration, 8) + 's' + (p.vow && p.vow !== 'none' ? ' · vow: ' + p.vow : ''),
 		note:(p) => 'The domain is always ' + CONFIG.domainRadius * 2 + ' px wide (radius ' + CONFIG.domainRadius + ') and costs ' + Math.round(domainDurationCost(p)) + ' mana (before the ×' + CONFIG.domainCostMult + ' domain multiplier) for its ' + domainSeconds(p).toFixed(1) + ' s (' + CONFIG.domainManaPerSec + ' per second) on top of the rest. Energy put into it is spent on the domain: it vanishes from the world and cannot be targeted. Needs a zone holding at least ' + CONFIG.domainMinFuel + ' E (Create Zone → Draw Out → Domain). Rules under it run for every foe inside. Burnout afterwards: about ' + Math.round(4 + 0.4 * num(p.duration, 8)) + ' s without techniques.',
 		analyze(p, a, node){
@@ -793,7 +804,7 @@
 			const max = domainMaxRunes(a.profile);
 			if(n > max) a.error(node, 'DOMAIN_RULES', 'This domain has ' + n + ' runes of rules — your Energy Control holds at most ' + max);
 			if(n === 0) a.warn(node, 'DOMAIN_EMPTY', 'A domain with no rules only traps and guides — add rune branches under it (Delay / Condition connectors)');
-			const fuel = (z.amount || 0) + (p.fuel === 'self' ? clamp(num(p.selfFuel, 400), 120, 1500) : 0);
+			const fuel = (z.amount || 0) + (p.fuel === 'self' ? clamp(num(p.selfFuel, 400), 120, CONFIG.domainSelfFuelMax) : 0);
 			if(fuel < CONFIG.domainMinFuel) a.warn(node, 'DOMAIN_FUEL', 'The zone will hold about ' + Math.round(fuel) + ' E — a domain needs at least ' + CONFIG.domainMinFuel + ' E (Draw Out more into the zone first)');
 			a.extra({ construct: { Domain: (p.form === 'open' ? 'Open' : 'Closed') + (p.sureHit !== 'no' ? ' · sure-hit' : ''), Rules: n + ' / ' + max + ' runes', Fuel: Math.round(fuel) + ' E', 'Rule power': '×' + domainMult(p.vow).toFixed(1), Burnout: Math.round(4 + 0.4 * num(p.duration, 8)) + ' s afterwards', Size: CONFIG.domainRadius * 2 + ' px wide', 'Cost multiplier': '×' + CONFIG.domainCostMult, 'Duration cost': Math.round(domainDurationCost(p)) + ' mana for ' + domainSeconds(p).toFixed(1) + ' s' } });
 			// each rule runs with a foe inside as its target, fuelled by the zone
@@ -2943,8 +2954,8 @@
 		};
 		// Sandbox: limits of your build (reserve, capacity, domain budget, control…) are only advice — never a reason to refuse a cast
 		const SANDBOX_FREE = { CAPACITY:1, RESERVE:1, DOMAIN_BUDGET:1, DOMAIN_CONTROL:1, DOMAIN_RULES:1, TECH_POINTS:1, ZONE_SIZE:1 };
-		const error = (node, code, text) => (profile.sandbox && SANDBOX_FREE[code])
-			? push(report.warnings, { node: node && node.id ? node.id : node, code, text: text + ' (ignored in the sandbox)', level:'warn' })
+		const error = (node, code, text) => ((profile.sandbox && SANDBOX_FREE[code]) || (profile.overflow && code === 'RESERVE'))
+			? push(report.warnings, { node: node && node.id ? node.id : node, code, text: text + (profile.sandbox ? ' (ignored in the sandbox)' : ' (the excess is paid from Total Mana)'), level:'warn' })
 			: push(report.errors, { node: node && node.id ? node.id : node, code, text, level:'error' });
 		const warn  = (node, code, text) => push(report.warnings, { node: node && node.id ? node.id : node, code, text, level:'warn' });
 		const linkError = (nodeId, code, text) => push(report.errors, { link: nodeId, code, text, level:'error' });
@@ -3559,6 +3570,7 @@
 				closeOtherZones(keep){
 					for(const z of W.bodies){
 						if(!z.alive || !z.isZone || z === keep || z.ownerId !== inst.owner.id) continue;
+						if(inst.profile && inst.profile.sandbox && z.domain && z.domain.alive) continue;      // sandbox: a zone that holds a domain stays open
 						killBody(z, 'leak');
 						const zi = instById(z.inst); if(zi) logI(zi, 'Zone closed — a new zone was opened');
 					}
@@ -3610,6 +3622,11 @@
 				reinforce(b, t, portion){ return reinforceApply(inst, b, t, portion); },
 				beginDraw(br, source, noZone){ return beginDraw(inst, api, br, source, noZone); },
 				addDrawn(b, amt){ return addDrawn(b, amt); },
+				drainTotal(amount){
+					if(inst.owner.alive && !inst.owner.alive()) return 0;
+					const got = W.host.drainTotal ? Math.max(0, Math.min(amount, num(W.host.drainTotal(inst.owner, amount), 0))) : 0;
+					inst.paid += got; return got;
+				},
 				drainReserve(amount){
 					const e = inst.owner.entity;
 					if(inst.owner.alive && !inst.owner.alive()) return 0;      // a dead caster cannot feed a zone
@@ -6255,11 +6272,12 @@
 			const z = (br.ctx.zone && br.ctx.zone.alive) ? br.ctx.zone : (br.ctx.body && br.ctx.body.isZone && br.ctx.body.alive ? br.ctx.body : null);
 			if(!z) return api.fail('No zone to expand into a domain');
 			if(z.domain && z.domain.alive) return api.fail('The domain is already open');      // e.g. Draw Out hands every drawn piece on — it opens once
-			const bl = burnoutLeft(inst.owner.id);
+			const sb = !!(inst.profile && inst.profile.sandbox);      // the sandbox: no burnout, and domains stack
+			const bl = sb ? 0 : burnoutLeft(inst.owner.id);
 			if(bl > 0) return api.fail('Burnout — you cannot expand a domain for ' + bl.toFixed(1) + ' s');
-			if(p.fuel === 'self'){ const got = api.drawBudget(clamp(num(p.selfFuel, 400), 120, 1500)); if(got > 0){ depositZone(z, got); z.amount = W.bodies.reduce((t, o) => t + (o.alive && o.zoneBlob && o.zoneOf === z ? o.amount : 0), 0); } }      // your own energy, poured straight in
+			if(p.fuel === 'self'){ const got = api.drawBudget(clamp(num(p.selfFuel, 400), 120, CONFIG.domainSelfFuelMax)); if(got > 0){ depositZone(z, got); z.amount = W.bodies.reduce((t, o) => t + (o.alive && o.zoneBlob && o.zoneOf === z ? o.amount : 0), 0); } }      // your own energy, poured straight in
 			if((z.amount || 0) < CONFIG.domainMinFuel) return api.fail('The zone holds ' + Math.floor(z.amount || 0) + ' E — a domain needs at least ' + CONFIG.domainMinFuel + ' E (Draw Out more into it)');
-			for(const o of W.domains) if(o.alive && o.ownerId === inst.owner.id) endDomain(o, 'replaced');      // one domain at a time
+			if(!sb) for(const o of W.domains) if(o.alive && o.ownerId === inst.owner.id) endDomain(o, 'replaced');      // one domain at a time
 			const form = p.form === 'open' ? 'open' : 'closed', vow = p.vow || 'none';
 			let dur = clamp(num(p.duration, 8), 3, 20) * (form === 'open' ? 0.7 : 1) * (vow === 'brief' ? 0.5 : 1);
 			/* the opening: gather (the world runs, a sigil forms) → freeze (everything holds still) → expand (the domain bursts out) → active.
@@ -6322,8 +6340,8 @@
 			D.alive = false; D.endedAt = W.time; D.why = why;
 			if(D.z && D.z.domain === D) D.z.domain = null;
 			// burnout: the caster's techniques are spent for a while
-			W.burnout.set(D.ownerId, W.time + 4 + 0.4 * D.dur);
 			const inst = instById(D.inst);
+			if(!(inst && inst.profile && inst.profile.sandbox)) W.burnout.set(D.ownerId, W.time + 4 + 0.4 * D.dur);
 			if(inst){ logI(inst, 'Domain ended (' + why + ') — burnout for ' + (4 + 0.4 * D.dur).toFixed(1) + ' s'); for(const br of inst.branches) if(br.ctx.domain === D && br.state !== 'done' && br !== D.br){ br.state = 'done'; br.note = 'domain closed'; } }
 			W.rings.push({ x: D.x, y: D.y, r: D.r * 0.9, max: D.r * 1.15, age: 0, life: 26, color: D.ownerId === 'player' ? '#c9a8ff' : '#ff6a7a' });
 			if(W.cine && W.cine.D === D) W.cine = null;      // a domain that dies during its own freeze releases the world
@@ -8084,7 +8102,8 @@
 			getForeignProjectiles: () => [], foreignAlive: (p) => !!p && !p.dead && p.alive !== false && !p._magicGone,
 			removeForeign: (p) => { if(p){ p.dead = true; p.alive = false; } },
 			ambientDensity: null, shake: null,
-			drainEnergy: (owner, amount) => amount
+			drainEnergy: (owner, amount) => amount,
+			drainTotal: (owner, amount) => 0
 		};
 		for(const k in d) if(typeof h[k] !== 'function') h[k] = d[k];
 		return h;
@@ -8689,6 +8708,12 @@
 		const over = peak - mx;
 		return { over, total: Math.ceil(over * 5), scale: mx / peak, peak, max: mx };
 	}
+	/* a spell that costs more than your whole reserve can still be cast: your reserve pays what it holds, the rest is paid 1:1 from Total Mana. null when it fits. */
+	function overReserve(cost, profile){
+		const mx = (profile && profile.maxEnergy) || 0;
+		if(!(cost > mx && mx > 0)) return null;
+		return { over: Math.ceil(cost - mx), regular: mx, cost, max: mx };
+	}
 	function castCooldownFrames(def){
 		// free runes (Binding Vows) never lengthen the cooldown
 		let n = 0;
@@ -8707,7 +8732,7 @@
 		Techniques,
 		deriveProfile, maxManaFromStats, defaultMagicProfile,
 		blankSpell, starterSpell, makeNode, isWeaponSlot, makeWeaponSlot, defaultLink, defaultLoop, loopChain, isMagicSpell, indexOf, structureErrors, normalize,
-		validate, createWorld, sanitizeSlots, encode, decode, castCooldownFrames, overOutput, registerWorldHook, outPow,
+		validate, createWorld, sanitizeSlots, encode, decode, castCooldownFrames, overOutput, overReserve, registerWorldHook, outPow,
 		bodyRadius, bodyPower, densityFactor, labelOf,
 		Reinforcement, techOf, techList, hasTech, dominantTech, addTech, convertTech, techKey, bodyColors, hexA, TARGET_NOUN,
 		remember, memCount, MEM_EVENTS, stateOf, hasState, compMin, gravResist, unstableChance, magicResist, spatialPolarity, INF, speedRange, itemEligible, itemFromBody, itemStats, ITEM_SHAPES,
