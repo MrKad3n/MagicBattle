@@ -28,12 +28,20 @@
 	   ------------------------------------------------------------------ */
 	const BAL = {
 		// ordinary enemies: health multiplier  1 + a·(w-1) + b·(w-1)²   (≈ x18 at 100, x43 at 250, no cap)
-		enemyHp:  { a: 0.07,  b: 0.0004 },
+		// (c64: much softer — was 1 + 0.07·(w-1) + 0.0004·(w-1)², ×18 at 100 and ×43 at 250)
+		enemyHp:  { base: 0.65, a: 0.025, b: 0.00008 },      // (still used for a boss's adds' display only)
+		// c66: ordinary enemies are a lot weaker. Their dungeon health (340 … 7000) is squashed first, so a dungeon
+		// heavyweight is no longer 20× an imp, then grown by wave:  hp = (squash(base) ) × (1 + a·(w-1) + b·(w-1)²)
+		//   squash(base) = sq · √(base / 100):  imp-sized ≈ 110–190, golems ≈ 260–340, tomb guardians ≈ 450–500
+		//   wave 1 ≈ 110–190 · wave 50 ≈ 500–2200 · wave 100 ≈ 1000–4500 · wave 250 ≈ 3000–14000 (a boss there has 236k)
+		minion:   { sq: 60, a: 0.06, b: 0.0002 },
 		// incoming damage multiplier           1 + a·(w-1) + b·(w-1)²   (≈ x2.8 at 100, x6.6 at 250, no cap)
-		damage:   { a: 0.015, b: 0.00003 },
+		// (c64: softer — was 1 + 0.015·(w-1) + 0.00003·(w-1)²; now ×0.7 at 1, ×1.6 at 100, ×3.3 at 250)
+		damage:   { base: 0.7, a: 0.008, b: 0.00001 },
 		bossDamageScale: 0.85,           // bosses hit a little softer than the same wave's crowd
 		// boss health target: T(w) = base + per·w, times a per-boss weight (the hidden bosses are the anchors)
-		bossHp:   { base: 4000, per: 1700 },
+		// boss health by wave (piecewise linear between these anchors; past the last one it keeps growing at the last slope)
+		bossHpCurve: [[1, 700], [5, 1000], [50, 15000], [100, 50000], [150, 100000], [200, 170000], [250, 250000]],
 		bossHpWeight: {
 			elderTreant: 0.55, stormRaptor: 0.5, frostboundKnight: 0.62, magmaWarden: 0.72,
 			fireDragon: 0.85, frostColossus: 0.9, earthColossus: 0.9, fireColossus: 1.0,
@@ -49,9 +57,23 @@
 	};
 	const HIDDEN = { 100: 'infernalKitten', 150: 'seraphel', 200: 'zenith', 250: 'challenger' };
 
-	const hpMult  = (w) => 1 + BAL.enemyHp.a * (w - 1) + BAL.enemyHp.b * (w - 1) * (w - 1);
-	const dmgMult = (w) => 1 + BAL.damage.a * (w - 1) + BAL.damage.b * (w - 1) * (w - 1);
-	const bossHpFor = (type, w) => Math.round((BAL.bossHp.base + BAL.bossHp.per * w) * (BAL.bossHpWeight[type] || 1));
+	const hpMult  = (w) => BAL.enemyHp.base + BAL.enemyHp.a * (w - 1) + BAL.enemyHp.b * (w - 1) * (w - 1);
+	const minionMult = (w) => 1 + BAL.minion.a * (w - 1) + BAL.minion.b * (w - 1) * (w - 1);
+	const minionHp = (base, w) => Math.round(BAL.minion.sq * Math.sqrt(Math.max(1, base) / 100) * minionMult(w));
+	const dmgMult = (w) => BAL.damage.base + BAL.damage.a * (w - 1) + BAL.damage.b * (w - 1) * (w - 1);
+	function bossCurve(w){
+		const C = BAL.bossHpCurve;
+		if(w <= C[0][0]) return C[0][1];
+		for(let i = 1; i < C.length; i++) if(w <= C[i][0]){ const a = C[i - 1], b = C[i]; return a[1] + (b[1] - a[1]) * (w - a[0]) / (b[0] - a[0]); }
+		const a = C[C.length - 2], b = C[C.length - 1];
+		return b[1] + (b[1] - a[1]) * (w - b[0]) / (b[0] - a[0]);
+	}
+	/* the curve is the boss's whole health; the per-boss weight only nudges pool bosses (0.85–1), and a hidden boss gets exactly the curve */
+	const bossHpFor = (type, w) => {
+		const hidden = type === 'infernalKitten' || type === 'seraphel' || type === 'zenith' || type === 'challenger';
+		const wt = hidden ? 1 : Math.max(0.85, Math.min(1, 0.85 + 0.15 * ((BAL.bossHpWeight[type] || 1) - 0.5) / 0.55));
+		return Math.round(bossCurve(w) * wt);
+	};
 
 	/* boss order for the non-hidden boss waves, by position in the 250-wave cycle */
 	const MINI_UNTIL = 50;      // boss waves up to here are minibosses
@@ -157,7 +179,7 @@
 		const isBoss = !!o.boss;
 		const t = isBoss ? buffedDef(base, w) : base;
 		const ew = Math.round(base.w * DIFF_SIZE_MULT), eh = Math.round(base.h * DIFF_SIZE_MULT);
-		const hp = Math.max(1, Math.round(o.hp != null ? o.hp : base.hp * hpMult(w)));
+		const hp = Math.max(1, Math.round(o.hp != null ? o.hp : minionHp(base.hp, w)));
 		const x = o.x != null ? o.x : pickX(ew);
 		let y;
 		if(o.y != null) y = o.y;
@@ -413,6 +435,19 @@
 		return true;
 	}
 
+	/* a boss's art starts downloading and decoding (off the main thread) during the countdown, so the fight does not
+	   open with a freeze while a huge sheet is decoded on first draw */
+	function prefetchWave(w){
+		const inf = waveInfo(w);
+		try {
+			if(!inf.boss) return;
+			if(inf.boss === 'challenger'){ if(root.prefetchChallengerArt) root.prefetchChallengerArt(); return; }
+			if(inf.boss === 'zenith'){ if(root.LAZY_IMG) LAZY_IMG.need('zenith-sheet'); return; }
+			if(inf.boss !== 'fireDragon' && typeof ENEMY_SPRITE_SHEETS !== 'undefined') ENEMY_SPRITE_SHEETS[inf.boss];
+			if(typeof LAZY_SET_SLUG !== 'undefined' && LAZY_SET_SLUG[inf.boss] && root.LAZY_IMG) LAZY_IMG.need(LAZY_SET_SLUG[inf.boss]);
+		} catch(e){}
+	}
+
 	/* ------------------------------------------------------------------ per-frame */
 	function tick(){
 		// ---- both sides ----
@@ -428,7 +463,7 @@
 		if(ST.phase === 'fight' && partyAllDown()){ wipe('down'); }
 		for(const k in SPECIAL) if(ST.special === SPECIAL[k] && SPECIAL[k].update) { try { SPECIAL[k].update(); } catch(e){ console.warn('[survival] special', k, e); } }
 		if(ST.phase === 'prep'){
-			if(ST.t === 1){ reviveLocal(false); announceWave(); say('wave', { w: ST.wave }); }
+			if(ST.t === 1){ reviveLocal(false); announceWave(); say('wave', { w: ST.wave }); prefetchWave(ST.wave); }
 			if(ST.t >= ST.prepLen){ if(ST.down) reviveLocal(false); startWave(); }
 		} else if(ST.phase === 'fight'){
 			const inf = info();
@@ -454,7 +489,7 @@
 			if(ST.phase === 'wipe') banner('PARTY DEFEATED', 'Returning to wave ' + ST.checkpoint, '#ff6b6b', BAL.wipeFrames);
 			_lastPhase = ST.phase;
 		}
-		if(ST.wave !== _lastWaveSeen){ if(ST.phase !== 'wipe' && _lastWaveSeen) announceWave(); _lastWaveSeen = ST.wave; }
+		if(ST.wave !== _lastWaveSeen){ if(ST.phase !== 'wipe' && _lastWaveSeen) announceWave(); _lastWaveSeen = ST.wave; prefetchWave(ST.wave); }
 	}
 	function refreshBossBar(){
 		let name = '', hp = 0, mx = 0;
@@ -482,7 +517,18 @@
 		ST.checkpoint = s.ck; ST.best = Math.max(ST.best, s.b || 0); ST.bossName = s.bn || ''; ST.bossHp = s.bh || 0; ST.bossMax = s.bm || 0;
 		if((s.sk || '') !== _lastSk){ _lastSk = s.sk || ''; leaveSpecials(); if(_lastSk && SPECIAL[_lastSk] && SPECIAL[_lastSk].guestEnter) SPECIAL[_lastSk].guestEnter(); }
 	}
-	function onNet(d){ if(!d) return; if(d.k === 'banner') banner(d.text, d.sub, d.color, d.f); }
+	function onNet(d){
+		if(!d) return;
+		if(d.k === 'banner') banner(d.text, d.sub, d.color, d.f);
+		if(d.k === 'jump' && !HOST()){
+			// the host skipped to another wave: the old wave's enemies, shots and boss fights end here too
+			leaveSpecials();
+			for(const k in SPECIAL) try { SPECIAL[k].reset && SPECIAL[k].reset(); } catch(e){}
+			enemies.length = 0; enemyProjectiles.length = 0; if(typeof bossTelegraphs !== 'undefined') bossTelegraphs.length = 0;
+			ST.wave = d.w; ST.bossEn = null; ST.special = null; ST.bossMax = 0; ST.bossHp = 0;
+			reviveLocal(true);
+		}
+	}
 
 	/* ------------------------------------------------------------------ HUD */
 	function draw(c){
@@ -544,6 +590,7 @@
 		ST.prepLen = ni.kind === 'hidden' ? 240 : 120;
 		ST.checkpoint = Math.max(1, Math.floor((w - 1) / BAL.checkpointEvery) * BAL.checkpointEvery + 1);
 		reviveLocal(true);
+		say('jump', { w });      // guests clear their copies of the old wave at once
 		return true;
 	}
 	function tierMix(w){
@@ -575,7 +622,7 @@
 			L.push(['t', nm + ' — ' + fmt(bossHpFor(inf.boss, w)) + ' HP']);
 			L.push(['t', 'Plus ' + Math.min(18, 4 + Math.floor(w / 12)) + ' adds (max ' + Math.min(6, 2 + Math.floor(w / 40)) + ' at once)']);
 		}
-		L.push(['s', 'Enemy HP ×' + hpMult(w).toFixed(1) + ' · Damage taken ×' + dmgMult(w).toFixed(2) + (inf.kind === 'normal' ? '' : ' (bosses ×' + BAL.bossDamageScale + ')')]);
+		L.push(['s', 'Enemy HP ×' + minionMult(w).toFixed(2) + ' (of a squashed base) · Damage taken ×' + dmgMult(w).toFixed(2) + (inf.kind === 'normal' ? '' : ' (bosses ×' + BAL.bossDamageScale + ')')]);
 		if(w % BAL.checkpointEvery === 0) L.push(['c', '✔ Checkpoint — clearing it saves wave ' + (w + 1)]);
 		else L.push(['s', 'Respawn checkpoint: wave ' + (Math.floor((w - 1) / BAL.checkpointEvery) * BAL.checkpointEvery + 1)]);
 		return L;
@@ -658,7 +705,7 @@
 	/* ------------------------------------------------------------------ public */
 	root.SurvivalMode = {
 		BAL, ST, waveInfo, tick, draw, snap, applySnap, onNet, incomingMult, onPlayerDown,
-		hpMult, dmgMult, bossHpFor, makeEnemy, say, banner, fx, B,
+		hpMult, minionMult, minionHp, dmgMult, bossHpFor, makeEnemy, say, banner, fx, B,
 		debug: {
 			jump(w){ ST.wave = w; ST.phase = 'prep'; ST.t = 0; enemies.length = 0; },
 			jumpTo, waveDescribe,

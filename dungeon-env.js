@@ -1285,8 +1285,14 @@
 
 	function collideMovers(ent){
 		if(!IS_DUNGEON) return;
+		const dropping = ent === player && typeof keys !== 'undefined' && (keys['s'] || keys['arrowdown']);
 		for(const p of platforms()){
-			if((p.kind !== 'move' && p.kind !== 'raft' && p.kind !== 'orbit') || p._gone) continue;
+			if(p._gone) continue;
+			const mover = p.kind === 'move' || p.kind === 'raft' || p.kind === 'orbit';
+			// platforms left out of the tile grid (door landings, pads in halls) are one-way ledges: stand on them, jump up
+			// through them, hold Down to drop through. Before, the new rock skin drew them but nothing let you stand on them.
+			if(!mover && (p._stamped || p.kind === 'collapse' || p.kind === 'pillar' || p.kind === 'thinIce' || p.kind === 'growth')) continue;
+			if(!mover && dropping) continue;
 			if(ent.vy < -0.2) continue;
 			if(ent.x + ent.w > p.x && ent.x < p.x + p.w &&
 				ent.y + ent.h >= p.y && ent.y + ent.h <= p.y + 16){

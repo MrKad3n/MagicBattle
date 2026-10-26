@@ -162,7 +162,8 @@
 	/* ---------------- IN-GAME SYNC ---------------- */
 	/* testing without a server: tabs of one browser talk over a BroadcastChannel (?local=1) */
 	function connectCoopLocal(matchId, handlers) {
-		const me = myId();
+		let slotTag = ''; try { slotTag = '#' + (new URLSearchParams(global.location.search).get('slot') || ''); } catch (e) {}
+		const me = myId() + slotTag;      // frames of one tab share sessionStorage: the slot keeps them apart
 		const bc = new BroadcastChannel('coop-local-' + matchId);
 		const peers = new Set();
 		const post = (m) => { try { bc.postMessage(m); } catch (e) {} };
@@ -199,6 +200,8 @@
 		}
 		const me = myId();
 		const topic = 'coop-match-' + matchId;
+		// co-op traffic: states ~20/s, world ~10/s, batched shots/telegraphs ~15/s, casts — give the channel room for it
+		try { if (client.realtime && client.realtime.params) client.realtime.params.eventsPerSecond = 100; if (client.realtime) client.realtime.eventsPerSecondLimitMs = 10; } catch (e) {}
 		dropChannel(client, topic);
 		const ch = client.channel(topic, { config: { broadcast: { self: false }, presence: { key: me } } });
 		let subscribed = false;

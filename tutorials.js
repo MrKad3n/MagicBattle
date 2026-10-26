@@ -126,7 +126,7 @@
 					['💧 Mana Regen', 'How fast your energy (mana) refills'],
 					['🛡️ Defence', 'Less damage from enemy magic, and more max HP']
 				] },
-				{ h: 'Energy', p: 'Your energy bar is your mana: up to 1500 E. Every rune spell costs energy when you cast it, and some things keep costing while they last (passives, reinforcement, magical items).' },
+				{ h: 'Energy', p: 'Your energy bar is your mana: 500 E to start, growing toward 3000 E as your stats (everything except Strength) rise. Every rune spell costs energy when you cast it, and some things keep costing while they last (passives, reinforcement, magical items).' },
 				{ h: 'Mage rank', p: 'You earn XP by defeating enemies and completing quests. Ranks go Novice → Apprentice → Adept → Mage → Archmage → Grand Sorcerer. Higher ranks unlock more of the world (the Storm Islands open at Mage).' }
 			],
 			tip: 'The stats panel on the left of the inventory shows your current rune damage, Max Output, rune capacity and largest zone.' },
@@ -156,7 +156,7 @@
 			intro: 'The forge is where you build and edit rune spells. The tree is in the middle, the selected rune\'s settings and the spell\'s report are on the right.',
 			sections: [
 				{ h: 'Editing', keys: [
-					['Drag empty space', 'Pan'], ['Wheel', 'Zoom'], ['Drag a rune', 'Move its branch; drop on a rune to swap, on a connector to insert'],
+					['Drag empty space', 'Pan'], ['Wheel', 'Zoom'], ['+ sockets', 'Eight around every rune (N, NE, E, SE, S, SW, W, NW): up to 8 runes can branch off one rune. Shift+arrows, or Shift+Home / PgUp / End / PgDn for the corners'], ['Drag a rune', 'Move its branch; drop on a rune to swap, on a connector to insert'],
 					['Double-click', 'Change the rune'], ['Right-click', 'Menu'], ['Del / Shift+Del', 'Remove the branch / remove just this rune'],
 					['Ctrl+Z / Ctrl+Y', 'Undo / redo'], ['Ctrl+S', 'Save'], ['F / C', 'Fit / centre the view'], ['R', 'Recast the preview']
 				] },
@@ -198,12 +198,17 @@
 					['⇩ Draw Out', 'Pulls energy out of the target (or the environment) into your zone'],
 					['⦿ Domain Expansion', 'Turns a full zone into a domain with its own rules']
 				] },
+				{ h: 'Logic', keys: [
+					['❖ Conditional', 'A waiting rune: each of up to 8 branches starts only when its own condition occurs. Only the first can win, or each can fire again every time (see <b>Conditional and Loop</b>)'],
+					['↻ Loop', 'Repeats part of the spell up to 10 times. Pull its ⟲ handle onto an earlier rune; each repeat costs the repeated runes\' mana × 1.5']
+				] },
 				{ h: 'Effects', keys: [
 					['✸ Discharge', 'Releases the energy as a burst. Your own spells never hurt you'],
 					['✚ Infuse', 'Pours energy into you or an ally as healing'],
 					['✧ Technique', 'Gives the energy a magical law: Thermal, Kinetic, Spatial, Gravity, Light, Anti-Magic…'],
 					['⛨ Reinforcement', 'Strengthens you, your legs, arms, weapon, an ally or another spell'],
-					['⟲ Spell Memory', 'Lets the branch continue only if the energy went through something — a portal, a hit, a compression…']
+					['⟲ Spell Memory', 'Lets the branch continue only if the energy went through something — a portal, a hit, a compression…'],
+					['⛓ Binding Vow', 'Swears a contract: meet a condition, accept a commitment, earn bonus energy or stats. Free (see <b>Binding Vows</b>)']
 				] }
 			] },
 
@@ -225,6 +230,29 @@
 					'<b>Its energy remembers… (spell memory)</b> — react to what already happened to the energy.'
 				] },
 				{ h: 'Example: a mine', p: 'Generate → Compress → Anchor (anchored here) → <i>Condition: Enemy is nearby</i> → Discharge. Place it, walk away, and it bursts when something comes close.' }
+			] },
+
+		{ id: 'logic', cat: 'magic', icon: '↻', title: 'Conditional and Loop',
+			intro: 'Two <b>Logic</b> runes. Conditional waits and chooses; Loop repeats. Every rune now has eight sockets, so up to 8 branches can leave one rune.',
+			sections: [
+				{ h: 'Conditional ❖', steps: [
+					'Place it where the spell should wait. It hands its energy and target on unchanged.',
+					'Add up to 8 branches. Each one is a <b>Wait until</b> connector (new branches under a Conditional start that way) — pick the condition for each.',
+					'<b>Branches fire:</b> <i>each</i> starts a branch when its own condition occurs; <i>only the first</i> lets one win and cancels the rest (a switch); <i>every time</i> lets each branch fire again whenever its condition recurs, up to a limit, with a rest between firings.',
+					'Example: enemy within 150 px → fire a bolt; you fall below 30% health → heal; you press T → detonate. One Conditional, three branches.'
+				] },
+				{ h: 'Loop ↻', steps: [
+					'Place it at the end of the part you want repeated. Set <b>Repeats</b> (1–10) and the <b>pause between passes</b>.',
+					'<b>Pull the ⟲ handle</b> on the Loop onto an EARLIER rune on its own branch. A dashed arrow shows where it returns; that rune and everything down to the Loop run again each pass.',
+					'Click the <b>↻ badge</b> on the arrow to give the return branch a condition: <b>When it happens</b> waits for it before each repeat (and gives up after a while); <b>While still true</b> checks at that moment — the target is still alive, the energy is still there — and ends the loop the moment it is not.',
+					'Runes after the Loop run once, when the repeats are done (or when the loop ends early).'
+				] },
+				{ h: 'What a Loop costs', list: [
+					'Every repeat costs the repeated runes\' mana <b>× 1.5</b>, paid when the repeat starts. The spell\'s cost shows the whole loop (“+N ↻”).',
+					'If you do not have the mana when a repeat starts, the loop ends there.',
+					'A loop inside a split repeats only its own branch. One spell can make at most 300 repeats in all.',
+					'Example: Generate → Redirect → Discharge → Loop ×4 back to Generate = five bolts, one after another.'
+				] }
 			] },
 
 		{ id: 'compress', lesson: 'spear', cat: 'magic', icon: '◈', title: 'Compression and shapes',
@@ -328,14 +356,70 @@
 				{ h: 'Opening one', steps: [
 					'Fill a zone with 120 E or more (or let the domain pour in your own energy as it opens).',
 					'Add <b>⦿ Domain Expansion</b> (needs Control 6+). Set 3–20 seconds.',
+					'Every domain is exactly <b>1400 px</b> in radius, whatever zone it grew from, and costs <b>14 mana for every second it lasts</b> on top of its other costs.',
 					'Every branch under it is a <b>rule</b>: Instant runs once as it opens, Delay repeats, Condition fires per foe whenever it is met.',
 					'Choose closed (a barrier) or open, and optionally sure-hit.'
 				] },
+				{ h: 'Laws: rules that always hold', steps: [
+					'Place a <b>§ Domain Law</b> directly under the domain. Read it as a sentence: <b>Who</b> (every foe / you), <b>When</b> (constantly, every few seconds, they attack, move, stand still, jump, are hurt, are low, carry marks…), <b>Then</b> (damage, stun, bind, seal casting, mark, copy a spell…).',
+					'Laws are checked for every foe inside, all the time. Each one has a weight, and the total must fit what your Energy Control holds (a <b>Declared</b> vow holds more).',
+					'<b>Marks</b> build a trial: mark each offence, then a law that fires at three marks hands down the sentence. <b>Copy</b> keeps the spells foes cast; <b>cast a copy</b> throws them back from the domain\'s own energy.'
+				] },
+				{ h: 'The opening and the look', list: [
+					'<b>Opening: Full</b> — a breath gathers, the world freezes for a moment, then the domain bursts out. Quick and None are shorter.',
+					'<b>🎨 Design the look</b> on the Domain rune opens the <b>Domain Designer</b>: a world of its own replaces the level inside your domain — a sky, a landmark on the horizon, a floor that meets the real ground, a sigil, two kinds of drifting particles, an edge, light, the burst and the title.',
+					'Start from one of 25 presets or the <b>Ideas</b> tab, then change any layer. <b>🔒</b> locks a layer, <b>🎲</b> rolls one (or press R to roll every unlocked layer). Space plays the opening in the preview.',
+					'<b>⇄ Code</b> copies the look as a short code you can share, or loads someone else\'s.',
+					'From outside a sealed domain you cannot see what is inside it — the <b>Outside</b> tab picks what they see instead (a glowing shell, a black sphere, a mirror, a cocoon…).'
+				] },
 				{ h: 'Good to know', list: [
+					'The energy you put into a domain is spent on it: it disappears from the world, cannot be targeted, drawn back out or claimed, and only the domain\'s own rules use it up. A longer domain burns more of it.',
 					'<b>Overwhelm</b> (+30 cost) stuns everyone inside for a moment as it opens.',
-					'Vows make it stronger: shared (rules can hit you) ×1.5, brief ×1.3, narrow ×1.3.',
+					'Vows make it stronger: shared (rules can hit you) ×1.5, brief ×1.3, narrow ×1.3 (narrow squeezes the domain to 60% of its size).',
 					'One domain at a time. Two domains clash and the more refined one wins.',
 					'Afterwards you suffer <b>burnout</b>: Technique runes fail for a while.'
+				] }
+			] },
+
+		{ id: 'bindingvows', cat: 'advanced', icon: '⛓', title: 'Binding Vows',
+			intro: 'The ⛓ Binding Vow rune is a contract. You choose a condition to meet and a restriction to accept; keep the vow and it pays out. Vows are free: no mana, no extra cooldown, and the energy they grant never counts against your Max Output.',
+			sections: [
+				{ h: 'Every vow has', keys: [
+					['Condition', 'What must happen: travel 600 px, wait 2 s, hit three times in a row…'],
+					['Commitment', 'What it gives up while the vow holds: no turning, no splitting, no melee…'],
+					['Reward', 'Bonus energy for the bound energy, or a stat change for you'],
+					['If broken', 'Energy vows: lose the bonus, lose 35% of the energy (+15% reward) or have it destroyed (+30% reward)']
+				] },
+				{ h: 'Energy vows (bind the energy in the branch)', keys: [
+					['Unerring Path', 'Flies straight after launch; the longer the straight flight, the bigger the hit'],
+					['Solitude', 'Stays one body (no Split / Divide); it leaks less and hits harder'],
+					['Long Journey', 'Must travel a set distance before striking'],
+					['Patience', 'Passes through enemies harmlessly until the wait is over, then strikes hard'],
+					['Final Fragment', 'Paid when every other branch of the spell has finished'],
+					['Gauntlet', 'Must pass through your zones, constructs or still energy (gates) first'],
+					['Named Prey', 'Swears it on the enemy you are targeting; others break it or are passed through'],
+					['Untouched', 'Survives a while without hostile magic touching it'],
+					['Sacrifice', 'Gives up part of the rest of the spell, or your health, for energy now'],
+					['Perfect Sequence', 'Is the last of several pieces of the spell to strike in time'],
+					['Stillness', 'You hold your ground for a while'],
+					['Absolute Compression', 'Reaches a compression and keeps it until it strikes']
+				] },
+				{ h: 'Vows that bind you', list: [
+					'<b>Passive</b> vows reward a way of playing over time: Still Mind (no casting → regen or a charge), Immovable Resolve, Dormant Power, Sealed Hand, Singular Purpose, Unarmed Sage, First Spark, Conservation, Lone Star, Patient Guardian, Unbroken Thread, Narrow Gate.',
+					'<b>Attribute</b> vows give up a freedom for Strength, Defense, Mana, Mana Control or Magic Power: Iron Fist, Duelist, Physical Mastery, Unbroken Guard, Open Gate (no dash), Last Stand, Deep Reservoir, Scarcity, Unspent Cup, Few Words, Precision, Closed Circuit, Glass Cannon, Charged Heart, Forbidden Technique.',
+					'<b>Exchange</b> vows trade one stat for another at uneven rates: Arcane Glass, Iron Vessel, Empty Mind, Overflowing Mind, Vast Reservoir, Explosive Vessel.',
+					'They hold while their spell runs — put them in a <b>∞ passive</b> spell to keep them up. What you have sworn shows under your mana bars; breaking a rule switches a vow off for a few seconds.'
+				] },
+				{ h: 'A worked example: Mirror War', list: [
+						'The <b>Scroll of Mirror War</b> (the 🪞 button in the inventory) holds a 61-rune spell: one Generate, a cascade of Splits and five families of projectiles — Harriers, Sweepers, Crossfire, Reserves, Executors — released one after another with Delay connectors. Open it in the forge to read it.',
+						'It carries seven contracts of five kinds, each where its restriction is real: <b>Unerring Path</b> on two harriers, <b>Patience</b> on the wave that waits holding still, <b>Long Journey</b> on two crossfire arrows, <b>Absolute Compression</b> on one spear (sworn before it is compressed) and <b>Solitude</b> on another (after its last split).',
+						'It needs Energy Control 17 for its 61 runes, and its output is far over an ordinary Max Output — you pay the rest in Total Mana. Nothing in it homes: every projectile is aimed once at your cursor when it is released.'
+					] },
+					{ h: 'Fair play', list: [
+					'One contract pays once — energy split from a bound body shares its contract.',
+					'Vow bonuses add from the energy\'s own part, never multiply each other, and stop at +150%.',
+					'Stat vows are clamped, so stacking many cannot make you invulnerable or one-shot everything.',
+					'The forge shows the whole contract (condition, commitment, reward, difficulty, what breaking it costs) when you select the rune.'
 				] }
 			] },
 
@@ -373,11 +457,17 @@
 					['S + attack', 'In the air: plunge'], ['Attack in the air', 'Air combo'], ['R', 'Special (some weapons charge while held)']
 				] },
 				{ h: 'Defence', keys: [
-					['Q (or right-click)', 'Parry — time it as the hit lands to block it and open a riposte'], ['Shift', 'Dash — a short burst with brief invulnerability; it can cancel attacks']
+					['Q (or right-click)', 'Parry — time it as the hit lands to block it and open a riposte. It turns aside spells too (see below)'], ['Shift', 'Dash — a short burst with brief invulnerability; it can cancel attacks']
+				] },
+				{ h: 'Parrying spells', list: [
+					'A parry can turn aside enemy projectiles and the energy of enemy casters — but only a spell the weapon can <b>bear</b>. A spell\'s strength is its damage plus a quarter of its energy; a stronger one goes straight through your guard ("Too strong to parry" shows both numbers).',
+					'<b>Parry capacity</b>: the weapon\'s own power (its first strike), plus the reinforcement poured into it, plus your Strength (+2% a point), plus a heavy (Gravity) weapon. Reinforce the weapon with <b>Target → Weapon</b> and it parries far stronger spells.',
+					'A weapon reinforced with <b>Anti-Magic</b> also <b>reflects</b> what it parries — the spell flies back at its caster, weaker and stripped of its element — and bears more against magic.',
+					'Parrying strains the reinforcement: a bigger spell costs the weapon more of it, a reflection twice as much.'
 				] },
 				{ h: 'Weapons', p: 'Apprentice Blade, Twin Daggers, Spear, Greatsword, Gauntlets, War Hammer, Scythe, Glaive, Whip, Chain Blade and Staff. Each has its own speed, reach and combo. Try them in the Sandbox — press ' + K('P') + ' there for the training yard and ' + K('F8') + ' to see hitboxes.' }
 			],
-			tip: 'Reinforce your arms or weapon with a passive spell to make every swing stronger.' },
+			tip: 'Reinforce your arms or weapon with a passive spell to make every swing stronger — and to parry stronger spells.' },
 
 		{ id: 'items', cat: 'combat', icon: '💎', title: 'Engraving and magical items',
 			intro: 'Two ways to mix weapons and magic.',

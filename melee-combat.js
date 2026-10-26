@@ -707,6 +707,7 @@
 
 		tryStartDash(up, down){
 			if(this.dash.cd>0 || this.dash.t>0 || this.hitstun>0) return;
+			if(typeof window.vowNoDash === 'function' && window.vowNoDash()) return;      // Vow of the Open Gate: you gave up dashing
 			if(this.parry.t>0 && this.parry.age < PARRY.startup+PARRY.active) return;
 			if(this.atk){
 				const ok = this.phase==='cancel' && this.atk.def.canDashCancel;
@@ -1551,6 +1552,7 @@
 
 		tryParry(){
 			if(!this.parryWindow()) return false;
+			if(this.spellGate && this.spellGate() === false) return false;      // a spell too strong for the weapon goes straight through the guard
 			const first = !this.parry.success;
 			this.parry.success = true;
 			this.parry.t = Math.min(this.parry.t, 6);
@@ -2801,6 +2803,8 @@
 	/* ---------------- whip: lashes at the cursor, up to a maximum reach ---------------- */
 	const WHIP_RANGE = 360, CHAIN_RANGE = 360, WHIP_MIN = 34;
 	MeleeMode.whipCursor = function(){
+		const mk = (this.frame||0) + ':' + (typeof mouseScreenX==='number' ? mouseScreenX : 0) + ':' + (typeof mouseScreenY==='number' ? mouseScreenY : 0) + ':' + (player.x|0) + ':' + (player.y|0) + ':' + (this.weapon() && this.weapon().style);
+		if(this._wcKey === mk && this._wcVal) return this._wcVal;      // asked several times a frame: work it out once
 		const px = player.x + player.w/2, py = player.y + player.h*0.42;
 		const f = player.facing || 1;
 		let mx = (typeof mouseScreenX==='number') ? mouseScreenX + camera.x : px + f*120;
@@ -2814,7 +2818,7 @@
 		if(typeof projectilePointBlocked==='function'){          // stops at a wall instead of lashing through it
 			for(let i=12; i>=0 && projectilePointBlocked(x, y); i--){ x = px + (x-px)*i/12; y = py + (y-py)*i/12; }
 		}
-		return { x:x, y:y, range:reach };
+		return (this._wcKey = mk, this._wcVal = { x:x, y:y, range:reach });
 	};
 	/* the point the current whip attack lands on (follows the cursor while winding up, then stays put) */
 	MeleeMode.whipPoint = function(){
@@ -3020,6 +3024,13 @@
 	};
 
 	MeleeMode.flexExtend = function(){
+		const ck = (this.frame||0) + ':' + (this.atk ? this.atk.id + ':' + this.atk.t : '-') + ':' + this.phase + ':' + (this._wcKey||'');
+		if(this._feKey === ck && this._feVal) return this._feVal;      // drawn + tip tracking ask in the same frame
+		const r = MeleeMode._flexExtend.call(this);
+		this._feKey = ck; this._feVal = r;
+		return r;
+	};
+	MeleeMode._flexExtend = function(){
 		const def = this.atk && this.atk.def;
 		let ext = 0.34;
 		if(def && this.phase==='active') ext = 1;
@@ -3065,11 +3076,13 @@
 				ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = 'rgba(255,214,140,0.32)'; ctx.lineWidth = 9;
 				ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); for(let k=1;k<pts.length;k++) ctx.lineTo(pts[k].x, pts[k].y); ctx.stroke(); ctx.restore();
 			}
-			for(let k=1;k<pts.length;k++){          // tapered braid: thick at the grip, a thin tail at the end
-				const u = k/pts.length;
-				ctx.strokeStyle = k%2 ? '#7a4a20' : '#a8692e';
+			for(let band=0; band<3; band++){          // tapered braid in three width bands (a few strokes instead of one per segment)
+				const k0 = Math.floor(band*(pts.length-1)/3)+1, k1 = Math.floor((band+1)*(pts.length-1)/3);
+				if(k1 < k0) continue;
+				const u = (k0+k1)*0.5/pts.length;
+				ctx.strokeStyle = band===1 ? '#a8692e' : '#7a4a20';
 				ctx.lineWidth = 5.2 - 3.4*u;
-				ctx.beginPath(); ctx.moveTo(pts[k-1].x, pts[k-1].y); ctx.lineTo(pts[k].x, pts[k].y); ctx.stroke();
+				ctx.beginPath(); ctx.moveTo(pts[k0-1].x, pts[k0-1].y); for(let k=k0;k<=k1;k++) ctx.lineTo(pts[k].x, pts[k].y); ctx.stroke();
 			}
 			ctx.strokeStyle = 'rgba(255,236,190,0.75)'; ctx.lineWidth = 1.1;
 			ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y-1); for(let k=1;k<pts.length;k++) ctx.lineTo(pts[k].x, pts[k].y-0.8); ctx.stroke();
@@ -3112,15 +3125,25 @@
 				ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = 'rgba(200,225,255,0.28)'; ctx.lineWidth = 11;
 				ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); for(let k=1;k<pts.length;k++) ctx.lineTo(pts[k].x, pts[k].y); ctx.stroke(); ctx.restore();
 			}
-			for(let k=1;k<pts.length;k++){          // alternating links: one seen flat, the next on edge
-				const a = pts[k-1], b = pts[k], mx = (a.x+b.x)/2, my = (a.y+b.y)/2, ang = Math.atan2(b.y-a.y, b.x-a.x);
-				ctx.save(); ctx.translate(mx, my); ctx.rotate(ang);
-				const flat = k%2===0, L = 8.6, Wd = flat ? 4.8 : 2.2;
+			for(let pass=0; pass<2; pass++){          // alternating links: the flat ones, then the ones seen on edge — two fills, not one per link
+				const flat = pass===0;
 				ctx.fillStyle = flat ? '#cfd8e4' : '#8d99a8'; ctx.strokeStyle = '#47515f'; ctx.lineWidth = 1.2;
-				ctx.beginPath(); ctx.ellipse(0, 0, L, Wd, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
-				if(flat){ ctx.fillStyle = '#4a5463'; ctx.beginPath(); ctx.ellipse(0, 0, L*0.5, Wd*0.45, 0, 0, Math.PI*2); ctx.fill(); }
-				ctx.restore();
+				ctx.beginPath();
+				for(let k=1;k<pts.length;k++){
+					if((k%2===0) !== flat) continue;
+					const a = pts[k-1], b = pts[k], mx = (a.x+b.x)/2, my = (a.y+b.y)/2, ang = Math.atan2(b.y-a.y, b.x-a.x);
+					ctx.moveTo(mx + Math.cos(ang)*8.6, my + Math.sin(ang)*8.6);
+					ctx.ellipse(mx, my, 8.6, flat ? 4.8 : 2.2, ang, 0, Math.PI*2);
+				}
+				ctx.fill(); ctx.stroke();
 			}
+			ctx.fillStyle = '#4a5463'; ctx.beginPath();          // the dark hole of each flat link
+			for(let k=2;k<pts.length;k+=2){
+				const a = pts[k-1], b = pts[k], mx = (a.x+b.x)/2, my = (a.y+b.y)/2, ang = Math.atan2(b.y-a.y, b.x-a.x);
+				ctx.moveTo(mx + Math.cos(ang)*4.3, my + Math.sin(ang)*4.3);
+				ctx.ellipse(mx, my, 4.3, 2.16, ang, 0, Math.PI*2);
+			}
+			ctx.fill();
 			const e = pts[pts.length-1], p0 = pts[pts.length-2], ang = Math.atan2(e.y-p0.y, e.x-p0.x);
 			ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(ang);          // the blade head: a barbed spike
 			const grd = ctx.createLinearGradient(0, -7, 0, 7); grd.addColorStop(0, '#f5f9ff'); grd.addColorStop(0.5, '#b9c6d6'); grd.addColorStop(1, '#6f7c8d');

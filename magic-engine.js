@@ -31,6 +31,11 @@
 		perf: { gridAt: 40, gridCell: 96, crowdAt: 24, sparkCrowd: 260, ringCap: 160, lightCap: 24, emitMax: 160 },
 		maxBodiesGlobal: 640,
 		maxBranchesPerInstance: 256,
+		maxChildren: 8,             // runes that can branch off one rune (the Forge has eight sockets: N NE E SE S SW W NW)
+		loopMax: 10, loopFee: 1.5, loopPassCap: 300,      // Loop rune: most repeats, mana per repeat = the repeated runes' cost × this, repeats one spell may make in all
+		domainRadius: 1400, domainCostMult: 3.35,         // every domain is exactly this wide (radius, px) — the zone is resized to it when the domain opens
+		domainManaPerSec: 14,       // Domain Expansion costs this much mana for every second it lasts
+		domainUpkeep: 0.03,         // share of the zone's starting energy the domain burns each second
 		maxStepsPerFrame: 600,      // rune executions per instance per frame (tree is finite, this is a seatbelt)
 		condCheckFrames: 3,         // waiting conditions re-check every N frames (they only exist once reached)
 		condTimeoutDefault: 10,
@@ -108,8 +113,8 @@
 		}
 	};
 
-	const DIRS = { n:{x:0,y:-1}, e:{x:1,y:0}, s:{x:0,y:1}, w:{x:-1,y:0} };
-	const OPPOSITE = { n:'s', s:'n', e:'w', w:'e' };
+	const DIRS = { n:{x:0,y:-1}, ne:{x:1,y:-1}, e:{x:1,y:0}, se:{x:1,y:1}, s:{x:0,y:1}, sw:{x:-1,y:1}, w:{x:-1,y:0}, nw:{x:-1,y:-1} };
+	const OPPOSITE = { n:'s', s:'n', e:'w', w:'e', ne:'sw', sw:'ne', se:'nw', nw:'se' };
 
 	function clamp(v, a, b){ return v < a ? a : (v > b ? b : v); }
 	function num(v, d){ v = Number(v); return isFinite(v) ? v : d; }
@@ -148,7 +153,8 @@
 		{ id:'technique',   label:'Technique',    color:'#d2c4ff' },
 		{ id:'reinforcement', label:'Reinforcement', color:'#9dffcf' },
 		{ id:'memory',      label:'Spell Memory', color:'#ffc8ec' },
-		{ id:'appearance',  label:'Appearance',   color:'#ffd6f5' }
+		{ id:'appearance',  label:'Appearance',   color:'#ffd6f5' },
+		{ id:'logic',       label:'Logic',        color:'#ffe08a' }
 	];
 	const CATEGORY_MAP = {};
 	CATEGORIES.forEach(c => { CATEGORY_MAP[c.id] = c; });
@@ -505,12 +511,23 @@
 	/* =====================================================================
 	   PLAYER MAGIC PROFILE
 	   ===================================================================== */
+	/* Max mana from stats: 500 with the starting stats, rising toward 3000. Every stat but Strength adds a little; the curve flattens near the top.
+	   `vowPenalty` is the old flat sacrifice (in units of the old 1500 pool) and is taken as a fraction of the result. */
+	const MANA_BASE = 500, MANA_TOP = 3000, MANA_SCALE = 230;
+	function maxManaFromStats(st, vowPenalty){
+		st = st || {};
+		const gain = (v, base) => Math.max(0, num(v, base) - base);
+		const score = gain(st.magicPower, 10) * 1.0 + gain(st.magicControl, 5) * 1.2 + gain(st.manaRegen, 100) * 0.15 + gain(st.magicDefence, 8) * 0.6;
+		const m = MANA_BASE + (MANA_TOP - MANA_BASE) * (1 - Math.exp(-score / MANA_SCALE));
+		return Math.max(100, Math.round(m * (1 - clamp(num(vowPenalty, 0) / 1500, 0, 0.92))));
+	}
 	function deriveProfile(src){
 		src = src || {};
 		const control = Math.max(0, num(src.magicControl, 5));
 		const powerStat = Math.max(0, num(src.magicPower, 10));
 		const mp = src.magicProfile || {};
 		return {
+			sandbox: !!src.sandbox,
 			maxEnergy: Math.max(10, Math.round(num(src.maxMana, 1500))),
 			maxOutput: Math.max(20, Math.round(num(src.maxOutput, 60 + powerStat * 6 + powerStat * powerStat * 0.15))),      // grows faster the higher your Magic Power
 			energyControl: control,
@@ -531,6 +548,15 @@
 	/* =====================================================================
 	   RUNE REGISTRY
 	   ===================================================================== */
+	/* =====================================================================
+	   WORLD HOOKS — systems that live beside the executor (Binding Vows, magic-vows.js) register here. Each world
+	   calls hook.init(W, internals) once; the hook installs the W._vow* callbacks the executor calls at fixed points.
+	   ===================================================================== */
+	const WORLD_HOOKS = [];
+	function registerWorldHook(h){ if(h && typeof h.init === 'function') WORLD_HOOKS.push(h); }
+	/* a body's share of its instance's output: energy a Binding Vow granted is free — it never counts against Max Output */
+	function outPow(b){ const p = Math.abs(bodyPower(b)); return b.vowShare > 0 ? p * (1 - Math.min(1, b.vowShare)) : p; }
+
 	const Runes = {};
 	function defineRune(def){
 		if(!def.id || !def.category || typeof def.exec !== 'function') throw new Error('bad rune ' + def.id);
@@ -660,7 +686,7 @@
 			const want = clamp(num(p.amount, 20), 1, 1000);
 			// inside a Domain rule the energy comes out of the domain's zone (and is stronger with a binding vow)
 			const D = br.ctx.domain && br.ctx.domain.alive ? br.ctx.domain : null;
-			const amount = D ? api.takeFromZone(D.z, want) : api.drawBudget(want);
+			const amount = D ? api.takeFromZone(D.z, want, true) : api.drawBudget(want);
 			if(amount < 1) return api.fail(D ? 'The domain has no energy left' : 'Not enough energy');
 			const allowed = api.outputHeadroom();
 			const finalAmt = Math.min(amount, allowed);
@@ -734,7 +760,10 @@
 		{ value:'narrow', label:'Narrow — 60% of the size (×1.3 power)' }
 	];
 	function domainMaxRunes(profile){ return 4 + Math.floor(Math.max(0, num(profile && profile.energyControl, 5)) / 2); }
-	function domainMult(vow){ return vow === 'shared' ? 1.5 : (vow === 'brief' || vow === 'narrow' ? 1.3 : 1); }
+	/* how long the domain really lasts (open domains are shorter, the Brief vow halves it) — and what that costs */
+	function domainSeconds(p){ return clamp(num(p && p.duration, 8), 3, 20) * (p && p.form === 'open' ? 0.7 : 1) * (p && p.vow === 'brief' ? 0.5 : 1); }
+	function domainDurationCost(p){ return domainSeconds(p) * CONFIG.domainManaPerSec; }
+	function domainMult(vow){ return vow === 'shared' ? 1.5 : (vow === 'declared' ? 1.4 : (vow === 'brief' || vow === 'narrow' ? 1.3 : 1)); }
 	defineRune({
 		id:'domain', name:'Domain Expansion', glyph:'⦿', category:'zone',
 		description:'Turns the zone into your domain for a while: a space with its own rules. Every branch under this rune is a RULE that runs for each foe inside (that foe is its target): an Instant connector runs once when the domain opens, a Delay connector repeats every few seconds, a Condition connector fires whenever it is met (e.g. "Target attacks or casts", "Target is moving"). Rules draw their energy from what the zone holds. Closed domains trap foes inside and block outside attacks; with sure-hit, your energy inside homes onto foes and cannot miss. Binding vows make rules stronger at a price. Two domains that overlap clash — the more refined (more energy, more control) wins. When it ends you suffer burnout: no techniques for a few seconds.',
@@ -751,9 +780,9 @@
 		],
 		input:{ energy:'required' },
 		perBody:false,
-		cost:(p, kids) => 60 + 8 * (kids || 0) + (p && p.opening === 'overwhelm' ? 30 : 0) + (p && p.fuel === 'self' ? clamp(num(p.selfFuel, 400), 120, 1500) : 0),
+		cost:(p, kids) => CONFIG.domainCostMult * (60 + 8 * (kids || 0) + (p && p.opening === 'overwhelm' ? 30 : 0) + domainDurationCost(p)) + (p && p.fuel === 'self' ? clamp(num(p.selfFuel, 400), 120, 1500) : 0),
 		summary:(p) => (p.form === 'open' ? 'open' : 'closed') + ' · ' + num(p.duration, 8) + 's' + (p.vow && p.vow !== 'none' ? ' · vow: ' + p.vow : ''),
-		note:(p) => 'Needs a zone holding at least ' + CONFIG.domainMinFuel + ' E (Create Zone → Draw Out → Domain). Rules under it run for every foe inside. Burnout afterwards: about ' + Math.round(4 + 0.4 * num(p.duration, 8)) + ' s without techniques.',
+		note:(p) => 'The domain is always ' + CONFIG.domainRadius * 2 + ' px wide (radius ' + CONFIG.domainRadius + ') and costs ' + Math.round(domainDurationCost(p)) + ' mana (before the ×' + CONFIG.domainCostMult + ' domain multiplier) for its ' + domainSeconds(p).toFixed(1) + ' s (' + CONFIG.domainManaPerSec + ' per second) on top of the rest. Energy put into it is spent on the domain: it vanishes from the world and cannot be targeted. Needs a zone holding at least ' + CONFIG.domainMinFuel + ' E (Create Zone → Draw Out → Domain). Rules under it run for every foe inside. Burnout afterwards: about ' + Math.round(4 + 0.4 * num(p.duration, 8)) + ' s without techniques.',
 		analyze(p, a, node){
 			const z = a.ctx.zone || (a.ctx.body && a.ctx.body.zone ? a.ctx.body : null);
 			if(!z){ a.error(node, 'DOMAIN_ZONE', 'A domain is expanded from a zone — put Create Zone (and Draw Out to fill it) before it'); return; }
@@ -766,7 +795,7 @@
 			if(n === 0) a.warn(node, 'DOMAIN_EMPTY', 'A domain with no rules only traps and guides — add rune branches under it (Delay / Condition connectors)');
 			const fuel = (z.amount || 0) + (p.fuel === 'self' ? clamp(num(p.selfFuel, 400), 120, 1500) : 0);
 			if(fuel < CONFIG.domainMinFuel) a.warn(node, 'DOMAIN_FUEL', 'The zone will hold about ' + Math.round(fuel) + ' E — a domain needs at least ' + CONFIG.domainMinFuel + ' E (Draw Out more into the zone first)');
-			a.extra({ construct: { Domain: (p.form === 'open' ? 'Open' : 'Closed') + (p.sureHit !== 'no' ? ' · sure-hit' : ''), Rules: n + ' / ' + max + ' runes', Fuel: Math.round(fuel) + ' E', 'Rule power': '×' + domainMult(p.vow).toFixed(1), Burnout: Math.round(4 + 0.4 * num(p.duration, 8)) + ' s afterwards' } });
+			a.extra({ construct: { Domain: (p.form === 'open' ? 'Open' : 'Closed') + (p.sureHit !== 'no' ? ' · sure-hit' : ''), Rules: n + ' / ' + max + ' runes', Fuel: Math.round(fuel) + ' E', 'Rule power': '×' + domainMult(p.vow).toFixed(1), Burnout: Math.round(4 + 0.4 * num(p.duration, 8)) + ' s afterwards', Size: CONFIG.domainRadius * 2 + ' px wide', 'Cost multiplier': '×' + CONFIG.domainCostMult, 'Duration cost': Math.round(domainDurationCost(p)) + ' mana for ' + domainSeconds(p).toFixed(1) + ' s' } });
 			// each rule runs with a foe inside as its target, fuelled by the zone
 			a.ctx.body = null; a.ctx.target = 'enemy'; a.ctx.zone = z; a.ctx.groupN = 1;
 		},
@@ -2312,6 +2341,8 @@
 		if(!Techniques.canUse(api.profile, d.id)) return api.fail(Techniques.accessError(d.id));
 		const burnt = api.world.burnoutLeft ? api.world.burnoutLeft(api.owner.id) : 0;
 		if(burnt > 0) return api.fail('Burnout — your techniques are spent for ' + burnt.toFixed(1) + ' s after your domain');
+		const sealed = api.world.sealLeft ? api.world.sealLeft(api.owner, 'techniques') : 0;      // a domain's law has confiscated your techniques
+		if(sealed > 0) return api.fail('Sealed — a domain has confiscated your techniques for ' + sealed.toFixed(1) + ' s');
 		const t0 = br.ctx.target;
 		if(d.onTarget && t0 && t0.kind && d.targets && d.targets[t0.kind] && !TECH_FOCUS[t0.kind]){
 			// the technique acts on the targeted world object itself (e.g. reverse Construction dismantles a construct)
@@ -2464,11 +2495,106 @@
 	function labelOf(opts, v){ const o = opts.find(x => x.value === v); return o ? o.label : String(v == null ? '' : v); }
 
 	/* =====================================================================
+	   LOGIC RUNES — Conditional (a waiting rune with up to 8 conditional branches) and Loop (repeat part of the spell)
+	   ===================================================================== */
+	const COND_FIRE = [
+		{ value:'each',   label:'Each branch, when its own condition occurs' },
+		{ value:'first',  label:'Only the first condition that occurs' },
+		{ value:'repeat', label:'Every time its condition occurs (up to a limit)' }
+	];
+	defineRune({
+		id:'conditional', name:'Conditional', glyph:'❖', category:'logic',
+		description:'A waiting rune. It hands its energy and target on unchanged, then waits: each branch (up to 8) starts only when ITS OWN condition occurs — give every branch a "Wait until" connector. Choose whether every branch can fire, only the first condition to occur wins (the rest are cancelled), or each branch fires again every time its condition recurs.',
+		params:[
+			{ key:'mode', label:'Branches fire', type:'select', options:COND_FIRE, default:'each' },
+			{ key:'times', label:'Most firings per branch', type:'int', min:2, max:10, step:1, default:3, show:(p) => p.mode === 'repeat' },
+			{ key:'rest', label:'Rest between firings', type:'float', min:0, max:20, step:0.25, default:1, unit:'s', show:(p) => p.mode === 'repeat' }
+		],
+		input:{ energy:'none' },
+		cost:(p, n) => 1 + 0.5 * (n || 0),
+		summary:(p, node, kids) => (kids || 0) + ' condition' + (kids === 1 ? '' : 's') + ' · ' + (p.mode === 'first' ? 'first wins' : (p.mode === 'repeat' ? 'repeats ×' + (p.times | 0) : 'each')),
+		analyze(p, a, node, kids){
+			if(kids < 1) a.warn(node, 'COND_NONE', 'A Conditional waits for its branches\' conditions — add branches and give each a "Wait until" connector');
+			let plain = 0;
+			for(const cid of a.kidsOf(node.id)){ const l = a.def.nodes[cid].link; if(!l || l.mode !== 'condition') plain++; }
+			if(plain) a.warn(node, 'COND_PLAIN', plain + ' branch' + (plain === 1 ? ' has' : 'es have') + ' no condition: ' + (plain === 1 ? 'it runs' : 'they run') + ' at once (set the connector to "Wait until")');
+		},
+		exec(api, br, p){
+			br.condRule = (p.mode === 'first' || p.mode === 'repeat') ? { mode: p.mode, times: clamp(num(p.times, 3) | 0, 2, 10), rest: clamp(num(p.rest, 1), 0, 20) } : null;
+			return true;
+		}
+	});
+	/* the loop's return branch lives on the Loop node: { to: an earlier rune, mode: 'instant' | 'condition', check: 'wait' | 'now', cond } */
+	function defaultLoop(){ return { to:null, mode:'instant', check:'wait', cond:{ type:'enemyNear', params: condDefaults('enemyNear'), timeout: CONFIG.condTimeoutDefault } }; }
+	function loopChain(def, node){      // the runes this loop repeats: from the rune it returns to, down to the loop itself
+		const L = node && node.loop; if(!L || !L.to || L.to === node.id) return null;
+		const out = []; let cur = node, g = 0;
+		while(cur && g++ < 400){ out.push(cur.id); if(cur.id === L.to) return out; cur = cur.parent ? def.nodes[cur.parent] : null; }
+		return null;
+	}
+	defineRune({
+		id:'loop', name:'Loop', glyph:'↻', category:'logic',
+		description:'Repeats part of the spell, up to 10 times. Pull the ⟲ handle on this rune onto an EARLIER rune on its branch: when execution reaches the Loop it jumps back there and runs everything again. Give the return branch a condition to repeat only when something happens (wait for it) or only while it is still true (checked at that moment). Every repeat costs extra mana: the repeated runes\' cost × ' + CONFIG.loopFee + '. Runes after the Loop run once the repeats are done.',
+		params:[
+			{ key:'times', label:'Repeats', type:'int', min:1, max:CONFIG.loopMax, step:1, default:3 },
+			{ key:'gap', label:'Pause between passes', type:'float', min:0, max:10, step:0.05, default:0.3, unit:'s' }
+		],
+		input:{ energy:'none' },
+		cost:() => 0.5,
+		summary:(p, node) => '↻ ×' + (p.times | 0) + (node && node.loop && node.loop.to ? (node.loop.mode === 'condition' ? (node.loop.check === 'now' ? ' · while true' : ' · on event') : '') : ' · not connected'),
+		note:(p) => 'Each repeat costs the repeated runes\' mana × ' + CONFIG.loopFee + ' (shown on the spell\'s cost). A repeat needs that mana at the moment it starts — without it the loop ends.',
+		analyze(p, a, node){
+			const L = node.loop;
+			if(!L || !L.to){ a.warn(node, 'LOOP_OPEN', 'This Loop does nothing yet — pull its ⟲ handle onto an earlier rune to choose what it repeats'); return; }
+			const chain = loopChain(a.def, node);
+			if(!chain){ a.error(node, 'LOOP_TARGET', 'The loop must return to a rune BEFORE it on its own branch'); return; }
+			if(chain.some(id => { const n = a.def.nodes[id]; return n && (n.type === 'domain' || n.type === 'law'); })) a.error(node, 'LOOP_DOMAIN', 'A loop inside a domain\'s rules can only return to a rune inside that same rule');
+			const times = clamp(num(p.times, 3) | 0, 1, CONFIG.loopMax);
+			let chainCost = 0; for(const id of chain) chainCost += a.nodeCost[id] || 0;
+			const per = chainCost * CONFIG.loopFee, total = per * times;
+			a.report.cost += total; a.report.loop = (a.report.loop || 0) + total;
+			a.extra({ construct: { Repeats: times + ' × ' + (Math.round(per * 10) / 10) + ' mana', 'Extra mana': Math.round(total), 'Repeated runes': chain.length + ' rune' + (chain.length === 1 ? '' : 's') } });
+			if(L.mode === 'condition'){
+				const cd = Conditions[L.cond && L.cond.type];
+				if(!cd) a.loopError(node, 'COND', 'Choose a condition for the return branch');
+				else {
+					if(cd.needs === 'target' && !a.ctx.target) a.loopError(node, 'COND_TARGET', 'No valid target for this condition');
+					if(cd.needs === 'energy' && !a.ctx.body) a.loopError(node, 'COND_ENERGY', 'Condition requires energy');
+					if((cd.id === 'targetInZone' || cd.needs === 'zone') && !a.ctx.zone) a.loopError(node, 'COND_ZONE', 'Condition needs a zone earlier in this branch');
+					const to = num(L.cond.timeout, -1);
+					if(L.check !== 'now' && !(to >= 0.5 && to <= CONFIG.condTimeoutMax)) a.loopError(node, 'COND_TIMEOUT', 'Give-up time must be 0.5…' + CONFIG.condTimeoutMax + 's');
+				}
+			}
+		},
+		exec(){ return true; }
+	});
+
+	/* =====================================================================
 	   CONDITIONS (connector mode "condition")
 	   Evaluated only once execution reaches the connector.
 	   ===================================================================== */
 	const Conditions = {};
-	function defineCondition(def){ def.params = def.params || []; Conditions[def.id] = def; return def; }
+	/* the picker groups conditions so one is easy to find: who or what it is about */
+	const CONDITION_GROUPS = [
+		{ id:'target',  label:'Target',               hint:'About the enemy this branch is aimed at' },
+		{ id:'enemies', label:'Enemies around',       hint:'Any enemy near the energy or you' },
+		{ id:'you',     label:'You (the caster)',     hint:'Your health, movement and keys' },
+		{ id:'energy',  label:'This energy',          hint:'How much it holds, how it moves, what state it is in' },
+		{ id:'contact', label:'Contact & collisions', hint:'Touching surfaces, other spells and your own energy' },
+		{ id:'spell',   label:'This spell & time',    hint:'Clocks, hits landed and the rest of the spell' },
+		{ id:'zone',    label:'Zone & domain',        hint:'Zones, domains and what happens inside them' },
+		{ id:'other',   label:'Other',                hint:'' }
+	];
+	const CONDITION_GROUP_OF = {
+		targetNear:'target', targetFar:'target', targetDead:'target', targetHurt:'target', targetMoving:'target', targetAttacks:'target',
+		enemyNear:'enemies', noEnemyNear:'enemies', enemiesNear:'enemies',
+		casterNear:'you', casterFar:'you', casterHurt:'you', casterGrounded:'you', casterAirborne:'you', casterMoving:'you', casterStill:'you', trigger:'you', cursorNear:'you',
+		energyAbove:'energy', energyBelow:'energy', powerAbove:'energy', stopped:'energy', travelled:'energy', arrived:'energy', combined:'energy', state:'energy', techNeutral:'energy',
+		surfaceContact:'contact', spellContact:'contact', ownContact:'contact', energyGone:'contact',
+		spellAge:'spell', spellHit:'spell', restFinished:'spell', memory:'spell',
+		targetInZone:'zone', zoneFull:'zone'
+	};
+	function defineCondition(def){ def.params = def.params || []; if(!def.group) def.group = CONDITION_GROUP_OF[def.id] || 'other'; Conditions[def.id] = def; return def; }
 	function condDefaults(id){ const d = Conditions[id]; const o = {}; if(d) for(const p of d.params) o[p.key] = p.default; return o; }
 
 	defineCondition({ id:'targetNear', name:'Target is nearby', needs:'target',
@@ -2790,6 +2916,11 @@
 			}
 			n.link = Object.assign(defaultLink(), n.link || {});
 			n.link.cond = Object.assign(defaultLink().cond, n.link.cond || {});
+			if(n.type === 'loop'){
+				n.loop = Object.assign(defaultLoop(), n.loop || {});
+				n.loop.cond = Object.assign(defaultLoop().cond, n.loop.cond || {});
+				if(n.loop.to != null && !def.nodes[n.loop.to]) n.loop.to = null;
+			} else if(n.loop) delete n.loop;
 			n.gx = n.gx | 0; n.gy = n.gy | 0; n.order = n.order | 0;
 		}
 		return def;
@@ -2798,19 +2929,23 @@
 	/* =====================================================================
 	   STATIC ANALYSIS / VALIDATION (separate from runtime)
 	   ===================================================================== */
-	function validate(def, profile){
+	function validate(def, profile, seed){
 		profile = profile || deriveProfile({});
 		const report = {
 			ok: true, errors: [], warnings: [], byNode: {}, byLink: {},
 			runeCount: 0, cost: CONFIG.castBaseCost, peakOutput: 0, energyCreated: 0,
-			techniques: {}, efficiencyLoss: 0, nodeInfo: {}, upfront: CONFIG.castBaseCost, channel: 0
+			techniques: {}, efficiencyLoss: 0, nodeInfo: {}, upfront: CONFIG.castBaseCost, channel: 0, nodeCost: {}, loop: 0
 		};
 		const push = (list, item) => {
 			list.push(item);
 			if(item.link){ (report.byLink[item.link] = report.byLink[item.link] || []).push(item); }
 			else if(item.node){ (report.byNode[item.node] = report.byNode[item.node] || []).push(item); }
 		};
-		const error = (node, code, text) => push(report.errors, { node: node && node.id ? node.id : node, code, text, level:'error' });
+		// Sandbox: limits of your build (reserve, capacity, domain budget, control…) are only advice — never a reason to refuse a cast
+		const SANDBOX_FREE = { CAPACITY:1, RESERVE:1, DOMAIN_BUDGET:1, DOMAIN_CONTROL:1, DOMAIN_RULES:1, TECH_POINTS:1, ZONE_SIZE:1 };
+		const error = (node, code, text) => (profile.sandbox && SANDBOX_FREE[code])
+			? push(report.warnings, { node: node && node.id ? node.id : node, code, text: text + ' (ignored in the sandbox)', level:'warn' })
+			: push(report.errors, { node: node && node.id ? node.id : node, code, text, level:'error' });
 		const warn  = (node, code, text) => push(report.warnings, { node: node && node.id ? node.id : node, code, text, level:'warn' });
 		const linkError = (nodeId, code, text) => push(report.errors, { link: nodeId, code, text, level:'error' });
 
@@ -2825,8 +2960,9 @@
 		const bodies = [];
 		let bodySeq = 0;
 		const A = {
-			profile, report,
-			error, warn,
+			profile, report, def,
+			error, warn, def, nodeCost: report.nodeCost,
+			loopError(node, code, text){ push(report.errors, { link: 'loop:' + node.id, code, text, level:'error' }); },
 			newBody(amount, source){
 				const b = { id: ++bodySeq, amount, scale: 1, source, technique: null, maxPower: amount, mult: 1 };
 				bodies.push(b);
@@ -2839,7 +2975,7 @@
 		};
 
 		// DFS with explicit stack (no recursion limits); ctx copied per branch
-		const stack = [{ id: def.rootId, ctx: { body:null, target:null, zone:null, groupN:1 }, depth:0 }];
+		const stack = [{ id: def.rootId, ctx: { body:null, target:(seed && seed.target) || null, zone:null, groupN:1 }, depth:0 }];
 		const seen = {};
 		while(stack.length){
 			const fr = stack.pop();
@@ -2884,7 +3020,8 @@
 					error(node, 'IMMOVABLE', 'Spatial energy cannot be moved — it has become a ' + ctx.body.immovable + ' (' + R.name + ' cannot act on it)');
 				const perB = isPerBody(R) ? (ctx.groupN || 1) : 1;
 				const c1 = (ctx.domainRule && node.type === 'generate') ? 1 : R.cost(p, kids.length) * perB;      // a Domain rule's energy comes from the zone, not from you
-				report.cost += c1; report.upfront += c1;
+				report.cost += c1; report.upfront += c1; report.nodeCost[node.id] = c1;
+				if(kids.length > CONFIG.maxChildren) error(node, 'KIDS', 'At most ' + CONFIG.maxChildren + ' runes can branch off one rune (this one has ' + kids.length + ')');
 				if(R.channelCost){ const cc = R.channelCost(p); report.cost += cc; report.channel += cc; }
 				if(R.analyze) R.analyze(p, A, node, kids.length);
 				if(ctx.body) A.touch(ctx.body);
@@ -3189,15 +3326,19 @@
 			return H;
 		}
 		W.hostFor = hostFor;
+		/* a body parried back by a weapon (reflected) now fights for the player: it strikes the player's foes, whoever cast it */
+		function hostForB(b){ return b && b.reflected ? W.host : hostFor(b.inst); }
+		W.hitSrc = null;      // the body whose blow is landing right now (the host reads it to judge a parry)
 		/* ---------- casting ---------- */
 		W.cast = function(defIn, castOpts){
 			castOpts = castOpts || {};
 			if(castOpts.host) W.host = withDefaults(castOpts.host);
 			if(!W.host) W.host = withDefaults({});
 			const profile = castOpts.profile || deriveProfile({});
-			const report = validate(defIn, profile);
+			const report = validate(defIn, profile, castOpts.ctx && castOpts.ctx.target ? { target: castOpts.ctx.target.kind === 'enemy' ? 'enemy' : castOpts.ctx.target.kind } : null);
 			if(!report.ok) return { ok:false, error: report.errors[0] ? report.errors[0].text : 'This spell is not finished yet', report };
 			const owner = castOpts.owner || { id:'player', entity:null };
+			if(W._castBlocked){ const why = W._castBlocked(owner, castOpts); if(why) return { ok:false, error: why }; }      // a domain's seal: no casting
 			const live = W.instances.filter(i => i.owner.id === owner.id).length;
 			if(live >= CONFIG.maxInstancesPerOwner) return { ok:false, error:'Too many active spells' };
 			const def = Object.freeze(clone(defIn));        // instance never touches the saved definition
@@ -3209,21 +3350,26 @@
 				outputUsed: 0, maxOutput: profile.maxOutput, done: false, struck: new Set(),
 				lastCaster: null, exec: {}, log: [], seed: (W.nextId * 2654435761) >>> 0, steps: 0,
 				spawnAt: castOpts.spawnAt ? { x: castOpts.spawnAt.x, y: castOpts.spawnAt.y } : null,     // e.g. an engraved weapon special: energy appears where it strikes
-				passive: !!castOpts.passive      // a passive spell: never times out; its reinforcement holds steady (the host drains mana instead)
+				passive: !!castOpts.passive,      // a passive spell: never times out; its reinforcement holds steady (the host drains mana instead)
+				nodeCost: report.nodeCost || {}, loopPasses: 0, loopTargets: loopTargetsOf(def)
 			};
 			if(inst.passive) inst.lifetime = Infinity;
 			const cp = owner.entity ? center(owner.entity) : (castOpts.origin || { x:0, y:0 });
 			inst.lastCaster = { x: cp.x, y: cp.y };
 			W.instances.push(inst);
-			const br = newBranch(inst, def.rootId, { body:null, target:null, zone:null }, null);
+			if(W._vowCast) try { W._vowCast(inst, castOpts, report); } catch(e){ magicError('vow cast', e, null); }
+			const br = newBranch(inst, def.rootId, Object.assign({ body:null, target:null, zone:null }, castOpts.ctx || {}), null);
 			br.state = 'run';
+			if(W._domCast) try { W._domCast(inst, castOpts); } catch(e){ magicError('domain cast', e, null); }
 			pumpInstance(inst);
 			return { ok:true, instance: inst, report };
 		};
 
+		function loopTargetsOf(def){ const t = {}; let any = false; for(const id in def.nodes){ const n = def.nodes[id]; if(n.type === 'loop' && n.loop && n.loop.to && def.nodes[n.loop.to]){ t[n.loop.to] = true; any = true; } } return any ? t : null; }
 		function newBranch(inst, nodeId, ctx, parent){
 			if(inst.branches.length >= CONFIG.maxBranchesPerInstance){ logI(inst, 'Branch limit reached'); return null; }
 			const br = { id: inst.nextBranch++, nodeId, ctx, state:'pending', wait:0, condAge:0, condTick:0, parent: parent ? parent.id : null, note:'', splitBodies:null, condMemo:null };
+			if(parent){ if(parent.loopN) br.loopN = Object.assign({}, parent.loopN); if(parent.snaps) br.snaps = Object.assign({}, parent.snaps); }      // a branch that forks inside a loop keeps counting the same loop
 			inst.branches.push(br);
 			return br;
 		}
@@ -3328,7 +3474,7 @@
 					const ref = sel === 'nearMouse' ? api.host.mouseWorld() : (sel === 'nearCaster' ? api.casterPos() : api.refPoint(br));
 					let best = null, bs = Infinity;
 					for(const z of W.bodies){
-						if(!z.alive || !z.isZone) continue;
+						if(!z.alive || !z.isZone || (z.domain && z.domain.alive)) continue;      // a zone that became a domain is no longer a target
 						if(sel === 'thisSpell'){ if(z.inst !== inst.id) continue; }
 						else if(dist(z.x, z.y, ref.x, ref.y) - z.zoneRadius > range) continue;      // in range: you only need to reach its edge
 						const score = sel === 'largest' ? -z.zoneRadius : (sel === 'thisSpell' ? -z.id : dist(z.x, z.y, ref.x, ref.y));
@@ -3336,12 +3482,13 @@
 					}
 					return best;
 				},
-				takeFromZone(z, want){
-					// pull stored energy out of a zone's blobs (Target → Zone → Draw Out)
+				takeFromZone(z, want, internal){
+					// pull stored energy out of a zone's blobs (Target → Zone → Draw Out); a domain's sealed energy only feeds the domain itself
 					let got = 0;
 					for(const o of W.bodies){
 						if(got >= want) break;
 						if(!o.alive || !o.zoneBlob || o.zoneOf !== z) continue;
+						if(o.sealed && !internal) continue;
 						const t = Math.min(o.amount, want - got); o.amount -= t; got += t;
 						if(o.amount < CONFIG.minEnergy) killBody(o, 'drawn');
 					}
@@ -3512,11 +3659,13 @@
 				follow: from ? (from.follow || null) : null, bond: from && from.bond ? { t: from.bond.t, len: from.bond.len, str: from.bond.str, mode: from.bond.mode } : null,
 				comp: from ? (from.comp || 0) : 0, nearGen: !!(from && from.nearGen),
 				infDerived: !!(from && from.infDerived), infFrom: from ? (from.infFrom || 0) : 0, tint: from ? (from.tint || null) : null,
-				bondsX: from && from.bondsX ? from.bondsX.map(B => ({ t: B.t, len: B.len, str: B.str, mode: B.mode })) : null
+				bondsX: from && from.bondsX ? from.bondsX.map(B => ({ t: B.t, len: B.len, str: B.str, mode: B.mode })) : null,
+				vows: from && from.vows ? from.vows.slice() : null, vowShare: from ? (from.vowShare || 0) : 0      // a Binding Vow travels with the energy (one contract, paid once)
 			};
 			W.bodies.push(b);
 			inst.bodyCount++;
-			inst.outputUsed += Math.abs(bodyPower(b));      // the frame's recount keeps it exact; counting every body for each new one was O(n²)
+			inst.outputUsed += outPow(b);      // the frame's recount keeps it exact; counting every body for each new one was O(n²)
+			if(inst._vowBoost && W._vowBody) W._vowBody(inst, b);
 			return b;
 		}
 		function killBody(b, why){
@@ -3533,7 +3682,7 @@
 		}
 		function recomputeOutput(inst){
 			let s = 0;
-			for(const b of W.bodies) if(b.alive && b.inst === inst.id && !b.isZone && !b.zoneBlob && !b.drawnOut) s += Math.abs(bodyPower(b));      // gathered and drawn energy is not the spell's output
+			for(const b of W.bodies) if(b.alive && b.inst === inst.id && !b.isZone && !b.zoneBlob && !b.drawnOut) s += outPow(b);      // gathered and drawn energy is not the spell's output
 			for(let i = 0; i < W.reinf.length; i++){ const st = W.reinf[i]; if(st.inst === inst.id) s += st.energy * st.density * (1 + 0.5 * (st.inf || 0)); }     // reinforcement still holds its energy (an Infinity layer weighs heavily)
 			inst.outputUsed = s;
 		}
@@ -3610,7 +3759,7 @@
 			}
 			const found = [];
 			for(const b of W.bodies){
-				if(!b.alive || b.isZone || b.technique || b.foreign || mine[b.id] || b.drawing) continue;
+				if(!b.alive || b.isZone || b.technique || b.foreign || mine[b.id] || b.drawing || b.sealed) continue;
 				if(b.ownerId !== inst.owner.id) continue;
 				if(own && b.inst !== inst.id) continue;          // "inside this spell": only energy this spell made
 				if(!techMatch(b, p)) continue;                    // "With technique": only energy carrying it now
@@ -3677,7 +3826,7 @@
 				if(d > r) continue;
 				markStruck(inst.id, e);
 				const fall = 1 - 0.5 * (d / r);
-				hostFor(inst).damageEnemy(e, dmg * fall, { x: cx, y: cy, color: col.mid, area: true, instance: inst.id });
+				hostFor(inst).damageEnemy(e, dmg * fall * (inst.vowPower || 1), { x: cx, y: cy, color: col.mid, area: true, instance: inst.id });
 			}
 			if(W.host.shake) W.host.shake(Math.min(10, 2 + dmg * 0.05));
 		}
@@ -3732,6 +3881,7 @@
 			api.host = hostFor(inst);
 			const kids = inst.kids[node.id] || [];
 			br.splitGroups = null;
+			if(inst.loopTargets && inst.loopTargets[node.id]){ const sn = br.snaps || (br.snaps = {}); if(!sn[node.id]) sn[node.id] = { body: br.ctx.body, target: br.ctx.target, zone: br.ctx.zone, cohort: br.ctx.cohort || null, domain: br.ctx.domain || null }; }      // what a Loop returns to: the state this rune was first reached in
 			let ok = true, note = '';
 			const group = br.ctx.group;
 			if(group && group.length > 1 && isPerBody(R)){
@@ -3764,7 +3914,7 @@
 				const ob = br.ctx.body;
 				if(ob && !ob.foreign){
 					const runs = ob._ranNodes || (ob._ranNodes = {});
-					if(runs[node.id] && runs[node.id] !== br.id){ br.state = 'done'; br.note = 'merged with another branch'; return false; }
+					if(runs[node.id] && runs[node.id] !== br.id && !br.rearmed){ br.state = 'done'; br.note = 'merged with another branch'; return false; }      // (a Conditional that repeats re-arms on purpose)
 					runs[node.id] = br.id;
 				}
 				const res = runOnce(inst, api, R, br, node, kids);
@@ -3790,8 +3940,11 @@
 		function advance(inst, br, queue){
 			const node = inst.def.nodes[br.nodeId];
 			const kids = inst.kids[node.id] || [];
+			if(node.type === 'loop' && loopStep(inst, br, node, queue)) return;      // jumped back (or is waiting to): this branch carries on elsewhere
 			if(!kids.length){ br.state = 'done'; br.note = 'complete'; return; }
 			const splitB = br.splitBodies, splitG = br.splitGroups;
+			const CR = br.condRule || null; br.condRule = null;
+			const cg = CR ? { mode: CR.mode, rest: CR.rest, fired: false } : null;
 			for(let i = 0; i < kids.length; i++){
 				const cid = kids[i];
 				const ctx = { body: br.ctx.body, target: br.ctx.target, zone: br.ctx.zone, group: br.ctx.group ? br.ctx.group.slice() : null, cohort: br.ctx.cohort || null, domain: br.ctx.domain || null };
@@ -3800,6 +3953,7 @@
 				let nb;
 				if(kids.length === 1){ nb = br; nb.nodeId = cid; nb.ctx = ctx; }
 				else { nb = newBranch(inst, cid, ctx, br); if(!nb) continue; }
+				if(cg){ nb.cgroup = cg; nb.rep = cg.mode === 'repeat' ? { left: CR.times - 1 } : null; }
 				enterLink(inst, nb, inst.def.nodes[cid].link, queue);
 			}
 			if(kids.length > 1){ br.state = 'done'; br.note = 'branched'; }
@@ -3807,6 +3961,7 @@
 
 		function enterLink(inst, br, link, queue){
 			link = link || defaultLink();
+			if(link.mode !== 'condition'){ br.cgroup = null; br.rep = null; }
 			if(link.mode === 'delay'){
 				br.state = 'delay'; br.wait = clamp(num(link.delay, 1), 0.05, CONFIG.delayMax);
 			} else if(link.mode === 'condition'){
@@ -3815,16 +3970,93 @@
 				if(cd && cd.start) cd.start(inst._api || (inst._api = makeApi(inst)), br, link.cond.params || {});
 				// evaluate immediately on arrival
 				const r = checkCond(inst, br);
-				if(r === true){ br.state = 'run'; queue.push(br); }
+				if(r === true){ if(condFire(inst, br)){ br.state = 'run'; queue.push(br); } }
 				else if(r === 'fail'){ br.state = 'done'; br.note = 'condition can never be met'; }
 			} else {
 				br.state = 'run'; queue.push(br);
 			}
 		}
 
-		function checkCond(inst, br){
+/* a branch's condition just occurred. Under a Conditional: 'first' cancels its siblings, 'repeat' arms a copy that waits for the condition again */
+		function condFire(inst, br){
+			const g = br.cgroup;
+			if(!g) return true;
+			if(g.mode === 'first'){
+				if(g.fired){ br.state = 'done'; br.note = 'another condition came first'; br.cgroup = null; return false; }
+				g.fired = true;
+				for(const o of inst.branches) if(o !== br && o.cgroup === g && o.state !== 'done'){ o.state = 'done'; o.note = 'another condition came first'; o.cgroup = null; }
+			} else if(g.mode === 'repeat' && br.rep && br.rep.left > 0){
+				const c = br.ctx;
+				const cl = newBranch(inst, br.nodeId, { body: c.body, target: c.target, zone: c.zone, group: c.group ? c.group.slice() : null, cohort: c.cohort || null, domain: c.domain || null }, br);
+				if(cl){
+					cl.cgroup = g; cl.rearmed = true; cl.rep = { left: br.rep.left - 1 }; cl.state = 'cond'; cl.condAge = 0; cl.condTick = 0; cl.condRest = g.rest || 0;
+					const lk = inst.def.nodes[br.nodeId].link, cd = Conditions[lk && lk.cond && lk.cond.type];
+					if(cd && cd.start) cd.start(inst._api || (inst._api = makeApi(inst)), cl, lk.cond.params || {});
+				}
+			}
+			br.cgroup = null; br.rep = null;
+			return true;
+		}
+
+		/* ---------- Loop: jump back to an earlier rune, up to `times` times, paying mana for every pass ---------- */
+		function loopCondNow(inst, br, L){
+			const cd = Conditions[L.cond && L.cond.type]; if(!cd) return false;
+			const api = inst._api || (inst._api = makeApi(inst)); api.host = hostFor(inst);
+			const params = L.cond.params || {};
+			if(cd.start) try { cd.start(api, br, params); } catch(e){}
+			let r = false; try { r = cd.check(api, br, params); } catch(e){ r = false; }
+			return r === true;
+		}
+		function loopStep(inst, br, node, queue){
+			const L = node.loop;
+			if(!L || !L.to || !inst.def.nodes[L.to]) return false;
+			const chain = loopChain(inst.def, node); if(!chain) return false;
+			const cnt = br.loopN || (br.loopN = {}), done = cnt[node.id] | 0;
+			const times = clamp(num(node.params && node.params.times, 3) | 0, 1, CONFIG.loopMax);
+			if(done >= times) return false;                                            // the repeats are used up: carry on past the Loop
+			if(inst.loopPasses >= CONFIG.loopPassCap){ logI(inst, 'Loop stopped — this spell has repeated too often'); cnt[node.id] = times; return false; }
+			if(L.mode === 'condition'){
+				if(L.check === 'now'){
+					if(!loopCondNow(inst, br, L)){ logI(inst, 'Loop ended — its condition no longer holds'); cnt[node.id] = times; return false; }
+				} else {
+					br.state = 'lwait'; br.lw = { age: 0, tick: 0, node: node.id };
+					const cd = Conditions[L.cond && L.cond.type];
+					if(cd && cd.start) cd.start(inst._api || (inst._api = makeApi(inst)), br, L.cond.params || {});
+					const r = checkCond(inst, br, L.cond);
+					if(r === true){ if(!loopGo(inst, br, node, chain, queue)){ cnt[node.id] = times; br.state = 'resume'; inst._needPump = true; } return true; }
+					if(r === 'fail'){ cnt[node.id] = times; br.state = 'resume'; inst._needPump = true; }
+					return true;
+				}
+			}
+			if(!loopGo(inst, br, node, chain, queue)){ cnt[node.id] = times; return false; }
+			return true;
+		}
+		/* pay for one more pass and send the branch back; false when the mana is not there */
+		function loopGo(inst, br, node, chain, queue){
+			const L = node.loop, api = inst._api || (inst._api = makeApi(inst));
+			let base = 0; for(const id of chain) base += inst.nodeCost[id] || 0;
+			const fee = base * CONFIG.loopFee;
+			if(fee > 0){
+				const got = api.drainReserve(fee);
+				if(got < fee - 0.01){ logI(inst, 'Loop ended — not enough mana for another pass (' + Math.ceil(fee) + ' needed)'); return false; }
+				inst.budget += Math.min(got, base);                                    // the energy the repeated runes make this pass
+			}
+			const cnt = br.loopN, done = cnt[node.id] | 0;
+			cnt[node.id] = done + 1; inst.loopPasses++;
+			for(const id of chain) if(id !== node.id && inst.def.nodes[id].type === 'loop') delete cnt[id];      // an inner loop starts over on every outer pass
+			const sn = (br.snaps && br.snaps[L.to]) || {};
+			const keep = sn.body && api.bodyValid(sn.body) ? sn.body : null;
+			br.nodeId = L.to; br.ctx = { body: keep, target: sn.target || null, zone: sn.zone || null, group: null, cohort: sn.cohort || null, domain: sn.domain || null };
+			br.lw = null;
+			const gap = clamp(num(node.params && node.params.gap, 0.3), 0, 10);
+			if(gap > 0.001){ br.state = 'delay'; br.wait = Math.max(0.05, gap); }
+			else { br.state = 'run'; queue.push(br); }
+			logI(inst, 'Loop pass ' + (done + 1) + ' of ' + clamp(num(node.params && node.params.times, 3) | 0, 1, CONFIG.loopMax));
+			return true;
+		}
+		function checkCond(inst, br, condOverride){
 			const node = inst.def.nodes[br.nodeId];
-			const link = node.link || defaultLink();
+			const link = condOverride ? { cond: condOverride } : (node.link || defaultLink());
 			const cd = Conditions[link.cond && link.cond.type];
 			if(!cd) return 'fail';
 			const api = inst._api || (inst._api = makeApi(inst));
@@ -3907,7 +4139,9 @@
 			damage(e, dmg, info, b){
 				if(!e || e.dead || !(dmg > 0)) return;
 				if(b) markStruck(b.inst, e);
-				(b ? hostFor(b.inst) : (T.hostNow || W.host)).damageEnemy(e, dmg, Object.assign({ instance: b ? b.inst : 0, color: b ? bodyColors(b).mid : '#ffffff' }, info || {}));
+				W.hitSrc = b || null;
+					(b ? hostForB(b) : (T.hostNow || W.host)).damageEnemy(e, dmg, Object.assign({ instance: b ? b.inst : 0, color: b ? bodyColors(b).mid : '#ffffff' }, info || {}));
+					W.hitSrc = null;
 			},
 			foreign(){ return W.host.getForeignProjectiles() || []; },
 			bodies(){ return W.bodies; },
@@ -4212,10 +4446,10 @@
 			if(b.infSource){ if(!infAntiOnly(b)) infBacklash(b, 'its unstable compression went off'); return; }
 			const P = Math.abs(bodyPower(b)), R = 50 + Math.sqrt(P) * 9, col = bodyColors(b), inst = instById(b.inst);
 			const dmgAt = (d) => P * CONFIG.damagePerPower * 0.9 * Math.max(0, 1 - d / R);
-			for(const e of (hostFor(b.inst).getEnemies() || [])){
+			for(const e of (hostForB(b).getEnemies() || [])){
 				if(!e || e.dead) continue;
 				const c = center(e), d = dist(c.x, c.y, b.x, b.y);
-				if(d < R){ const dm = dmgAt(d * 0.7); if(dm > 0) hostFor(b.inst).damageEnemy(e, dm, { x: b.x, y: b.y, color: col.mid, instance: b.inst }); if(W.host.knockback){ const l = d || 1; W.host.knockback(e, (c.x - b.x) / l * 6, -3, 12); } }
+				if(d < R){ const dm = dmgAt(d * 0.7); if(dm > 0) hostForB(b).damageEnemy(e, dm, { x: b.x, y: b.y, color: col.mid, instance: b.inst }); if(W.host.knockback){ const l = d || 1; W.host.knockback(e, (c.x - b.x) / l * 6, -3, 12); } }
 			}
 			const me = inst && inst.owner ? inst.owner.entity : null;
 			if(me){
@@ -4371,6 +4605,127 @@
 			}
 			return erased;
 		};
+		/* ================= WEAPON PARRY & ANTI-MAGIC CONTACT =================
+		   A weapon meets magic in two ways. PARRY: a defended zone (the weapon's reach during a parry window) turns away any spell
+		   whose STRENGTH (its hit damage plus a quarter of its energy) the weapon can bear — a stronger weapon (more reinforcement)
+		   bears more. A weapon with Anti-Magic reinforcement REFLECTS what it parries instead of just breaking it.
+		   CONTACT: an Anti-Magic reinforced weapon erodes or erases any magic it touches, paid for by its own reinforcement. */
+		function segDist(px, py, g){
+			const dx = g.x1 - g.x0, dy = g.y1 - g.y0, L2 = dx * dx + dy * dy;
+			const t = L2 > 0 ? clamp(((px - g.x0) * dx + (py - g.y0) * dy) / L2, 0, 1) : 0;
+			return Math.hypot(px - (g.x0 + dx * t), py - (g.y0 + dy * t));
+		}
+		W.segDist = segDist;
+		/* how hard a spell is to turn aside: its damage per blow plus a quarter of the energy behind it */
+		W.spellStrength = function(b){
+			if(!b) return 0;
+			if(b.alive === undefined && (b.power != null || b.dmg != null || b.damage != null)) return foreignStrength(b) * (1 + 0.1 * ((b.effects && b.effects.length) || 0));      // a game projectile
+			const dmg = b.hitDamage != null ? b.hitDamage : Math.abs(bodyPower(b)) * CONFIG.damagePerPower * (1 + (b.reinfImpact || 0));
+			const ok = b.over > 0 ? overK(b) : 0;
+			return (dmg + 0.25 * Math.max(0, b.amount)) * (1 + 0.6 * ok);      // over-compressed energy drives through a guard
+		};
+		/* turn a spell about: it now fights for the player and flies back the way it came (or at `aim`) */
+		W.reflectBody = function(b, o){
+			o = o || {};
+			b.reflected = true; b.hostile = false; b.ownerId = o.ownerId || 'player';
+			const sp = Math.max(7, Math.hypot(b.vx, b.vy)) * 1.1;
+			let a = Math.atan2(-b.vy, -b.vx);
+			const aim = o.aimFn ? o.aimFn(b) : o.aim;
+			if(aim) a = Math.atan2(aim.y - b.y, aim.x - b.x);
+			if(!isFinite(a)) a = 0;
+			b.vx = Math.cos(a) * sp; b.vy = Math.sin(a) * sp; b.angleSet = false;
+			b.follow = null; b.arrive = null; b.attach = null; b.anchored = false; b.held = null; b.bond = null; b.bondsX = null; b.guided = false;
+			b.hitIds = null; b.amount *= num(o.keep, 0.85);
+			if(b.tech && o.strip) for(const k in b.tech) if(k !== 'antimagic') b.tech[k] *= 1 - clamp(o.strip, 0, 1);      // Anti-Magic dulls the nature of what it turns
+			remember(b, 'reflected');
+			W.rings.push({ x: b.x, y: b.y, r: 4, max: bodyRadius(b) + 20, age: 0, life: 14, color: o.dark ? '#2a2a2a' : bodyColors(b).mid });
+			return b;
+		};
+		/* one spell turned aside: broken up, or (o.reflect) flung back at its caster */
+		W.parryBody = function(b, o){
+			o = o || {};
+			if(o.reflect){ W.reflectBody(b, o); return 'reflected'; }
+			W.rings.push({ x: b.x, y: b.y, r: 3, max: bodyRadius(b) + 16, age: 0, life: 12, color: bodyColors(b).mid });
+			for(let i = 0; i < 6; i++){ const a = Math.random() * Math.PI * 2; spark(b.x, b.y, Math.cos(a) * 2.5, Math.sin(a) * 2.5, b, 10 + Math.random() * 8); }
+			killBody(b, 'parried');
+			return 'parried';
+		};
+		/* a defended zone — zone.hits(x, y, r) — meets the spells that cross it.  o: { cap, ownerId, reflect, aim, keep, strip, dark }
+		   → [ { kind: 'parried'|'reflected'|'strong', S, cap, x, y } ] */
+		W.parry = function(zone, o){
+			o = o || {};
+			const res = [], cap = num(o.cap, 0), mine = o.ownerId || 'player';
+			if(!W.host) return res;
+			for(const b of W.bodies){
+				if(!b.alive || b.isZone || b.zoneBlob || b.infSource || b.rupture || b.reflected || b.noContact || b.attach || b.foreign) continue;
+				if(b.ownerId === mine && !b.hostile) continue;
+				if(!zone.hits(b.x, b.y, bodyRadius(b))) continue;
+				if((b._parryAt || 0) > W.time) continue;
+				const S = W.spellStrength(b);
+				if(S > cap){ b._parryAt = W.time + 0.6; res.push({ kind: 'strong', S, cap, x: b.x, y: b.y, body: b }); continue; }
+				const x = b.x, y = b.y;
+				res.push({ kind: W.parryBody(b, o), S, cap, x, y, body: b });
+			}
+			for(const p of (W.host.getForeignProjectiles() || []).slice()){      // a copy: the host takes the bolt out of its list as it goes
+				if(!p || p._magicGone || p.necroFriendly || p._parried || p._reflected || p.hasHit) continue;
+				if(p.aoe || p.linger || p._isLaser || p._isZenithWall || p._isNecroZenithWall) continue;      // only a bolt can be turned aside in flight
+				if(!zone.hits(p.x, p.y, Math.max(p.width || 8, p.height || 8) * 0.5)) continue;
+				if((p._parryAt || 0) > W.time) continue;
+				const S = W.spellStrength(p);
+				if(S > cap){ p._parryAt = W.time + 0.6; res.push({ kind: 'strong', S, cap, x: p.x, y: p.y, proj: p }); continue; }
+				const x = p.x, y = p.y, refl = !!o.reflect && !p.reflectImmune;
+				p._parried = true;
+				if(W.host.parryForeign) W.host.parryForeign(p, { reflect: refl, aim: o.aim, aimFn: o.aimFn, keep: o.keep, strip: o.strip, dark: o.dark });
+				else removeForeign(p);
+				res.push({ kind: refl ? 'reflected' : 'parried', S, cap, x, y, proj: p });
+			}
+			return res;
+		};
+		/* Anti-Magic reinforcement on a held weapon: whatever magic the weapon touches is eaten into (erased outright when under 10% of
+		   the weapon's energy), paid for by the reinforcement. seg = the weapon in world space { x0, y0, x1, y1 }. */
+		W.weaponContact = function(key, seg, dt, o){
+			o = o || {};
+			if(!seg || !W.reinf.length || !W.host) return 0;
+			const mine = o.ownerId || 'player', AMT = Techniques.get('antimagic'), B = (AMT && AMT.balance) || { rate: 160, ratePerS: 80 };
+			const minI = CONFIG.tech.minIntensity;
+			let erased = 0;
+			for(const st of W.reinf){
+				if(st.kind !== 'weapon' || st.key !== key || st.removed) continue;
+				const am = (st.tech && st.tech.antimagic) || 0;
+				if(am < minI || (st.suppressed || 0) > W.time || !(st.energy > 1)) continue;
+				const a = Math.min(2.5, am), pad = 8 + 14 * st.strength, energy = st.energy;
+				const budget = (B.rate + B.ratePerS * a) * (0.35 + st.strength) * dt;
+				const pseudo = { amount: energy };
+				for(const t of W.bodies){
+					if(!t.alive || t.zoneBlob || t.foreign || t.rupture || t.reflected || antiOf(t) > 0 || (t.ownerId === mine && !t.hostile)) continue;
+					if(t.isZone){ if(segDist(t.x, t.y, seg) < t.zoneRadius + pad) antiZoneSuppress(t, (0.02 + energy / 6000) * dt * 60); continue; }
+					if(segDist(t.x, t.y, seg) > bodyRadius(t) + pad) continue;
+					if(!t.infSource && t.amount * magicResist(t) < energy * 0.1){
+						remember(t, 'antiMagicContact'); remember(t, 'antiMagicConsumed'); remember(t, 'antiMagicDisrupted');
+						W.rings.push({ x: t.x, y: t.y, r: bodyRadius(t), max: 4, age: 0, life: 14, color: '#1a1a1a' });
+						pseudo.amount -= Math.min(pseudo.amount, t.amount * 0.2);
+						killBody(t, 'antimagic'); erased++;
+					} else antiMagicExchange(pseudo, t, budget);
+					if(pseudo.amount < 1) break;
+				}
+				for(const p of (W.host.getForeignProjectiles() || []).slice()){      // a copy: the host takes the bolt out of its list as it goes
+					if(pseudo.amount < 1) break;
+					if(!p || p._magicGone || p.necroFriendly || p._reflected) continue;
+					if(segDist(p.x, p.y, seg) > Math.max(p.width || 8, p.height || 8) * 0.5 + pad) continue;
+					if(W.spellStrength(p) < energy * 0.1){ pseudo.amount -= Math.min(pseudo.amount, foreignStrength(p) * 0.2); removeForeign(p); erased++; }
+					else antiForeignExchange(pseudo, p, budget);
+				}
+				for(const c of W.constructs){
+					if(!c.alive || c.ownerId === mine) continue;
+					constructParts(c);
+					let hit = false; for(const q of c.wp) if(obbCircle(q, (seg.x0 + seg.x1) / 2, (seg.y0 + seg.y1) / 2, Math.hypot(seg.x1 - seg.x0, seg.y1 - seg.y0) / 2 + pad)){ hit = true; break; }
+					if(hit && (c._amSweep || 0) <= W.time){ c._amSweep = W.time + 0.25; damageConstruct(c, Math.max(4, energy * 0.05), 'antimagic', null); }
+				}
+				if(!st.item) st.energy = Math.max(0, pseudo.amount);      // a reinforcement pays for what it eats (a magical item is the weapon itself: it does not shrink)
+				st.contact = W.time;
+			}
+			return erased;
+		};
 		/* ================= INFINITY ================= */
 		/* portal / spatial / infinity recursion: something bouncing between portals is stopped safely */
 		function portalGuard(obj){
@@ -4442,11 +4797,11 @@
 			const R = 70 + Math.sqrt(P) * 4.5;
 			const inst = instById(b.inst);
 			remember(b, 'infinityExploded'); remember(b, 'infinityCollapsed'); infFamily(b, 'infinityExploded');
-			for(const e of (hostFor(b.inst).getEnemies() || [])){
+			for(const e of (hostForB(b).getEnemies() || [])){
 				if(!e || e.dead) continue;
 				const c = center(e), d = dist(c.x, c.y, b.x, b.y); if(d > R) continue;
 				const k = 1 - d / R;
-				hostFor(b.inst).damageEnemy(e, P * 0.18 * k, { x: c.x, y: c.y, color: bodyColors(b).mid, instance: b.inst });
+				hostForB(b).damageEnemy(e, P * 0.18 * k, { x: c.x, y: c.y, color: bodyColors(b).mid, instance: b.inst });
 				if(W.host.knockback) W.host.knockback(e, (c.x - b.x) / (d || 1) * 12 * k, -4 * k, 16);
 			}
 			const me = inst && inst.owner ? inst.owner.entity : null;
@@ -4599,12 +4954,12 @@
 				if(T.every(e, 'rup' + b.id, 0.12)){
 					// the first touch is the tear passing through (it moves too fast to linger): it lands as one heavy blow
 					const first = !(b.rupHit || (b.rupHit = new Set())).has(e); if(first) b.rupHit.add(e);
-					markStruck(b.inst, e); remember(b, 'hitEnemy'); hostFor(b.inst).damageEnemy(e, dmg * (first ? 3 : 1), { x: b.x, y: b.y, color: '#c9a7ff', instance: b.inst, rupture: true });
+					markStruck(b.inst, e); remember(b, 'hitEnemy'); hostForB(b).damageEnemy(e, dmg * (first ? 3 : 1), { x: b.x, y: b.y, color: '#c9a7ff', instance: b.inst, rupture: true });
 				}
 				for(const st of W.reinf) if(st.ref === e) st.energy -= st.energy * 0.8 * dt;
 			}
 			const me = inst && inst.owner ? inst.owner.entity : null;
-			if(me && shapeHit(b, reach, W.host.hitRect(me)) && T.every(me, 'rup' + b.id, 0.25)){ const H = hostFor(b.inst); if(H.hurtCaster) H.hurtCaster(me, dmg * 0.6, { x: b.x, y: b.y, color: '#c9a7ff' }); }
+			if(me && shapeHit(b, reach, W.host.hitRect(me)) && T.every(me, 'rup' + b.id, 0.25)){ const H = hostForB(b); if(H.hurtCaster) H.hurtCaster(me, dmg * 0.6, { x: b.x, y: b.y, color: '#c9a7ff' }); }
 			if(Math.random() < 0.6 * f){ const a = Math.random() * Math.PI * 2, rr = pullR * (0.6 + 0.4 * Math.random()); spark(b.x + Math.cos(a) * rr, b.y + Math.sin(a) * rr, -Math.cos(a) * 3, -Math.sin(a) * 3, b, 18); }
 		}
 		/* Spatial Infinity reinforcement: space around the body is held apart — approaches slow ever more, never arriving */
@@ -4811,7 +5166,7 @@
 			// creatures touching the cord: an ordinary cord is part of the energy and strikes enemies that touch it;
 			// a kinetic cord is solid to everything — creatures (you included) are thrown back off it
 			const inst = instById(b.inst), me = inst && inst.owner ? inst.owner.entity : null;
-			const ents = (hostFor(b.inst).getEnemies() || []).concat(hostFor(b.inst).getAllies() || []);
+			const ents = (hostForB(b).getEnemies() || []).concat(hostForB(b).getAllies() || []);
 			if(kin > 0 && me && ents.indexOf(me) < 0) ents.push(me);
 			const L = Math.sqrt(L2);
 			for(const e of ents){
@@ -4822,7 +5177,7 @@
 				if(u < 0.04 || u > 0.96) continue;
 				const qx = ax + vx * u, qy = ay + vy * u, d = Math.hypot(c.x - qx, c.y - qy);
 				if(d > rad) continue;
-				const isEnemy = e !== me && (hostFor(b.inst).getEnemies() || []).indexOf(e) >= 0;
+				const isEnemy = e !== me && (hostForB(b).getEnemies() || []).indexOf(e) >= 0;
 				if(kin > 0){
 					let nx = -vy / L, ny = vx / L;
 					if((c.x - qx) * nx + (c.y - qy) * ny < 0){ nx = -nx; ny = -ny; }      // push out on the side it is on
@@ -4846,7 +5201,7 @@
 						else if(W.host.knockback) W.host.knockback(e, nx * -vn * k, ny * -vn * k, 12);
 						W.rings.push({ x: qx, y: qy, r: 4, max: 28, age: 0, life: 12, color: '#ffd84d' });
 						b._bendPt = { x: qx - nx * 14, y: qy - ny * 14 }; b._bendUntil = W.time + 0.18;      // the cord gives where it was hit
-						if(isEnemy && -vn > CONFIG.cordBounceSpeed * 1.6){ markStruck(b.inst, e); hostFor(b.inst).damageEnemy(e, Math.abs(bodyPower(b)) * CONFIG.damagePerPower * 0.12, { x: qx, y: qy, color: '#ffd84d', instance: b.inst }); }
+						if(isEnemy && -vn > CONFIG.cordBounceSpeed * 1.6){ markStruck(b.inst, e); hostForB(b).damageEnemy(e, Math.abs(bodyPower(b)) * CONFIG.damagePerPower * 0.12, { x: qx, y: qy, color: '#ffd84d', instance: b.inst }); }
 						remember(b, 'reflected');
 					}
 				} else if(isEnemy && T.every(e, 'cord' + b.id, 0.5)){
@@ -4854,7 +5209,7 @@
 					const info = { mult: 0.35, keep: true, cost: 0.02, noDamage: false, x: qx, y: qy };
 					if(b.tech) for(const id in b.tech){ const s = b.tech[id]; if(Math.abs(s) < CONFIG.tech.minIntensity) continue; const dd = Techniques.get(id); if(dd && dd.onHit) dd.onHit(T, b, s, e, info); }
 					markStruck(b.inst, e); remember(b, 'hitEnemy');
-					if(!info.noDamage) hostFor(b.inst).damageEnemy(e, Math.abs(bodyPower(b)) * CONFIG.damagePerPower * info.mult, { x: qx, y: qy, color: bodyColors(b).mid, instance: b.inst });
+					if(!info.noDamage) hostForB(b).damageEnemy(e, Math.abs(bodyPower(b)) * CONFIG.damagePerPower * info.mult, { x: qx, y: qy, color: bodyColors(b).mid, instance: b.inst });
 					b.amount *= 1 - 0.02;
 				}
 			}
@@ -4872,9 +5227,9 @@
 		function waitsOnHit(b){
 			const inst = instById(b.inst); if(!inst) return false;
 			for(const br of inst.branches){
-				if(br.state !== 'cond') continue;
+				if(br.state !== 'cond' && br.state !== 'lwait') continue;
 				if(br.ctx.body !== b && !(br.ctx.group && br.ctx.group.some(m => m.body === b))) continue;
-				const n = inst.def.nodes[br.nodeId], c = n && n.link && n.link.cond;
+				const n = inst.def.nodes[br.nodeId], c = n && (br.state === 'lwait' ? (n.loop && n.loop.cond) : (n.link && n.link.cond));
 				if(c && LODGE_CONDS[c.type]) return true;
 			}
 			return false;
@@ -5888,8 +6243,10 @@
 		W.domains = []; W.burnout = new Map();
 		function burnoutLeft(ownerId){ const t = W.burnout.get(ownerId); return t && t > W.time ? t - W.time : 0; }
 		W.burnoutLeft = burnoutLeft;
+/* energy put into a domain is spent on it: it leaves the world — not drawn, not targetable, not gatherable (only the domain's own rules and upkeep use it) */
+		function sealZoneEnergy(z){ for(const o of W.bodies) if(o.alive && o.zoneBlob && o.zoneOf === z){ o.sealed = true; o.noContact = true; } }
 		function domainFoes(D){ const H = hostFor(D.inst); return (H.getEnemies() || []).filter(e => e && !e.dead); }
-		function insideDomain(D, x, y, pad){ const dx = x - D.x, dy = y - D.y, r = D.r + (pad || 0); return dx * dx + dy * dy <= r * r; }
+		function insideDomain(D, x, y, pad){ const dx = x - D.x, dy = y - D.y, r = (D.rNow != null ? D.rNow : D.r) + (pad || 0); return dx * dx + dy * dy <= r * r; }
 		function domainRefine(D){
 			const inst = instById(D.inst);
 			return Math.max(1, D.z && D.z.alive ? D.z.amount : 0) * drawControl(inst && inst.profile) * (D.form === 'closed' ? 1 : 0.8);
@@ -5905,16 +6262,35 @@
 			for(const o of W.domains) if(o.alive && o.ownerId === inst.owner.id) endDomain(o, 'replaced');      // one domain at a time
 			const form = p.form === 'open' ? 'open' : 'closed', vow = p.vow || 'none';
 			let dur = clamp(num(p.duration, 8), 3, 20) * (form === 'open' ? 0.7 : 1) * (vow === 'brief' ? 0.5 : 1);
-			const r = z.zoneRadius * (form === 'open' ? 1.5 : 1) * (vow === 'narrow' ? 0.6 : 1);
+			/* the opening: gather (the world runs, a sigil forms) → freeze (everything holds still) → expand (the domain bursts out) → active.
+			   Without the Domain Laws plugin there is no 'cinematic' parameter and the domain opens at once, as it always did. */
+			const cine = (p.cinematic === 'full' || p.cinematic === 'quick') ? p.cinematic : 'none';
+			const CT = cine === 'full' ? { gather: 1.0, freeze: 0.9, expand: 0.38 } : (cine === 'quick' ? { gather: 0.35, freeze: 0.35, expand: 0.25 } : { gather: 0, freeze: 0, expand: 0 });
+			const cineTotal = CT.gather + CT.freeze + CT.expand;
+			const r = CONFIG.domainRadius * (vow === 'narrow' ? 0.6 : 1);      // forced size: every domain is 1400 px (the Narrow vow still squeezes it)
+			z.zoneRadius = r;
 			const node = inst.def.nodes[br.nodeId];
-			const rules = (inst.kids[node.id] || []).map(cid => { const n = inst.def.nodes[cid]; const L = n.link || defaultLink(); return { cid, mode: L.mode, every: clamp(num(L.delay, 1), 0.25, CONFIG.delayMax), timer: L.mode === 'delay' ? clamp(num(L.delay, 1), 0.25, 60) : 0, armed: new Map(), cool: new Map(), done: false }; });
-			const D = { id: W.nextId++, alive: true, z, inst: inst.id, br, ownerId: inst.owner.id, form, vow, x: z.x, y: z.y, r, born: W.time, end: W.time + dur, dur,
-				sureHit: p.sureHit !== 'no', mult: domainMult(vow), rules, fuel0: z.amount, suspended: false, trapped: new Set(), seed: Math.random() * 1000 };
+			const rules = (inst.kids[node.id] || []).filter(cid => inst.def.nodes[cid].type !== 'law').map(cid => { const n = inst.def.nodes[cid]; const L = n.link || defaultLink(); return { cid, mode: L.mode, every: clamp(num(L.delay, 1), 0.25, CONFIG.delayMax), timer: L.mode === 'delay' ? clamp(num(L.delay, 1), 0.25, 60) : 0, armed: new Map(), cool: new Map(), done: false }; });
+			const D = { id: W.nextId++, alive: true, z, inst: inst.id, br, ownerId: inst.owner.id, form, vow, x: z.x, y: z.y, r, born: W.time, end: cine === 'none' ? W.time + dur : Infinity, dur,
+				sureHit: p.sureHit !== 'no', mult: domainMult(vow), rules, fuel0: z.amount, suspended: false, trapped: new Set(), seed: Math.random() * 1000,
+				p, node, cine, CT, phase: cine === 'none' ? 'active' : 'gather', ph: 0, rNow: cine === 'none' ? r : 0, opening: p.opening };
 			D.refine = domainRefine(D);
 			W.domains.push(D);
-			z.domain = D; z.age = Math.min(z.age, CONFIG.zoneLifetime - dur - 1);      // the zone stands as long as the domain does
+			z.domain = D; z.age = Math.min(z.age, CONFIG.zoneLifetime - dur - cineTotal - 1);      // the zone stands as long as the domain does
 			br.ctx.domain = D;
-			for(const e of domainFoes(D)){ const c = center(e); if(insideDomain(D, c.x, c.y)) D.trapped.add(e); }
+			sealZoneEnergy(z);
+			if(cine === 'none') beginExpansion(D, inst, true);
+			else {
+				logI(inst, 'Domain Expansion — gathering…');
+				if(W._domGather) try { W._domGather(D, inst); } catch(e){ magicError('domain gather', e, null); }
+			}
+			br.hold = { time: dur + cineTotal + 30, elapsed: 0, label: 'domain', tick(){ return D.alive ? null : 'done'; }, end(){ endDomain(D, 'expired'); return 'stop'; } };
+			return true;
+		}
+		/* the moment the barrier goes up: who is caught, Overwhelm, the call-out. (cine 'none' does this at once; otherwise after the freeze.) */
+		function beginExpansion(D, inst, instant){
+			const p = D.p, form = D.form;
+			for(const e of domainFoes(D)){ const c = center(e); if(dist(c.x, c.y, D.x, D.y) <= D.r) D.trapped.add(e); }
 			// Overwhelm: everything the domain is, poured into every foe inside at once
 			if(p.opening === 'overwhelm'){
 				for(const e of D.trapped){
@@ -5926,13 +6302,20 @@
 					W.rings.push({ x: c.x, y: c.y, r: 6, max: 70, age: 0, life: 30, color: '#ffffff' });
 				}
 			}
-			logI(inst, 'Domain Expansion — ' + form + ', ' + rules.length + ' rule' + (rules.length === 1 ? '' : 's') + ', ' + dur.toFixed(1) + ' s');
-			if(hostFor(inst).say && inst.owner.id === 'player') W.host.say('Domain Expansion!');
-			else if(W.host.announce) W.host.announce('Domain Expansion!', inst.owner);
-			if(W.host.shake) W.host.shake(6);
-			// the branch holds the domain open; its rules run from domainPass (the hold never hands on to them the normal way)
-			br.hold = { time: dur, elapsed: 0, label: 'domain', tick(){ return D.alive ? null : 'done'; }, end(){ endDomain(D, 'expired'); return 'stop'; } };
-			return true;
+			logI(inst, 'Domain Expansion — ' + form + ', ' + D.rules.length + ' rule' + (D.rules.length === 1 ? '' : 's') + ', ' + D.dur.toFixed(1) + ' s');
+			const title = (p.title && String(p.title).trim()) || 'Domain Expansion';
+			if(instant){
+				if(hostFor(inst).say && inst.owner.id === 'player') W.host.say(title + '!');
+				else if(W.host.announce) W.host.announce(title + '!', inst.owner);
+				if(W.host.shake) W.host.shake(6);
+				activateDomain(D, inst);
+			} else if(W.host.shake) W.host.shake(10);
+		}
+		function domainTitle(D){ return (D.p && D.p.title && String(D.p.title).trim()) || 'Domain Expansion'; }
+		/* the barrier is fully up: the clock starts, rules arm, laws begin */
+		function activateDomain(D, inst){
+			D.phase = 'active'; D.rNow = D.r; D.ph = 0; D.end = W.time + D.dur; D.activeAt = W.time;
+			if(W._domOpen) try { W._domOpen(D, inst); } catch(e){ magicError('domain open', e, null); }
 		}
 		function endDomain(D, why){
 			if(!D.alive) return;
@@ -5943,6 +6326,8 @@
 			const inst = instById(D.inst);
 			if(inst){ logI(inst, 'Domain ended (' + why + ') — burnout for ' + (4 + 0.4 * D.dur).toFixed(1) + ' s'); for(const br of inst.branches) if(br.ctx.domain === D && br.state !== 'done' && br !== D.br){ br.state = 'done'; br.note = 'domain closed'; } }
 			W.rings.push({ x: D.x, y: D.y, r: D.r * 0.9, max: D.r * 1.15, age: 0, life: 26, color: D.ownerId === 'player' ? '#c9a8ff' : '#ff6a7a' });
+			if(W.cine && W.cine.D === D) W.cine = null;      // a domain that dies during its own freeze releases the world
+			if(W._domEnd) try { W._domEnd(D, why); } catch(e){ magicError('domain end', e, null); }
 		}
 		/* run one rule for one foe: a fresh branch at the rule's rune, targeting that foe, fuelled by the zone */
 		function spawnRule(D, R, foe, viaLink){
@@ -5963,9 +6348,32 @@
 				if(!inst || inst.done || !D.z || !D.z.alive){ endDomain(D, 'its zone is gone'); continue; }
 				if(W.time >= D.end){ endDomain(D, 'expired'); continue; }
 				D.x = D.z.x; D.y = D.z.y;
+				/* opening: gather → freeze → expand → active (rules, upkeep and sure-hit begin only when active) */
+				if(D.phase !== 'active'){
+					if(D.phase === 'gather'){
+						D.ph += dt;
+						if(D.ph >= D.CT.gather){
+							D.ph = 0;
+							if(!W.cine && !W.host.noFreeze && D.CT.freeze > 0){
+								D.phase = 'freeze';
+								const t0 = domainTitle(D);
+								if(hostFor(inst).say && inst.owner.id === 'player') W.host.say(t0 + '!'); else if(W.host.announce) W.host.announce(t0 + '!', inst.owner);
+								W.cine = { D, t: 0, dur: D.CT.freeze, done(){ D.phase = 'expand'; D.ph = 0; beginExpansion(D, inst, false); } };
+							} else { D.phase = 'expand'; D.ph = 0; beginExpansion(D, inst, false); }
+						}
+					} else if(D.phase === 'freeze'){
+						if(!W.cine){ D.phase = 'expand'; D.ph = 0; beginExpansion(D, inst, false); }
+					} else if(D.phase === 'expand'){
+						D.ph += dt;
+						const k = clamp(D.ph / Math.max(0.01, D.CT.expand), 0, 1);
+						D.rNow = D.r * (1 - Math.pow(1 - k, 4));      // a quartic ease-out: it bursts, then settles
+						if(k >= 1) activateDomain(D, inst);
+					}
+					continue;
+				}
 				// upkeep: the domain burns its zone's energy (faster while it is losing a clash)
-				const burn = D.fuel0 * 0.2 / D.dur * dt * (D.suspended ? 3 : 1);
-				if(burn > 0) inst._api ? inst._api.takeFromZone(D.z, burn) : null;
+				const burn = D.fuel0 * CONFIG.domainUpkeep * dt * (D.suspended ? 3 : 1);      // longer domains burn more of their energy
+				if(burn > 0) inst._api ? inst._api.takeFromZone(D.z, burn, true) : null;
 				if((D.z.amount || 0) < 1){ endDomain(D, 'out of energy'); continue; }
 				D.refine = domainRefine(D);
 				const foes = domainFoes(D), inside = foes.filter(e => { const c = center(e); return insideDomain(D, c.x, c.y); });
@@ -5980,7 +6388,7 @@
 						if((e.vx || 0) * dx > 0) e.vx = 0;
 						if((e.vy || 0) * dy > 0 && dy < 0) e.vy = 0;
 						if(e.launchVx && e.launchVx * dx > 0) e.launchVx = 0;
-						if(T.every(e, 'domWall' + D.id, 0.3)) W.rings.push({ x: D.x + dx / d * D.r, y: D.y + dy / d * D.r, r: 4, max: 26, age: 0, life: 12, color: '#ffffff' });
+						if(T.every(e, 'domWall' + D.id, 0.3)){ W.rings.push({ x: D.x + dx / d * D.r, y: D.y + dy / d * D.r, r: 4, max: 26, age: 0, life: 12, color: '#ffffff' }); if(W._domEdge) try { W._domEdge(D, e); } catch(er){ magicError('domain edge', er, null); } }
 					}
 				}
 				if(D.suspended) continue;      // losing a clash: no rules, no sure-hit
@@ -6001,6 +6409,7 @@
 						}
 					}
 				}
+				if(W._domTick) try { W._domTick(D, dt, f, inside, foes, inst); } catch(e){ magicError('domain laws', e, null); }
 				// sure-hit: your energy inside homes onto a foe inside and cannot miss (an Anti-Magic aura shields a foe from it)
 				if(D.sureHit && inside.length){
 					const shielded = (e) => W.reinf.some(st => st.ref === e && (st.tech && st.tech.antimagic > 0));
@@ -6022,7 +6431,7 @@
 			for(const D of W.domains) if(D.alive) D.suspended = false;
 			for(let i = 0; i < W.domains.length; i++) for(let j = i + 1; j < W.domains.length; j++){
 				const A = W.domains[i], B = W.domains[j];
-				if(!A.alive || !B.alive || A.ownerId === B.ownerId) continue;
+				if(!A.alive || !B.alive || A.ownerId === B.ownerId || A.phase !== 'active' || B.phase !== 'active') continue;
 				const d = dist(A.x, A.y, B.x, B.y); if(d > A.r + B.r) continue;
 				const lose = A.refine >= B.refine ? B : A;
 				lose.suspended = true;
@@ -6034,7 +6443,7 @@
 		/* outside energy and projectiles cannot get through a closed barrier (unless they are much stronger than it) */
 		function domainBarrier(b){
 			for(const D of W.domains){
-				if(!D.alive || D.form !== 'closed' || D.suspended || b.ownerId === D.ownerId) continue;
+				if(!D.alive || D.form !== 'closed' || D.suspended || D.phase !== 'active' || b.ownerId === D.ownerId) continue;
 				const was = b._domOut == null ? !insideDomain(D, b.x, b.y) : b._domOut;
 				const now = !insideDomain(D, b.x, b.y);
 				b._domOut = now;
@@ -6047,6 +6456,7 @@
 		}
 		function drawDomains(ctx, camX, camY, t){
 			if(!W.domains.length) return;
+			if(W._domDraw){ W._domDraw(ctx, camX, camY, t); return; }      // the Domain Laws plugin paints themed, phased domains
 			for(const D of W.domains){
 				const life = D.alive ? 1 : clamp(1 - (W.time - D.endedAt) / 0.8, 0, 1);
 				if(life <= 0) continue;
@@ -6236,6 +6646,12 @@
 			if(host) W.host = withDefaults(host);
 			if(!W.host) W.host = withDefaults({});
 			dt = dt || 1 / 60;
+			/* a domain is opening: everything holds still (nothing advances, not even time) until the freeze is over */
+			if(W.cine){
+				const C = W.cine; C.t += dt; W.cineFrames = (W.cineFrames || 0) + 1;
+				if(C.t >= C.dur || W.cineFrames > 400){ W.cine = null; W.cineFrames = 0; try { if(C.done) C.done(); } catch(e){ magicError('domain freeze', e, null); } }
+				return;
+			}
 			W.frame++; W.time += dt;
 			const f = dt * 60;
 			T.dt = dt; T.f = f; T.time = W.time;
@@ -6268,14 +6684,27 @@
 						const node = inst.def.nodes[br.nodeId];
 						const to = clamp(num(node.link.cond.timeout, CONFIG.condTimeoutDefault), 0.5, CONFIG.condTimeoutMax);
 						if(br.condAge > to){ br.state = 'done'; br.note = 'condition never met'; logI(inst, 'Condition timed out'); continue; }
+						if(br.condRest > 0){ br.condRest -= dt; continue; }      // a Conditional that repeats rests between firings
 						if(++br.condTick % CONFIG.condCheckFrames !== 0) continue;
 						const r = checkCond(inst, br);
-						if(r === true){ br.state = 'run'; any = true; }
+						if(r === true){ if(condFire(inst, br)){ br.state = 'run'; any = true; } }
 						else if(r === 'fail'){ br.state = 'done'; br.note = 'condition can never be met'; }
+					} else if(br.state === 'lwait'){      // a Loop waiting for its return condition
+						const node = inst.def.nodes[br.nodeId], L = node && node.loop;
+						if(!L){ br.state = 'done'; continue; }
+						br.lw.age += dt;
+						const cnt = br.loopN || (br.loopN = {}), times = clamp(num(node.params && node.params.times, 3) | 0, 1, CONFIG.loopMax);
+						const to = clamp(num(L.cond.timeout, CONFIG.condTimeoutDefault), 0.5, CONFIG.condTimeoutMax);
+						if(br.lw.age > to){ cnt[node.id] = times; br.state = 'resume'; any = true; logI(inst, 'Loop ended — its condition never occurred'); continue; }
+						if(++br.lw.tick % CONFIG.condCheckFrames !== 0) continue;
+						const r = checkCond(inst, br, L.cond);
+						if(r === true){ const q = []; const chain = loopChain(inst.def, node); if(chain && loopGo(inst, br, node, chain, q)) any = true; else { cnt[node.id] = times; br.state = 'resume'; any = true; } }
+						else if(r === 'fail'){ cnt[node.id] = times; br.state = 'resume'; any = true; }
 					}
 				}
 				if(any || inst._needPump){ inst._needPump = false; pumpInstance(inst); }
 			}
+			if(W._vowPre) try { W._vowPre(dt); } catch(e){ magicError('vows', e, null); }
 
 			// zone tallies: a zone's energy is the sum of its untouched blobs
 			for(const b of W.bodies) if(b.isZone){ b._sum = 0; b._n = 0; }
@@ -6299,7 +6728,7 @@
 				if(!b.alive){ b.dying += dt; continue; }
 				W._curBody = b;
 				// whose side it is on: a foe's (an enemy mage's) energy strikes that caster's foes
-				const HB = hostFor(b.inst), bEn = HB === W.host ? enemies : (HB.getEnemies() || []), bAl = HB === W.host ? allies : (HB.getAllies() || []);
+				const HB = hostForB(b), bEn = HB === W.host ? enemies : (HB.getEnemies() || []), bAl = HB === W.host ? allies : (HB.getAllies() || []);
 				T.enemies = bEn; T.allies = bAl; T.hostNow = HB;
 				b.age += dt;
 				if(b.dieAt && W.time >= b.dieAt){ killBody(b, 'fade'); continue; }      // energy given a set life (e.g. one blob of a beam) simply fades
@@ -6433,6 +6862,7 @@
 					if(sp2 > rg.hi){ const k = rg.hi / sp2; b.vx *= k; b.vy *= k; }
 					else if(rg.lo > 0 && sp2 > 0.3 && sp2 < rg.lo){ const k = rg.lo / sp2; b.vx *= k; b.vy *= k; }
 				}
+				if(b.vows && W._vowTick){ W._vowTick(b, dt); if(!b.alive) continue; }      // a Binding Vow watches its energy (distance, path, time …)
 				if(b.rupture){ ruptureTick(b, dt, f, bEn); continue; }      // a spatial rupture: erases what it touches (passes through walls)
 				if(b.isZone || b.zoneBlob) continue;     // untouched blobs just sit there, harmless
 				if(b.noContact) continue;                // e.g. a portal: it is no longer energy that strikes
@@ -6487,6 +6917,13 @@
 						const hp = shapeHit(b, r * (b.hitScale || 1), hr);
 						if(!hp) continue;
 						if(b.hitIds && (b.hitIds.get(e) || 0) > W.time) continue;     // energy that passed through recently
+						if(hurt && W._vowHit){
+							// a Binding Vow may let the energy pass this creature by (sworn to another / still waiting), break,
+							// or pay out its bonus energy right before the blow lands
+							const vr = W._vowHit(b, e);
+							if(vr === 'pass'){ (b.hitIds || (b.hitIds = new Map())).set(e, W.time + 0.35); continue; }
+							if(!b.alive) break;
+						}
 						markStruck(b.inst, e);
 						if(!hurt) continue;
 						remember(b, 'hitEnemy');
@@ -6501,8 +6938,13 @@
 						if(b.chillOnHit) applyStatus(e, 'chill', Math.min(1.2, 0.3 * b.chillOnHit), 2);
 						// over-compressed energy pierces straight through, losing only a little each time
 						if(b.over > 0 && !info.noDamage){ const ok = overK(b); info.keep = true; info.cost = Math.min(info.cost, 0.15 - 0.1 * ok); info.mult *= 1 + 0.35 * ok; }
-						const dmg = info.noDamage ? 0 : (b.hitDamage != null ? b.hitDamage : Math.abs(bodyPower(b)) * CONFIG.damagePerPower * info.mult * (1 + (b.reinfImpact || 0)) * overDamp(b));      // energy emitted with a set damage per hit (a beam's blobs) keeps it
-						if(dmg > 0) HB.damageEnemy(e, dmg, { x: hp.x, y: hp.y, color: bodyColors(b).mid, instance: b.inst, vx: b.vx, vy: b.vy });
+						let dmg = info.noDamage ? 0 : (b.hitDamage != null ? b.hitDamage : Math.abs(bodyPower(b)) * CONFIG.damagePerPower * info.mult * (1 + (b.reinfImpact || 0)) * overDamp(b));      // energy emitted with a set damage per hit (a beam's blobs) keeps it
+						if(dmg > 0){ const vi = instById(b.inst); if(vi && vi.vowPower) dmg *= vi.vowPower; }      // a vow-charged cast (Charged Heart …)
+						if(dmg > 0){
+								const wasRefl = b.reflected;
+								W.hitSrc = b; HB.damageEnemy(e, dmg, { x: hp.x, y: hp.y, color: bodyColors(b).mid, instance: b.inst, vx: b.vx, vy: b.vy }); W.hitSrc = null;
+								if(b.reflected && !wasRefl){ (b.hitIds || (b.hitIds = new Map())).set(e, W.time + 0.6); break; }      // a weapon turned it about as it struck: it flies on, no longer a blow
+							}
 						if(info.keep){
 							(b.hitIds || (b.hitIds = new Map())).set(e, W.time + 0.45);
 							b.amount *= 1 - info.cost;
@@ -6522,12 +6964,13 @@
 						hit = true; break;
 					}
 				}
+				if(!b.alive) continue;      // a broken vow destroyed it
 				// energy an enemy's gravity / portal took hold of can strike you too
 				if(!hit && b.hostile && W.host.hurtCaster){
 					const inst = instById(b.inst), me = inst && inst.owner ? inst.owner.entity : null;
 					if(me && !(b.hitIds && (b.hitIds.get(me) || 0) > W.time)){
 						const hp = shapeHit(b, r * (b.hitScale || 1), W.host.hitRect(me));
-						if(hp){ W.host.hurtCaster(me, Math.abs(bodyPower(b)) * CONFIG.damagePerPower, { x: hp.x, y: hp.y, color: bodyColors(b).mid }); hit = !(b.over > 0); (b.hitIds || (b.hitIds = new Map())).set(me, W.time + 0.6); }
+						if(hp){ W.hitSrc = b; W.host.hurtCaster(me, Math.abs(bodyPower(b)) * CONFIG.damagePerPower, { x: hp.x, y: hp.y, color: bodyColors(b).mid }); W.hitSrc = null; hit = !(b.over > 0); (b.hitIds || (b.hitIds = new Map())).set(me, W.time + 0.6); }
 					}
 				}
 				if(hit){ killBody(b, 'impact'); continue; }
@@ -6551,7 +6994,7 @@
 
 			// 3) finished instances (every spell's output in one pass over the bodies)
 			const outBy = new Map();
-			for(const b of W.bodies) if(b.alive && !b.isZone && !b.zoneBlob && !b.drawnOut) outBy.set(b.inst, (outBy.get(b.inst) || 0) + Math.abs(bodyPower(b)));
+			for(const b of W.bodies) if(b.alive && !b.isZone && !b.zoneBlob && !b.drawnOut) outBy.set(b.inst, (outBy.get(b.inst) || 0) + outPow(b));
 			for(let i = 0; i < W.reinf.length; i++){ const st = W.reinf[i]; outBy.set(st.inst, (outBy.get(st.inst) || 0) + st.energy * st.density * (1 + 0.5 * (st.inf || 0))); }
 			for(const inst of W.instances){
 				inst.outputUsed = outBy.get(inst.id) || 0;
@@ -6643,6 +7086,8 @@
 				for(const k in ids) nt[k] = total > 0 ? (techOf(keep, k) * keep.amount + techOf(drop, k) * drop.amount) / total : 0;
 				keep.tech = nt;
 			}
+			if(keep.vowShare || drop.vowShare) keep.vowShare = total > 0 ? ((keep.vowShare || 0) * keep.amount + (drop.vowShare || 0) * drop.amount) / total : 0;
+			if(drop.vows){ keep.vows = keep.vows || []; for(const C of drop.vows) if(keep.vows.indexOf(C) < 0) keep.vows.push(C); }
 			keep.amount = total;
 			keep.mergeCount = (keep.mergeCount || 0) + 1 + (drop.mergeCount || 0);
 			if(drop.mem){ keep.mem = keep.mem || {}; for(const k in drop.mem) keep.mem[k] = Math.max(keep.mem[k] || 0, drop.mem[k]); }
@@ -6742,6 +7187,7 @@
 		}
 
 		function endInstance(inst, why){
+			if(W._vowEnd) try { W._vowEnd(inst, why); } catch(e){}
 			for(const br of inst.branches) if(br.state !== 'done'){ br.state = 'done'; br.note = why; }
 			for(const b of W.bodies) if(b.alive && b.inst === inst.id) killBody(b, 'leak');
 			if(W.reinf.length) W.reinf = W.reinf.filter(st => st.inst !== inst.id);
@@ -6804,7 +7250,8 @@
 		};
 		W.removeItemReinforcement = function(st){ if(st){ st.removed = true; W.reinf = W.reinf.filter(x => x !== st); } };
 		W._sparkCap = 480;
-		W.clear = function(){ W.domains.length = 0; W.burnout.clear(); W.constructs.length = 0; W.debris.length = 0; W.instances.length = 0; W.bodies.length = 0; W.sparks.length = 0; W.rings.length = 0; W.ambient.clear(); W.reinf.length = 0; W.status.clear(); W.fields.length = 0; W.fmods.clear(); W.lights.length = 0; };
+		W.isFrozen = function(){ return !!W.cine; };
+		W.clear = function(){ if(W._vowClear) W._vowClear(); if(W._domClear) W._domClear(); W.cine = null; W.domains.length = 0; W.burnout.clear(); W.constructs.length = 0; W.debris.length = 0; W.instances.length = 0; W.bodies.length = 0; W.sparks.length = 0; W.rings.length = 0; W.ambient.clear(); W.reinf.length = 0; W.status.clear(); W.fields.length = 0; W.fmods.clear(); W.lights.length = 0; };
 		/* end every spell a caster has running (the game binds this to O) */
 		W.clearOwner = function(ownerId){
 			let n = 0;
@@ -6935,6 +7382,7 @@
 			if(!b) return null;
 			inst.bodyCount = Math.max(0, inst.bodyCount - 1);     // untouched blobs belong to the zone, not the spell's body limit
 			b.zoneBlob = true; b.zoneOf = z; b.anchored = true; b.small = 1; b.grow = 0;
+			if(z.domain && z.domain.alive){ b.sealed = true; b.noContact = true; }
 			z.blobN = (z.blobN || 0) + 1;
 			W.rings.push({ x, y, r: 2, max: 16, age: 0, life: 14, color: bodyColors(b).mid });
 			for(let i = 0; i < 4; i++){ const a = Math.random() * Math.PI * 2; spark(x + Math.cos(a) * 14, y + Math.sin(a) * 14, -Math.cos(a) * 1.1, -Math.sin(a) * 1.1, b, 14); }
@@ -6950,6 +7398,7 @@
 			b.zoneHome = { id: z.id, x: z.x, y: z.y };      // Spatial energy from a zone opens its portal back to the zone once enough is stored
 		}
 		function claimBlob(b, byInst){
+			if(b.sealed) return;
 			b.zoneBlob = false; b.claimed = true;
 			if(b.zoneOf && b.zoneOf.alive && b.zoneOf.tech) zoneKind(b, b.zoneOf);
 			const inst = W.instances.find(i => i.id === b.inst);
@@ -6957,7 +7406,7 @@
 		}
 		function gatherZoneBlobs(z, to, max){
 			let got = 0;
-			const list = W.bodies.filter(b => b.alive && b.zoneBlob && b.zoneOf === z)
+			const list = W.bodies.filter(b => b.alive && b.zoneBlob && !b.sealed && b.zoneOf === z)
 				.sort((a, b) => dist(a.x, a.y, to.x, to.y) - dist(b.x, b.y, to.x, to.y));
 			for(const b of list){
 				if(got + b.amount * CONFIG.zoneCollect > max + 0.5) break;
@@ -7028,6 +7477,7 @@
 			vis.length = 0;
 			for(const b of W.bodies){
 				if(b.isZone || b.coreOf) continue;      // a construct's Gravity core is shown as the construct's aura, not as energy
+				if(b.sealed || (b.zoneBlob && b.zoneOf && b.zoneOf.domainShown)) continue;      // energy put into a domain does not appear      // inside an open domain the zone's energy is the domain's world (painted by the domain art)
 				const x = b.x - camX, y = b.y - camY, R = bodyRadius(b) * 2.6;
 				if(!b.hideBody && (x < -R || y < -R || x > viewW + R || y > viewH + R)) continue;
 				vis.push(b);
@@ -7056,6 +7506,7 @@
 					ctx.save(); DRAW_TINT = b.tint || null; try { d.draw(ctx, b, x, y, R, s, t, lod); } finally { DRAW_TINT = null; } ctx.restore();
 				}
 			}
+			if(W._vowDraw){ ctx.save(); try { W._vowDraw(ctx, vis, camX, camY, t); } catch(e){} ctx.restore(); }
 			ctx.globalCompositeOperation = 'lighter';
 			// sparks: tiny squares are far cheaper than arcs and look the same at this size
 			// batched: one fill per colour and fade step instead of one per spark
@@ -7285,17 +7736,18 @@
 			for(const st of W.reinf){
 				const caps = CONFIG.reinforce.caps, P = st.props, s = st.strength, col = st.color;
 				const geo = { kind: st.kind, camX, camY, host: W.host };
+				const dark = ((st.tech && st.tech.antimagic) || 0) >= CONFIG.tech.minIntensity;      // Anti-Magic is a dark mass laid over the scene, never a glow added to it
 				if(st.kind === 'weapon'){
 					const seg = W.host.weaponSegment ? W.host.weaponSegment({ id: st.ownerId }, st.ref) : null;
 					if(!seg) continue;      // not in hand right now
 					geo.x0 = seg.x0 - camX; geo.y0 = seg.y0 - camY; geo.x1 = seg.x1 - camX; geo.y1 = seg.y1 - camY;
 					if(st.item){ drawItemInHand(ctx, st, geo, t); continue; }      // a magical item IS the compressed energy — no weapon, no reinforcement glow
-					drawReinfWeapon(ctx, st, geo, t);
+					if(dark) drawDarkWeapon(ctx, st, geo, t); else drawReinfWeapon(ctx, st, geo, t);
 				} else if(st.kind === 'spell' || st.kind === 'energy'){
 					const b = st.ref; if(!b || !b.alive) continue;
 					geo.x = b.x - camX; geo.y = b.y - camY; geo.r = bodyRadius(b) * 1.5;
-					ctx.globalCompositeOperation = 'lighter';
-					ctx.globalAlpha = 0.25 + 0.5 * s; ctx.strokeStyle = col.mid; ctx.lineWidth = 1.5;
+					ctx.globalCompositeOperation = dark ? 'source-over' : 'lighter';
+					ctx.globalAlpha = 0.25 + 0.5 * s; ctx.strokeStyle = dark ? '#060606' : col.mid; ctx.lineWidth = dark ? 2.4 : 1.5;
 					ctx.beginPath();
 					for(let i = 0; i <= 6; i++){ const a = t * 0.8 + i / 6 * Math.PI * 2; const px = geo.x + Math.cos(a) * geo.r, py = geo.y + Math.sin(a) * geo.r; if(i) ctx.lineTo(px, py); else ctx.moveTo(px, py); }
 					ctx.stroke();
@@ -7303,7 +7755,7 @@
 					const r = rectOf(st.ref); if(!r) continue;
 					geo.x = r.x - camX; geo.y = r.y - camY; geo.w = r.w; geo.h = r.h;
 					geo.facing = st.ref.facing || 1;
-					drawReinfBody(ctx, st, geo, t, P, caps);
+					if(dark) drawDarkBody(ctx, st, geo, t); else drawReinfBody(ctx, st, geo, t, P, caps);
 				}
 				for(const id in st.tech){
 					const sv = st.tech[id]; if(Math.abs(sv) < CONFIG.tech.minIntensity) continue;
@@ -7352,6 +7804,94 @@
 				ctx.beginPath(); ctx.moveTo(g.x0, g.y0); ctx.lineTo(g.x1, g.y1); ctx.stroke();
 				ctx.strokeStyle = hexA('#ffffff', 0.9); ctx.lineWidth = 2;
 				ctx.beginPath(); ctx.moveTo(g.x0, g.y0); ctx.lineTo(g.x1, g.y1); ctx.stroke();
+			}
+			ctx.restore();
+		}
+		/* ---- Anti-Magic reinforcement: opaque black, a cold grey rim, writhing tendrils and drifting flakes (the additive glow cannot show black) ---- */
+		function drawDarkWeapon(ctx, st, g, t){
+			const s = st.strength, dx = g.x1 - g.x0, dy = g.y1 - g.y0, L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L, px = -uy, py = ux;
+			const pulse = 0.92 + 0.08 * Math.sin(t * 6 + st.seed), sup = st.suppressed > W.time ? 0.45 : 1;
+			ctx.save();
+			ctx.globalCompositeOperation = 'source-over'; ctx.lineCap = 'round'; ctx.setLineDash([]);
+			const line = (ox, w, col, a) => { ctx.globalAlpha = a * sup; ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(g.x0 + px * ox, g.y0 + py * ox); ctx.lineTo(g.x1 + px * ox, g.y1 + py * ox); ctx.stroke(); };
+			line(0, (18 + 12 * s) * pulse, '#000000', 0.2 + 0.2 * s);       // the shadow it casts
+			line(0, (9 + 6 * s) * pulse, '#000000', 0.55 + 0.25 * s);
+			line(0, (5 + 4 * s) * pulse, '#020202', 0.97);                  // the black blade itself
+			const rim = (4 + 3 * s) * pulse;
+			line(rim, 1, '#8c8c8c', 0.5); line(-rim, 1, '#8c8c8c', 0.5);    // a cold grey edge
+			const amp = 2.5 + 4 * s, N = Math.max(8, Math.round(L / 6));
+			ctx.lineWidth = 2;
+			for(let k = 0; k < 3; k++){
+				ctx.globalAlpha = (0.8 - 0.15 * k) * sup; ctx.strokeStyle = '#000000';
+				ctx.beginPath();
+				for(let i = 0; i <= N; i++){
+					const u = i / N, o = Math.sin(u * 9 - t * 7 + k * 2.1 + st.seed) * amp * (0.35 + 0.65 * u) + (k - 1) * 3;
+					const x = g.x0 + dx * u + px * o, y = g.y0 + dy * u + py * o;
+					if(i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+				}
+				ctx.stroke();
+			}
+			// a hole of nothing at the tip
+			const tr = 9 + 9 * s, gr = ctx.createRadialGradient(g.x1, g.y1, 0, g.x1, g.y1, tr * 1.8);
+			gr.addColorStop(0, 'rgba(0,0,0,0.95)'); gr.addColorStop(0.55, 'rgba(0,0,0,0.6)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+			ctx.globalAlpha = sup; ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(g.x1, g.y1, tr * 1.8, 0, Math.PI * 2); ctx.fill();
+			// flakes of black drifting off the edge
+			ctx.fillStyle = '#000000';
+			const n = 3 + Math.round(5 * s);
+			for(let i = 0; i < n; i++){
+				const ph = (t * 0.7 + i / n + st.seed) % 1, u = (i * 0.37 + st.seed) % 1, side = i % 2 ? 1 : -1;
+				ctx.globalAlpha = 0.85 * Math.sin(ph * Math.PI) * sup;
+				const off = side * (5 + ph * 14);
+				ctx.fillRect(g.x0 + dx * u + px * off - 1.3, g.y0 + dy * u + py * off - ph * 8 - 1.3, 2.6, 2.6);
+			}
+			ctx.restore();
+			if(Math.random() < 0.12 * s){ const u = Math.random(); T.spark(g.x0 + dx * u + g.camX, g.y0 + dy * u + g.camY, px * 0.4, py * 0.4 - 0.3, '#4a4a4a', 18); }
+		}
+		function drawDarkBody(ctx, st, g, t){
+			const s = st.strength, cx = g.x + g.w / 2, cy = g.y + g.h * 0.52, rx = g.w * 0.66, ry = g.h * 0.58, bot = g.y + g.h;
+			const sup = st.suppressed > W.time ? 0.45 : 1;
+			ctx.save();
+			ctx.globalCompositeOperation = 'source-over'; ctx.setLineDash([]);
+			// a shroud: clear in the middle, black toward the edge, gone just outside it
+			ctx.translate(cx, cy); ctx.scale(1, ry / rx);
+			const gr = ctx.createRadialGradient(0, 0, rx * 0.45, 0, 0, rx * 1.35);
+			gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(0.5, 'rgba(0,0,0,' + (0.3 + 0.35 * s).toFixed(3) + ')'); gr.addColorStop(0.8, 'rgba(0,0,0,' + (0.18 + 0.25 * s).toFixed(3) + ')'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+			ctx.globalAlpha = sup; ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(0, 0, rx * 1.35, 0, Math.PI * 2); ctx.fill();
+			// a black skin and a grey, slowly turning rim
+			ctx.globalAlpha = (0.5 + 0.4 * s) * sup; ctx.strokeStyle = '#000000'; ctx.lineWidth = 2.6;
+			ctx.beginPath(); ctx.arc(0, 0, rx, 0, Math.PI * 2); ctx.stroke();
+			ctx.globalAlpha = 0.5 * sup; ctx.strokeStyle = '#8a8a8a'; ctx.lineWidth = 1; ctx.setLineDash([5, 9]); ctx.lineDashOffset = -t * 14;
+			ctx.beginPath(); ctx.arc(0, 0, rx * 1.06, 0, Math.PI * 2); ctx.stroke();
+			ctx.restore();
+			// black wisps rising off it
+			ctx.save();
+			ctx.globalCompositeOperation = 'source-over'; ctx.lineCap = 'round';
+			const n = 3 + Math.round(5 * s);
+			for(let i = 0; i < n; i++){
+				const side = i % 2 ? 1 : -1, ph = (t * 0.5 + i * 0.31 + st.seed) % 1;
+				const xo = side * g.w * (0.28 + 0.2 * ((i * 0.61) % 1));
+				ctx.globalAlpha = (0.35 + 0.5 * s) * Math.sin(ph * Math.PI) * sup; ctx.strokeStyle = '#000000'; ctx.lineWidth = 2.4 + 2 * s;
+				ctx.beginPath();
+				for(let k = 0; k <= 7; k++){
+					const u = ph - k * 0.04; if(u < 0) break;
+					const yy = bot - u * g.h * 1.1, xx = g.x + g.w / 2 + xo + Math.sin(u * 8 + t * 2.6 + i) * 4;
+					if(k) ctx.lineTo(xx, yy); else ctx.moveTo(xx, yy);
+				}
+				ctx.stroke();
+			}
+			// where the hands are (arms) and the feet (legs) it pools, darker
+			const arms = clamp((st.props.meleeDamage || 0) / 2, 0, 1), legs = clamp(((st.props.moveForce || 0) + (st.props.jumpForce || 0)) / 1.8, 0, 1);
+			const pool = (x, y, r, a) => { if(a <= 0.02) return; const q = ctx.createRadialGradient(x, y, 0, x, y, r); q.addColorStop(0, 'rgba(0,0,0,0.85)'); q.addColorStop(1, 'rgba(0,0,0,0)'); ctx.globalAlpha = a * sup; ctx.fillStyle = q; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); };
+			pool(g.x + g.w / 2 + (g.facing || 1) * g.w * 0.42, g.y + g.h * 0.48, g.w * 0.5, arms);
+			pool(g.x + g.w / 2, bot - g.h * 0.08, g.w * 0.7, legs);
+			// grey cracks that flicker across the shroud
+			ctx.globalAlpha = (0.25 + 0.3 * Math.abs(Math.sin(t * 5 + st.seed))) * sup; ctx.strokeStyle = '#9a9a9a'; ctx.lineWidth = 1;
+			for(let i = 0; i < 2; i++){
+				const a0 = st.seed + i * 3.1 + Math.floor(t * 2) * 1.7;
+				let x = cx + Math.cos(a0) * rx * 0.9, y = cy + Math.sin(a0) * ry * 0.9;
+				ctx.beginPath(); ctx.moveTo(x, y);
+				for(let k = 0; k < 4; k++){ x += Math.cos(a0 + k * 0.8 + 2) * 5; y += Math.sin(a0 + k * 0.8 + 2) * 5; ctx.lineTo(x, y); }
+				ctx.stroke();
 			}
 			ctx.restore();
 		}
@@ -7471,7 +8011,7 @@
 				const vw = ctx.canvas.width;
 				if(ax + 250 * K > vw) ax = Math.max(4, vw - 250 * K - 4);
 				if(ay < 4) ay = 4;
-				const waiting = inst.branches.filter(b => b.state === 'delay' || b.state === 'cond' || b.state === 'hold');
+				const waiting = inst.branches.filter(b => b.state === 'delay' || b.state === 'cond' || b.state === 'hold' || b.state === 'lwait');
 				const lines = [
 					'Spell #' + inst.id + '  ' + inst.def.name,
 					'life ' + (inst.lifetime - inst.age).toFixed(1) + 's  branches ' + inst.branches.filter(b => b.state !== 'done').length,
@@ -7481,7 +8021,7 @@
 				for(const br of waiting.slice(0, 4)){
 					const n = inst.def.nodes[br.nodeId]; const R = n && Runes[n.type];
 					if(br.state === 'hold'){ lines.push('  b' + br.id + ' ' + (br.hold ? br.hold.label : 'hold') + ' ' + (br.hold ? br.hold.elapsed.toFixed(1) + '/' + br.hold.time + 's' : '')); continue; }
-					lines.push('  b' + br.id + ' → ' + (R ? R.name : '?') + (br.state === 'delay' ? '  ⏱ ' + br.wait.toFixed(2) + 's' : '  ◆ ' + ((Conditions[n.link.cond.type] || {}).name || '?') + ' ' + br.condAge.toFixed(1) + 's'));
+					lines.push('  b' + br.id + ' → ' + (R ? R.name : '?') + (br.state === 'delay' ? '  ⏱ ' + br.wait.toFixed(2) + 's' : (br.state === 'lwait' ? '  ↻ waiting ' + (br.lw ? br.lw.age.toFixed(1) : '0') + 's' : '  ◆ ' + ((Conditions[n.link.cond.type] || {}).name || '?') + ' ' + br.condAge.toFixed(1) + 's')));
 				}
 				if(anchorB){
 					lines.push('E ' + anchorB.amount.toFixed(1) + '  P ' + bodyPower(anchorB).toFixed(1) + '  ' + (techList(anchorB) || 'no technique'));
@@ -7509,6 +8049,9 @@
 		W._crowd = CROWD;
 		W.setDetail = function(on){ LOD_ENABLED.on = on !== false; };
 		W.stats = function(){ return { instances: W.instances.length, bodies: W.bodies.filter(b => b.alive).length, sparks: W.sparks.length }; };
+		// systems beside the executor (Binding Vows) hook into this world
+		const internals = { killBody, instById, hostFor, spark, casterPosOf, recomputeOutput, makeApi, magicError, outPow, applyStatus, depositZone, endInstance, center, insideDomain, domainFoes, burnoutLeft, domainTitle, newBranch, spawnRule, takeFromZoneOf: (inst, z, want) => (inst._api || (inst._api = makeApi(inst))).takeFromZone(z, want, true) };      // the domain's own laws pay from its sealed energy
+		for(const h of WORLD_HOOKS){ try { h.init(W, internals); } catch(e){ if(typeof console !== 'undefined') console.warn('[magic] world hook', e); } }
 		return W;
 	}
 
@@ -8138,8 +8681,18 @@
 			return normalize(d);
 		} catch(e){ return null; }
 	}
+	/* a spell whose estimated output is over your Max Output can still be cast: the part over the limit is paid from
+	   Total Mana (5 × the excess) and its regular energy cost only covers the share that fits. null when it fits. */
+	function overOutput(rep, profile){
+		const peak = (rep && rep.peakOutput) || 0, mx = (profile && profile.maxOutput) || 0;
+		if(!(peak > mx && mx > 0)) return null;
+		const over = peak - mx;
+		return { over, total: Math.ceil(over * 5), scale: mx / peak, peak, max: mx };
+	}
 	function castCooldownFrames(def){
-		const n = def && def.nodes ? Object.keys(def.nodes).length : 1;
+		// free runes (Binding Vows) never lengthen the cooldown
+		let n = 0;
+		if(def && def.nodes){ for(const k in def.nodes){ const R = Runes[def.nodes[k].type]; if(!(R && R.free)) n++; } } else n = 1;
 		return Math.round(10 + n * 1.5);
 	}
 
@@ -8150,11 +8703,11 @@
 		divideOffsets,
 		CONFIG, DIRS, OPPOSITE, CATEGORIES, CATEGORY_MAP, SHAPES, SHAPE_OPTS, COLOR_PRESETS, tintHex, registerSkin, customShapeKey, cleanPoly,
 		Runes, defineRune, paramDefaults, paramVisible,
-		Conditions, defineCondition, condDefaults,
+		Conditions, defineCondition, condDefaults, CONDITION_GROUPS,
 		Techniques,
-		deriveProfile, defaultMagicProfile,
-		blankSpell, starterSpell, makeNode, isWeaponSlot, makeWeaponSlot, defaultLink, isMagicSpell, indexOf, structureErrors, normalize,
-		validate, createWorld, sanitizeSlots, encode, decode, castCooldownFrames,
+		deriveProfile, maxManaFromStats, defaultMagicProfile,
+		blankSpell, starterSpell, makeNode, isWeaponSlot, makeWeaponSlot, defaultLink, defaultLoop, loopChain, isMagicSpell, indexOf, structureErrors, normalize,
+		validate, createWorld, sanitizeSlots, encode, decode, castCooldownFrames, overOutput, registerWorldHook, outPow,
 		bodyRadius, bodyPower, densityFactor, labelOf,
 		Reinforcement, techOf, techList, hasTech, dominantTech, addTech, convertTech, techKey, bodyColors, hexA, TARGET_NOUN,
 		remember, memCount, MEM_EVENTS, stateOf, hasState, compMin, gravResist, unstableChance, magicResist, spatialPolarity, INF, speedRange, itemEligible, itemFromBody, itemStats, ITEM_SHAPES,

@@ -26,11 +26,24 @@
 	function F(n){ return Math.round(n * T); }
 	function INTRO_X(){ return 1980 + (A_L + A_R) / 2 - 2500; }
 
+	// In Survival the Challenger is only fought at wave 250: his ~40 MB of art waits until the fight starts.
+	const deferredArt = [];
 	function loadImg(src){
 		const im = new Image();
-		im.src = src;
+		if(SURV && !IS_CHALLENGER){ im._deferSrc = src; deferredArt.push(im); }
+		else if(window.LAZY_IMG && LAZY_IMG.loadDecoded) LAZY_IMG.loadDecoded(im, src);
+		else im.src = src;
 		return im;
 	}
+	function ensureArt(){
+		if(!deferredArt.length) return;
+		// decoded in the background: drawing a just-downloaded 40 MB set would freeze the game for seconds
+		for(const im of deferredArt){ if(window.LAZY_IMG && LAZY_IMG.loadDecoded) LAZY_IMG.loadDecoded(im, im._deferSrc); else im.src = im._deferSrc; }
+		deferredArt.length = 0;
+		try { warmPlates(); } catch(e){}
+	}
+	window.prefetchChallengerArt = ensureArt;
+	window.__challengerPlates = () => ({ sheets: Object.keys(SHEETS).filter(k => SHEETS[k]._sheetClean).length + ' / ' + Object.keys(SHEETS).length, worker: plateWorker === null ? 'idle' : (plateWorker ? 'on' : 'off'), fx: Object.keys(FX).filter(k => FX[k]._clean).length });
 	function loadSheet(name){
 		return loadImg('images/enemies/grand-challenger-' + name + '.png?v=3');
 	}
@@ -191,11 +204,78 @@
 		impact: loadImg('images/fx/challenger-punch-impact.png'),
 	};
 
+	if(!(SURV && !IS_CHALLENGER)) setTimeout(() => { try { warmPlates(); } catch(e){} }, 0);
+
 	const hits = [];
 	window.__challengerHits = hits;
 	window.resetChallengerFx = function(){ hits.length = 0; };
 
 	function ready(img){ return img && img.complete && img.naturalWidth > 0; }
+
+	/* Cleaning a sheet (flood-filling away its paper / ink background) walks every pixel of a 4000-px image: done on the
+	   main thread the first time a sheet was drawn, it froze the game for a second or more per sheet. It now runs in a
+	   worker as soon as the art has loaded; until a plate is ready that sprite simply is not drawn for a few frames. */
+	const PLATE_WORKER_SRC = `
+		function clean(d, w, h, test){
+			const seen = new Uint8Array(w * h), stack = [];
+			const push = (px, py) => { if(px < 0 || py < 0 || px >= w || py >= h) return; const idx = py * w + px; if(seen[idx]) return; if(!test(d, idx * 4)) return; seen[idx] = 1; stack.push(idx); };
+			for(let px = 0; px < w; px++){ push(px, 0); push(px, h - 1); }
+			for(let py = 0; py < h; py++){ push(0, py); push(w - 1, py); }
+			while(stack.length){ const idx = stack.pop(); d[idx * 4 + 3] = 0; const px = idx % w, py = (idx - px) / w; push(px + 1, py); push(px - 1, py); push(px, py + 1); push(px, py - 1); }
+		}
+		const isPaper = (d, i) => { const r = d[i], g = d[i+1], b = d[i+2], a = d[i+3]; if(a < 8) return true; const avg = (r + g + b) / 3; const spread = Math.max(Math.abs(r-g), Math.abs(g-b), Math.abs(r-b)); return avg > 232 && spread < 22; };
+		const isInk = (d, i) => { const r = d[i], g = d[i+1], b = d[i+2], a = d[i+3]; if(a < 8) return true; const avg = (r + g + b) / 3; const spread = Math.max(Math.abs(r-g), Math.abs(g-b), Math.abs(r-b)); return avg < 22 && spread < 16; };
+		onmessage = (e) => {
+			const { id, bmp, kind } = e.data;
+			try {
+				const w = bmp.width, h = bmp.height, c = new OffscreenCanvas(w, h), x = c.getContext('2d', { willReadFrequently: true });
+				x.drawImage(bmp, 0, 0); bmp.close();
+				const data = x.getImageData(0, 0, w, h);
+				clean(data.data, w, h, kind === 'sheet' ? isInk : isPaper);
+				x.putImageData(data, 0, 0);
+				const out = c.transferToImageBitmap();
+				postMessage({ id, out }, [out]);
+			} catch(err){ postMessage({ id, fail: String(err) }); }
+		};`;
+	let plateWorker = null, plateSeq = 0;
+	const plateJobs = new Map();
+	function getPlateWorker(){
+		if(plateWorker !== null) return plateWorker;
+		try {
+			if(typeof Worker === 'undefined' || typeof OffscreenCanvas === 'undefined' || typeof createImageBitmap !== 'function') throw 0;
+			plateWorker = new Worker(URL.createObjectURL(new Blob([PLATE_WORKER_SRC], { type: 'text/javascript' })));
+			plateWorker.onmessage = (e) => {
+				const job = plateJobs.get(e.data.id); if(!job) return;
+				plateJobs.delete(e.data.id);
+				if(e.data.out) job.img[job.key] = e.data.out;
+				else job.img[job.key + 'Sync'] = true;      // the worker could not do it: fall back to the old way
+				job.img[job.key + 'Busy'] = false;
+			};
+			plateWorker.onerror = () => { plateWorker = false; };
+		} catch(e){ plateWorker = false; }
+		return plateWorker;
+	}
+	/* the cleaned plate for an image, or null while it is still being made */
+	function plateOf(img, kind){
+		const key = kind === 'sheet' ? '_sheetClean' : '_clean';
+		if(img[key]) return img[key];
+		if(!ready(img)) return null;
+		const W = img[key + 'Sync'] ? false : getPlateWorker();
+		if(!W) return kind === 'sheet' ? knockOutSheet(img) : knockOutWhite(img);
+		if(!img[key + 'Busy']){
+			img[key + 'Busy'] = true;
+			const id = ++plateSeq;
+			plateJobs.set(id, { img, key });
+			createImageBitmap(img).then(bmp => W.postMessage({ id, bmp, kind }, [bmp]), () => { plateJobs.delete(id); img[key + 'Busy'] = false; img[key + 'Sync'] = true; });
+		}
+		return null;
+	}
+	/* start cleaning every piece of art as soon as it is decoded (so it is ready before it is first drawn) */
+	function warmPlates(){
+		const go = (img, kind) => { if(!img) return; if(ready(img)) plateOf(img, kind); else if(!img._warmHook){ img._warmHook = 1; const t = setInterval(() => { if(ready(img)){ clearInterval(t); plateOf(img, kind); } else if(!img._deferSrc && !img.src){ /* not requested yet */ } }, 250); setTimeout(() => clearInterval(t), 120000); } };
+		for(const k in SHEETS) go(SHEETS[k], 'sheet');
+		for(const k in FX) if(FX[k] !== FX.shockBand) go(FX[k], 'white');
+	}
 
 	function knockOutWhite(img){
 		if(!ready(img)) return img;
@@ -337,8 +417,26 @@
 			r: 0, vr: 0, thick: 40, gaps: null,
 		}, o);
 		hits.push(h);
+		// co-op: the host's attacks reach the guests (they run the hit's motion and their own hit checks)
+		if(typeof CoopSync !== 'undefined' && typeof COOP_HOST !== 'undefined' && COOP_HOST && typeof IS_COOP !== 'undefined' && IS_COOP && !CoopSync.applying){
+			const o2 = {};
+			for(const k in h){
+				const v = h[k];
+				if(k === 'img'){ if(v) for(const fk in FX) if(FX[fk] === v){ o2.imgK = fk; break; } continue; }
+				if(v == null || typeof v === 'function') continue;
+				if(typeof v === 'object'){ if(Array.isArray(v) && v.every(x => typeof x !== 'object')) o2[k] = v.slice(); continue; }
+				o2[k] = typeof v === 'number' ? Math.round(v * 100) / 100 : v;
+			}
+			CoopSync.queueEvent('chit', o2);
+		}
 		return h;
 	}
+	window.__challengerAddHit = function(d){
+		if(!d) return;
+		const o = Object.assign({}, d);
+		if(o.imgK){ o.img = FX[o.imgK] || null; delete o.imgK; }
+		hits.push(Object.assign({ kind: 'sprite', x: 0, y: 0, w: 80, h: 80, vx: 0, vy: 0, grav: 0, rot: 0, rotSpd: 0, age: 0, max: 40, dmg: 0, knockY: 0, effects: [], pierce: false, hit: false, solid: false, landed: false, img: null, scale: 1, alpha: 1, face: 1, r: 0, vr: 0, thick: 40, gaps: null }, o));
+	};
 
 	function floorAt(x){
 		let best = FLOOR + 40;
@@ -1838,6 +1936,7 @@
 	}
 
 	window.updateChallengerBoss = function(){
+		if(IS_CHALLENGER) ensureArt();
 		if(!IS_CHALLENGER || !challengerBoss) return;
 		if(COOP_GUEST){ if(typeof updateCoopRemoteBoss === 'function') updateCoopRemoteBoss(challengerBoss); updateHits(); return; }
 		const b = challengerBoss;
@@ -2006,9 +2105,11 @@
 		ctx.translate(x - camera.x, y - camera.y);
 		if(rot) ctx.rotate(rot);
 		if(face < 0) ctx.scale(-1, 1);
-		if(img && ready(img)){
-			const plate = (img === FX.shockBand) ? img : knockOutWhite(img);
+		const plate = img && ready(img) ? ((img === FX.shockBand) ? img : plateOf(img, 'white')) : null;
+		if(plate){
 			ctx.drawImage(plate, -w/2, -h/2, w, h);
+		} else if(img && ready(img)){
+			// its background is still being cleaned (a few frames): draw nothing rather than a white box
 		} else {
 			ctx.fillStyle = 'rgba(200,230,255,0.7)';
 			ctx.beginPath(); ctx.ellipse(0, 0, w/2, h/2, 0, 0, Math.PI*2); ctx.fill();
@@ -2453,7 +2554,7 @@
 		const col = b.phase >= 3 ? '#cfd6de' : b.phase >= 2 ? '#2fb6e8' : '#5a9fd8';
 		const sub = phaseName + (b.markedPlayer && !b.dead ? '  •  Mortal Challenge' : '');
 		if(typeof drawBossBar === 'function'){
-			drawBossBar(ctx, { key: 'challenger', x: (canvas.width - barW) / 2, y: 62, w: barW, h: 24, name: 'The Grand Challenger', sub,
+			drawBossBar(ctx, { key: 'challenger', x: (canvas.width - barW) / 2, y: 100, w: barW, h: 24, name: 'The Grand Challenger', sub,
 				hp: b.hp, max: b.maxHp, c1: col, c2: '#ffffff', accent: '#9ad8ff', nameColor: '#eaf6ff', ticks: [1/3, 2/3],
 				text: Math.round(b.hp).toLocaleString() + ' / ' + Math.round(b.maxHp).toLocaleString() });
 		}
@@ -2476,8 +2577,8 @@
 			ctx.beginPath(); ctx.arc(cx, cy, 90, 0, Math.PI*2); ctx.fill();
 		}
 
-		if(sheet && ready(sheet)){
-			const plate = knockOutSheet(sheet);
+		const plate = sheet && ready(sheet) ? plateOf(sheet, 'sheet') : null;
+		if(plate){
 			const fw = plate.width / ACT_COLS;
 			const fh = plate.height / ACT_ROWS;
 			const dw = b.w * 1.62, dh = b.h * 1.55;

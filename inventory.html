@@ -1,11 +1,11 @@
 <!doctype html>
 <html lang="en">
 <head>
-<script src="loading-screen.js?v=1"></script>
+<script src="loading-screen.js?v=2"></script>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Magic Battle — Inventory</title>
-<link rel="stylesheet" href="magic-forge.css?v=9"/>
+<link rel="stylesheet" href="magic-forge.css?v=13"/>
 <link rel="stylesheet" href="slot-chooser.css?v=3"/>
 <script src="auth-gate.js?v=4"></script>
 <style>
@@ -176,6 +176,8 @@ select,select option{background:#1c1a30;color:#e8eaff}
 .spell-slot .sp-color{width:10px;height:10px;border-radius:50%;flex-shrink:0}
 .spell-slot .sp-name{font-size:13px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .spell-slot .sp-mana{font-size:11px;color:var(--blue)}
+.spell-slot .sp-mana-over{display:inline-flex;flex-direction:column;align-items:flex-end;line-height:1.1}
+.spell-slot .sp-over{font-size:9px;color:#ffb347;font-weight:bold}
 .spell-slot .sp-empty{font-size:12px;color:var(--muted);font-style:italic}
 .ultimate-slot{border-color:rgba(255,170,0,.4);background:rgba(255,170,0,.08)}
 .ultimate-slot:hover{border-color:rgba(255,170,0,.6);background:rgba(255,170,0,.15)}
@@ -577,6 +579,9 @@ select,select option{background:#1c1a30;color:#e8eaff}
 				<span class="inv-page-info" id="pageInfo">1 / 1</span>
 				<button class="inv-page-btn" id="nextPage">▶</button>
 				<button class="inv-page-btn" id="testBtn" style="margin-left:auto;padding:4px 12px;background:rgba(243,156,18,.25);border-color:var(--rarity-legendary);color:var(--rarity-legendary);font-size:11px;border-radius:5px" title="Clear inventory and give one of every item">🧪 Test All</button>
+				<button class="inv-page-btn" id="mirrorWarBtn" style="padding:4px 12px;background:rgba(155,89,182,.22);border-color:#c9a8ff;color:#e3d2ff;font-size:11px;border-radius:5px" title="Add the Scroll of Mirror War (61 runes, needs Energy Control 17). Shift+click also raises your base Control to 17 and Power until your Max Output covers it, so you can cast it right away (a testing aid).">🪞 Mirror War</button>
+				<button class="inv-page-btn" id="yutaBtn" style="padding:4px 12px;background:rgba(255,120,170,.2);border-color:#ff9fc4;color:#ffd3e4;font-size:11px;border-radius:5px" title="Add the Scroll of Authentic Mutual Love (Yuta's domain: needs Energy Control 6 and about 1170 mana). Shift+click also raises your base Control to 6 for testing.">💞 Mutual Love</button>
+				<span id="mirrorWarNote" style="font-size:11px;color:var(--muted);max-width:340px"></span>
 			</div>
 			<div class="inv-grid" id="invGrid"></div>
 		</div>
@@ -722,19 +727,26 @@ select,select option{background:#1c1a30;color:#e8eaff}
 <!-- ============================================================
      JAVASCRIPT
      ============================================================ -->
-<script src="scrolls.js?v=2"></script>
+<script src="mirror-war-spell.js?v=1"></script>
+<script src="yuta-spell.js?v=2"></script>
+<script src="scrolls.js?v=4"></script>
 <script src="spell-cost.js?v=14"></script>
-<script src="magic-engine.js?v=64"></script>
-<script src="magic-techniques.js?v=43"></script>
+<script src="magic-engine.js?v=73"></script>
+<script src="magic-techniques.js?v=45"></script>
+<script src="magic-vows.js?v=1"></script>
+<script src="magic-domain.js?v=5"></script>
+<script src="magic-domain-look.js?v=1"></script>
+<script src="magic-domain-art.js?v=2"></script>
 <script src="shape-editor.js?v=3"></script>
-<script src="magic-forge.js?v=22"></script>
+<script src="magic-forge.js?v=26"></script>
+<script src="magic-domain-designer.js?v=1"></script>
 <script src="player-rig.js?v=5"></script>
 <script src="melee-weapons.js?v=2"></script>
 <script src="slot-chooser.js?v=4"></script>
 <script src="gear-data.js?v=6"></script>
 <script src="gear-system.js?v=11"></script>
 <script src="tutorial-coach.js?v=1"></script>
-<script src="tutorials.js?v=2"></script>
+<script src="tutorials.js?v=9"></script>
 <script>
 /* =============================================================
    DATA DEFINITIONS
@@ -1151,8 +1163,8 @@ function migrateToRuneMagic(s){
 }
 function magicProfileFor(){
 	const st = computeStats();
-	let maxMana = 1500;
-	try { if(typeof calcVowManaPenalty === 'function') maxMana = Math.max(100, 1500 - calcVowManaPenalty()); } catch(e){}
+	let maxMana = MagicEngine.maxManaFromStats(st, 0);
+	try { if(typeof calcVowManaPenalty === 'function') maxMana = MagicEngine.maxManaFromStats(st, calcVowManaPenalty()); } catch(e){}
 	return MagicEngine.deriveProfile({ magicControl: st.magicControl, magicPower: st.magicPower, maxMana, magicProfile: STATE.magicProfile });
 }
 
@@ -1621,7 +1633,7 @@ function runeStatSummary(s){
 		'⚔️ Rune damage <b style="color:#e74c3c">×' + dmg.toFixed(2) + '</b>' + (prof ? ' · Max Output <b>' + prof.maxOutput + ' E</b>' : ''),
 		prof ? '🎯 Rune capacity <b style="color:#9b59b6">' + prof.runeCapacity + '</b> · Zones up to <b>' + Math.round(prof.zoneRadiusMax || 0) + ' px</b>' : '',
 		'💪 Melee damage <b style="color:#ff9d3d">×' + (1 + (s.strength || 0) * 0.04).toFixed(2) + '</b> · Move speed <b>+' + Math.round(Math.min(0.25, (s.strength || 0) * 0.003) * 100) + '%</b>',
-		'🛡️ Enemy magic <b style="color:#2ecc71">' + (Math.abs(ward - 1) < 0.005 ? '±0' : ward < 1 ? '−' + Math.round((1 - ward) * 100) : '+' + Math.round((ward - 1) * 100)) + '%</b> · +' + Math.round((s.magicDefence || 0) * 6) + ' max HP'
+		'🛡️ Enemy magic <b style="color:#2ecc71">' + (Math.abs(ward - 1) < 0.005 ? '±0' : ward < 1 ? '−' + Math.round((1 - ward) * 100) : '+' + Math.round((ward - 1) * 100)) + '%</b> · +' + Math.round((500 + (s.magicDefence || 0) * 12) * 1.5) + ' max HP · all damage −' + Math.round((1 - Math.max(0.4, 1 / (1 + Math.max(0, (s.magicDefence || 0) - 8) * 0.025))) * 100) + '%'
 	].filter(Boolean);
 	return '<div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--border);font-size:11px;color:var(--muted);line-height:1.6">' + lines.join('<br>') + '</div>';
 }
@@ -4202,7 +4214,9 @@ function renderSpellSlots(){
 				<span class="sp-num">${isUlt ? '⚡0' : (i+1)}</span>
 				<span class="sp-color" style="background:${bad ? '#ff5d7a' : 'linear-gradient(135deg,#9fe6ff,#8d6bff)'}"></span>
 				<span class="sp-name" style="${bad?'color:var(--red)':''}">${sp.passive ? '∞ ' : ''}${escHtml(sp.name || 'Spell')}</span>
-				<span class="sp-mana" title="${report.runeCount} rune${report.runeCount===1?'':'s'}">${report.cost}💧</span>
+				${(() => { const oo = (!sp.passive && MagicEngine.overOutput) ? MagicEngine.overOutput(report, magicProfileFor()) : null;
+					return oo ? `<span class="sp-mana sp-mana-over" title="${report.runeCount} rune${report.runeCount===1?'':'s'} · over your Max Output (${oo.peak} / ${oo.max}): casting it also costs ${oo.total} Total Mana"><span>${Math.round(report.cost * oo.scale)}💧</span><span class="sp-over">+${oo.total} total</span></span>`
+						: `<span class="sp-mana" title="${report.runeCount} rune${report.runeCount===1?'':'s'}">${report.cost}💧</span>`; })()}
 				<button class="kb-btn" data-slot="${i}" title="Click to set keybind for this spell" style="margin-left:auto;padding:1px 6px;font-size:.75em;background:var(--panel2);border:1px solid var(--border);border-radius:4px;cursor:pointer;color:var(--text);flex-shrink:0">${kbKey ? '🔑 '+kbKey : '🔑 —'}</button>
 			`;
 			el.title = bad ? '⚠ ' + report.errors[0].text + ' — open the Rune Forge to fix' : 'Open in the Rune Forge';
@@ -5444,6 +5458,49 @@ document.getElementById('testBtn').addEventListener('click', () => {
 			GearSystem.discoverGem(STATE, g.itemId, g.quality || 'perfect');
 		}
 	}
+	saveState();
+	renderAll();
+});
+
+/* 🪞 Mirror War: hand over the scroll (one is enough — scrolls are reusable). Shift+click also lifts base Control (61 runes) and Power (its output) so it casts without Total Mana. */
+document.getElementById('mirrorWarBtn').addEventListener('click', (ev) => {
+	const note = document.getElementById('mirrorWarNote');
+	const need = window.MIRROR_WAR_NEED_CONTROL || 17;
+	const had = STATE.inventory.some(e => e && e.itemId === 'scroll_mirror_war');
+	if(!had) addToInventory('scroll_mirror_war', 1);
+	let msg = had ? 'You already carry the Scroll of Mirror War.' : 'Scroll of Mirror War added to your bag.';
+	const have = computeStats().magicControl || 0;
+	const sp0 = (typeof resolveScrollSpell === 'function') ? resolveScrollSpell({ itemId: 'scroll_mirror_war' }, ITEM_DB) : null;
+	const rep0 = sp0 ? MagicEngine.validate(sp0, MagicEngine.deriveProfile({ magicControl: 99, magicPower: 10, maxMana: 99999, magicProfile: STATE.magicProfile })) : null;
+	const peak = (rep0 && rep0.peakOutput) || 0, powNow = computeStats().magicPower || 0;
+	const maxOutAt = (pw) => MagicEngine.deriveProfile({ magicPower: pw }).maxOutput;
+	if(have < need || (peak && maxOutAt(powNow) < peak)){
+		if(ev.shiftKey){
+			if(have < need) STATE.baseStats.magicControl = (STATE.baseStats.magicControl || 0) + (need - have);
+			let pw = powNow; while(peak && maxOutAt(pw) < peak && pw < 200) pw++;
+			if(pw > powNow) STATE.baseStats.magicPower = (STATE.baseStats.magicPower || 0) + (pw - powNow);
+			msg += ' Test boost: base Control → ' + STATE.baseStats.magicControl + ', Power → ' + STATE.baseStats.magicPower + ' (Max Output ' + maxOutAt(pw) + ' covers its ' + peak + ' output, so no Total Mana needed).';
+		} else msg += ' Casting it needs Energy Control ' + need + ' (you have ' + have + ')' + (peak && maxOutAt(powNow) < peak ? ' and its ' + peak + ' output is over your Max Output ' + maxOutAt(powNow) + ' (that costs Total Mana)' : '') + ' — Shift+click raises base Control and Power for testing.';
+	}
+	note.textContent = msg;
+	saveState();
+	renderAll();
+});
+
+/* 💞 Authentic Mutual Love (Yuta's domain): hand over the scroll. Shift+click also lifts base Control to what a Domain Expansion needs. */
+document.getElementById('yutaBtn').addEventListener('click', (ev) => {
+	const note = document.getElementById('mirrorWarNote');
+	const need = window.YUTA_NEED_CONTROL || 6;
+	const had = STATE.inventory.some(e => e && e.itemId === 'scroll_yuta');
+	if(!had) addToInventory('scroll_yuta', 1);
+	let msg = had ? 'You already carry the Scroll of Authentic Mutual Love.' : 'Scroll of Authentic Mutual Love added to your bag.';
+	const have = computeStats().magicControl || 0;
+	if(have < need){
+		if(ev.shiftKey){ STATE.baseStats.magicControl = (STATE.baseStats.magicControl || 0) + (need - have); msg += ' Test boost: base Control → ' + STATE.baseStats.magicControl + '.'; }
+		else msg += ' A Domain Expansion needs Energy Control ' + need + ' (you have ' + have + ') — Shift+click raises base Control for testing.';
+	}
+	msg += ' It costs about 1170 mana to open.';
+	note.textContent = msg;
 	saveState();
 	renderAll();
 });

@@ -203,7 +203,11 @@
 	/* ---------- draw every visible lava run ---------- */
 	function visLava(c){ return c.visLava; }
 	let runCache = null, runSig = '';
+	let runAge = 0;
 	function buildRuns(){
+		// the depths only creep: re-reading 3000+ columns every frame was the lava's biggest cost — every 5th frame is plenty
+		if(runCache && ++runAge < 5) return runCache;
+		runAge = 0;
 		let sig = 0, cnt = 0;
 		const cols = [];
 		for(const k in F.bins){

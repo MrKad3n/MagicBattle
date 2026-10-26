@@ -87,6 +87,20 @@
 			desc:'A burning barrage of spikes. Use it to copy the spell into a slot. The scroll stays in your bag.',
 			spell: spell('Tempest Wall', [ph({ shape:'spike', behavior:'barrage', color:'#ffaa33', count:6, spread:18, effects:['burn'], trail:'flame', power:1.3, barrageHeight:220 })]),
 		},
+		/* Mirror War — a 61-rune legion spell (tools/mirror-war.js builds it; mirror-war-spell.js carries the serialized tree).
+		   Not sold: it is handed out by the inventory's 🪞 Mirror War button. */
+		scroll_mirror_war: {
+			name:'Scroll of Mirror War', type:'scroll', icon:'🪞', rarity:'legendary', stats:{}, price:2400, noShop:true,
+			desc:'Mirror War — five families of projectiles from one cast: Harriers, Sweepers, Crossfire, Reserves and Executors, released in sequence and carrying five Binding Vows. Needs Energy Control 17 (61 runes). Use it to copy the spell into a slot. The scroll stays in your bag.',
+			get spell(){ return window.MIRROR_WAR_SPELL || null; },
+		},
+		/* Authentic Mutual Love — Yuta's domain (tools/yuta-domain.js builds it; yuta-spell.js carries the serialized tree).
+		   Not sold: it is handed out by the inventory's 💞 Mutual Love button. */
+		scroll_yuta: {
+			name:'Scroll of Authentic Mutual Love', type:'scroll', icon:'💞', rarity:'legendary', stats:{}, price:3200, noShop:true,
+			desc:'Authentic Mutual Love — a sealed domain with no blow of its own. Every spell or attack made inside is copied, and the domain casts the copies back at its foes from its own energy, so they cannot miss. Needs Energy Control 6 and about 1170 mana. Use it to copy the spell into a slot. The scroll stays in your bag.',
+			get spell(){ return window.YUTA_SPELL || null; },
+		},
 		player_scroll: {
 			name:'Player Scroll', type:'scroll', icon:'📜', rarity:'pink', stats:{},
 			playerMade:true,
@@ -143,6 +157,9 @@
 		if(data.gold == null || isNaN(data.gold)) data.gold = window.SCROLL_STARTING_GOLD;
 		return data.gold;
 	};
+	/* the scroll for the inventory's 🪞 button (a fresh stack entry; scroll items are not consumed by use) */
+	window.MIRROR_WAR_NEED_CONTROL = 17;
+	window.YUTA_NEED_CONTROL = 6;
 	window.mergeScrollItems = function(itemDb){
 		if(!itemDb) return;
 		for(const k of Object.keys(ITEMS)){

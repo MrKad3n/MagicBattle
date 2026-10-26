@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
-<script src="loading-screen.js?v=1"></script>
+<script src="loading-screen.js?v=2"></script>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Magic Battle — Dungeon</title>
@@ -55,6 +55,13 @@ canvas{display:block}
 .hb-slot.hb-necro{width:58px;height:72px}
 .hb-raise{font-size:8px;color:#5dade2;line-height:1.15;text-align:center}
 .hb-raise .hb-total{color:#ffcc44}
+.hb-over{font-size:8px;line-height:1.1;color:#ffb347;text-align:center;font-weight:bold}
+#vowHud{display:none;margin-top:4px;font:11px/1.3 Arial,sans-serif;color:#f3e3b0;text-shadow:0 1px 2px #000}
+#vowHud .vh-sum{color:#ffd36b;font-weight:bold;margin-bottom:2px}
+#vowHud .vh-row{display:flex;align-items:center;gap:5px;white-space:nowrap}
+#vowHud .vh-row.off{color:#a49a85}
+#vowHud .vh-bar{width:34px;height:3px;background:rgba(255,255,255,.15);border-radius:2px;overflow:hidden;flex-shrink:0}
+#vowHud .vh-bar i{display:block;height:100%;background:#ffd36b}
 .hb-slot.active{border-color:#6c5ce7;background:rgba(108,92,231,.25)}
 .hb-cd-overlay{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.6);pointer-events:none}
 .hb-key{font-size:10px;color:#888;position:absolute;top:2px;left:5px}
@@ -240,6 +247,7 @@ body.ai-chat-open #hud{pointer-events:none;opacity:0.45}
 		<span class="sp-ic">⚡</span>
 		<div id="totalManaBarBg" class="sp-bar thin"><div id="totalManaBarFill" class="sp-fill" style="width:0%"></div><div id="totalManaText" class="sp-txt">Total Mana: 0</div></div>
 	</div>
+	<div id="vowHud"></div>
 </div>
 <div id="damageStoreWrap" style="position:fixed;top:110px;left:12px;font-size:11px;color:#ffcc00;text-shadow:0 0 4px #000;display:none">
 	<span id="damageStoreText">⚔️ Stored: 0</span>
@@ -374,10 +382,15 @@ body.ai-chat-open #hud{pointer-events:none;opacity:0.45}
 <script src="emberfall-life.js?v=4"></script>
 <script src="emberfall-city.js?v=44"></script>
 <script src="npc-profiles.js"></script>
-<script src="scrolls.js?v=2"></script>
+<script src="mirror-war-spell.js?v=1"></script>
+<script src="scrolls.js?v=4"></script>
 <script src="spell-cost.js?v=14"></script>
-<script src="magic-engine.js?v=64"></script>
-<script src="magic-techniques.js?v=43"></script>
+<script src="magic-engine.js?v=73"></script>
+<script src="magic-techniques.js?v=45"></script>
+<script src="magic-vows.js?v=1"></script>
+<script src="magic-domain.js?v=5"></script>
+<script src="magic-domain-look.js?v=1"></script>
+<script src="magic-domain-art.js?v=2"></script>
 <script src="rune-mages.js?v=13"></script>
 <script src="grand-arcanist-discovered.js?v=1"></script>
 <script src="grand-arcanist.js?v=2"></script>
@@ -386,7 +399,7 @@ body.ai-chat-open #hud{pointer-events:none;opacity:0.45}
 <script src="gear-data.js?v=6"></script>
 <script src="gear-system.js?v=11"></script>
 <script src="nightmare-system.js?v=1"></script>
-<script src="fire-dungeon-templates.js?v=34"></script>
+<script src="fire-dungeon-templates.js?v=35"></script>
 <script src="fire-dungeon-world.js?v=56"></script>
 <script src="fire-art.js?v=16"></script>
 <script src="ice-dungeon-templates.js?v=11"></script>
@@ -403,6 +416,37 @@ const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 window.canvas = canvas;
 window.ctx = ctx;
+/* Glow budget. shadowBlur and blur/brightness filters are by far the most expensive things the canvas does
+   (each blurred draw is a separate GPU blur), and a busy fight sets them hundreds of times a frame — one per
+   projectile, per spark, per telegraph. Each frame gets a budget; past it the draws still happen, just without
+   the blur. The budget shrinks when the frame is already slow, online, or the screen is full of shots. */
+/* HUD writes only when the value changes: touching style/text every frame forces the browser to restyle the page */
+const _hudCache = Object.create(null), _hudEls = Object.create(null);
+function hudEl(id){ return _hudEls[id] || (_hudEls[id] = document.getElementById(id)); }
+function hudW(id, pct){ const v = (Math.round(pct * 10) / 10) + '%'; if(_hudCache[id + 'w'] === v) return; _hudCache[id + 'w'] = v; const e = hudEl(id); if(e) e.style.width = v; }
+function hudT(id, t){ if(_hudCache[id + 't'] === t) return; _hudCache[id + 't'] = t; const e = hudEl(id); if(e) e.textContent = t; }
+const GLOW_BUDGET = { used: 0, budget: 40, fused: 0, fbudget: 4, cap: 24 };
+(function(){
+	const P = CanvasRenderingContext2D.prototype;
+	const sb = Object.getOwnPropertyDescriptor(P, 'shadowBlur'), fl = Object.getOwnPropertyDescriptor(P, 'filter');
+	const G = GLOW_BUDGET;
+	if(sb && sb.set) Object.defineProperty(ctx, 'shadowBlur', { configurable: true,
+		get(){ return sb.get.call(this); },
+		set(v){ if(v > 0){ if(++G.used > G.budget) v = 0; else if(v > G.cap) v = G.cap; } sb.set.call(this, v); } });
+	if(fl && fl.set) Object.defineProperty(ctx, 'filter', { configurable: true,
+		get(){ return fl.get.call(this); },
+		set(v){ if(v && v !== 'none' && ++G.fused > G.fbudget) return; fl.set.call(this, v); } });
+})();
+function glowBudgetFrame(){
+	const G = GLOW_BUDGET;
+	const shots = (typeof enemyProjectiles !== 'undefined' ? enemyProjectiles.length : 0) + (typeof projectiles !== 'undefined' ? projectiles.length : 0);
+	const slow = (typeof _frameCostEma === 'number' && _frameCostEma > 18) || (typeof _rafDtEma === 'number' && _rafDtEma > 22);      // under ~45 fps: drop the glows
+	const online = typeof _onlineLite !== 'undefined' && _onlineLite;
+	G.budget = slow ? 6 : (shots > 40 || online) ? 14 : shots > 20 ? 24 : 40;
+	G.cap = slow || online ? 12 : 24;
+	G.fbudget = slow ? 0 : online ? 2 : 4;
+	G.used = 0; G.fused = 0;
+}
 var inventoryOpen = false;
 var dialogueActive = false;
 var necroSelectOpen = false;
@@ -458,7 +502,62 @@ const DIFF_CD_MULT = DIFFICULTY === 'nightmare' ? 0.7 : DIFFICULTY === 'hard' ? 
 const DIFF_MOVE_MULT = DIFFICULTY === 'nightmare' ? 1.35 : DIFFICULTY === 'hard' ? 1.2 : DIFFICULTY === 'easy' ? 0.85 : 1;
 
 /* === ENEMY SPRITE SHEETS === */
-const ENEMY_SPRITE_SHEETS = {};
+/* Lazy sprite sheets. Every enemy and boss sheet used to start downloading the moment the page opened — about
+   200 MB of PNGs in every mode, most of them never drawn in that mode, and each one a 4000-px image the browser
+   had to decode (and hitch on) mid-game. Now a sheet only loads the first time something asks for it: an enemy
+   of that type being drawn, a summon menu, a boss fight starting. */
+const LAZY_IMG = (function(){
+	const desc = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+	const all = [];
+	let deferring = true;
+	if(desc && desc.set) Object.defineProperty(HTMLImageElement.prototype, 'src', { configurable: true, enumerable: desc.enumerable,
+		get(){ return desc.get.call(this); },
+		set(v){
+			if(deferring && typeof v === 'string' && /^images\/(newEnemies|enemies)\//.test(v)){ this._lazySrc = v; all.push(this); return; }
+			desc.set.call(this, v);
+		} });
+	/* A sheet that has downloaded is still undecoded: the first drawImage would decode a 4000-px PNG on the main
+	   thread and freeze the game for a moment (several at once when you skip to a new wave = seconds). So a lazy
+	   image reports complete = false until img.decode() has finished decoding it off the main thread. */
+	const cDesc = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'complete');
+	function gate(img){
+		if(!img || img._gated || !cDesc || !cDesc.get || typeof img.decode !== 'function') return img;
+		img._gated = 1;
+		Object.defineProperty(img, 'complete', { configurable: true, get(){ return img._decoded ? cDesc.get.call(img) : false; } });
+		return img;
+	}
+	function decodeSoon(img){
+		if(!img || !img._gated) return;
+		const done = () => { img._decoded = 1; };
+		const go = () => { try { img.decode().then(done, done); } catch(e){ done(); } };
+		if(cDesc.get.call(img) && img.naturalWidth) go(); else { img.addEventListener('load', go, { once: true }); img.addEventListener('error', done, { once: true }); }
+	}
+	const L = {
+		all,
+		stop(){ deferring = false; if(desc) Object.defineProperty(HTMLImageElement.prototype, 'src', desc); },
+		load(img){ if(img && img._lazySrc && !img._lazyGo){ img._lazyGo = 1; gate(img); desc.set.call(img, img._lazySrc); decodeSoon(img); } },
+		/* any image (e.g. boss art loaded late): load + decode in the background, report complete only when drawable */
+		loadDecoded(img, src){ gate(img); img.src = src; decodeSoon(img); return img; },
+		/* every deferred image whose file name mentions this (sheets that come in sets: A/B/C, 1–6 …) */
+		need(slug){
+			if(!slug) return;
+			slug = String(slug).toLowerCase();
+			if(L._done[slug]) return; L._done[slug] = 1;
+			for(const im of all) if(!im._lazyGo && im._lazySrc.toLowerCase().indexOf(slug) >= 0) L.load(im);
+		},
+		_done: Object.create(null),
+		forType(type){
+			if(!type) return;
+			L.need(type);
+			L.need(String(type).replace(/([A-Z])/g, '-$1').toLowerCase());
+		}
+	};
+	return L;
+})();
+window.LAZY_IMG = LAZY_IMG;
+const ENEMY_SPRITE_SHEETS = new Proxy({}, {
+	get(t, k){ const v = t[k]; if(v && v._lazySrc && !v._lazyGo){ LAZY_IMG.load(v); if(typeof k === 'string') LAZY_IMG.forType(k); } return v; }
+});
 const SPRITE_COLS = 6, SPRITE_ROWS = 4;
 const SPRITE_ROW = { idle: 0, walk: 1, attack: 2, defeat: 3 };
 const SPRITE_FPS = 18; // game frames per animation frame
@@ -719,6 +818,9 @@ function setSeraphelAnim(en, state){
 	img.src = 'images/enemies/levithan-' + part + '-sheet.png';
 	ENEMY_SPRITE_SHEETS['leviathan' + part.charAt(0).toUpperCase() + part.slice(1)] = img;
 });
+LAZY_IMG.stop();      // everything below loads normally
+// sheets that come in sets and are read straight from their own tables (not through ENEMY_SPRITE_SHEETS)
+const LAZY_SET_SLUG = { frostboundKnight: 'frostboundknight', frostColossus: 'frostcolossus', seraphel: 'seraphel-sheet', zenith: 'zenith-sheet', infernalKitten: 'infernal-kitten', earthColossus: 'verdant' };
 
 /* === PLAYER SPRITE SHEETS ===
    Four colour variants keep every client showing the same mage in the same
@@ -4218,8 +4320,9 @@ function refreshOnlinePerf(){
 	_onlineLite = !!(IS_COOP || IS_COLOSSEUM);
 	if(!_onlineLite){
 		const n = (typeof projectiles !== 'undefined' ? projectiles.length : 0) + (typeof enemyProjectiles !== 'undefined' ? enemyProjectiles.length : 0);
-		MAX_PARTICLES = n > 70 ? 120 : n > 40 ? 220 : 400;
-		MAX_TRAIL = n > 70 ? 0 : n > 40 ? 2 : 8;
+		const _slowFr = typeof _rafDtEma === 'number' && _rafDtEma > 22;      // the real frame rate is under ~45 fps
+		MAX_PARTICLES = (n > 70 || _slowFr) ? 120 : n > 40 ? 220 : 400;
+		MAX_TRAIL = (n > 70 || _slowFr) ? 0 : n > 40 ? 2 : 8;
 		if(CAMERA_ZOOM !== CAMERA_ZOOM_SOLO){ CAMERA_ZOOM = CAMERA_ZOOM_SOLO; resize(); }
 		return;
 	}
@@ -5457,18 +5560,19 @@ function spawnTelegraph(x, y, w, h, duration, color, type, label){
 
 /* Player health — flat 500 base + vow bonuses + defence grants health buff */
 const rangerHpMult = (hasClass('ranger') && !hasClass('warrior')) ? 0.85 : 1;
-const defHealthBonus = Math.round(stats.magicDefence * 6);
+const defHealthBonus = Math.round(stats.magicDefence * 12);      // Defence: +12 max HP per point (was 6)
 const baseHp = 500 + defHealthBonus;
 const healthBoostPct = vowMaxHealthBonus / 100; // percent-based increase
 const healthPenaltyPct = Math.min(vowHealthPenalty, 90) / 100;
-const maxHealth = Math.max(30, Math.round(baseHp * (1 + healthBoostPct) * (1 - healthPenaltyPct) * rangerHpMult * ((typeof GearRuntime !== 'undefined' && GearRuntime.maxHpMult) ? GearRuntime.maxHpMult() : 1)));
+const maxHealth = Math.max(30, Math.round(baseHp * (1 + healthBoostPct) * (1 - healthPenaltyPct) * rangerHpMult * 1.5 * ((typeof GearRuntime !== 'undefined' && GearRuntime.maxHpMult) ? GearRuntime.maxHpMult() : 1)));
 let health = maxHealth;
 function updateHealthHUD(){
 	const pct = Math.max(0, Math.min(100, (health / maxHealth) * 100));
-	document.getElementById('healthBarFill').style.width = pct + '%';
-	document.getElementById('healthBarGhost').style.width = pct + '%';
-	document.getElementById('healthText').textContent = `${Math.ceil(health)} / ${maxHealth}`;
-	document.getElementById('healthWrap').classList.toggle('low', pct > 0 && pct < 25);
+	hudW('healthBarFill', pct);
+	hudW('healthBarGhost', pct);
+	hudT('healthText', `${Math.ceil(health)} / ${maxHealth}`);
+	const low = pct > 0 && pct < 25;
+	if(_hudCache.low !== low){ _hudCache.low = low; const e = hudEl('healthWrap'); if(e) e.classList.toggle('low', low); }
 }
 updateHealthHUD();
 
@@ -5799,7 +5903,7 @@ function necroCombatRaiseOpts(ns){
 	const spell = ns && ns.spell;
 	const opts = dungeonManaOpts(slot, spell);
 	opts.spell = spell;
-	opts.maxMana = (typeof maxMana === 'number' && isFinite(maxMana)) ? maxMana : 1500;
+	opts.maxMana = (typeof maxMana === 'number' && isFinite(maxMana)) ? maxMana : 500;
 	if(ns && (ns.isUltimate || ns.sourceSlot === 9)) opts.isUltimate = true;
 	return opts;
 }
@@ -10916,18 +11020,19 @@ computeTileEdges();
 /* =============================================================
    MANA
    ============================================================= */
-const maxMana = (IS_SANDBOX && !ARCANIST_TRIAL) ? Infinity : Math.max(100, Math.round((1500 - vowManaPenalty) * ((typeof GearRuntime !== 'undefined' && GearRuntime.maxManaMult) ? GearRuntime.maxManaMult() : 1)));
+let maxMana = (IS_SANDBOX && !ARCANIST_TRIAL) ? Infinity : Math.max(100, Math.round(MagicEngine.maxManaFromStats(stats, vowManaPenalty) * ((typeof GearRuntime !== 'undefined' && GearRuntime.maxManaMult) ? GearRuntime.maxManaMult() : 1)));
+const BASE_MAX_MANA = maxMana;      // Binding Vows (Deep Reservoir, Scarcity …) scale maxMana from this each frame
 let mana = (IS_SANDBOX && !ARCANIST_TRIAL) ? Infinity : maxMana;
 const baseManaRegen = 0.45 + (stats.manaRegen||0) * 0.009;
 function updateManaHUD(){
 	if(IS_SANDBOX && !ARCANIST_TRIAL){
-		document.getElementById('manaBarFill').style.width = '100%';
-		document.getElementById('manaText').textContent = '∞ / ∞';
+		hudW('manaBarFill', 100);
+		hudT('manaText', '∞ / ∞');
 		return;
 	}
 	const pct = Math.max(0, Math.min(100, (mana / maxMana) * 100));
-	document.getElementById('manaBarFill').style.width = pct + '%';
-	document.getElementById('manaText').textContent = `${Math.floor(mana)} / ${maxMana}`;
+	hudW('manaBarFill', pct);
+	hudT('manaText', `${Math.floor(mana)} / ${maxMana}`);
 }
 
 /* Total Mana — accumulates from every spell cast, used for ultimate */
@@ -10987,6 +11092,7 @@ function renderHotbar(){
 			const _icon = _magic ? null : sp.weaponId;
 			el.classList.add('hb-weapon');
 			el.title = _magic ? (_it ? 'Magical ' + _it.shape + ' — ' + Math.round(_it.amount) + ' energy, compression ' + Math.round(10 + (_it.over || 0)) + ' (keeps drawing energy while equipped)' : 'Empty magical item — Redirect "Into your inventory" with fist / sword / spear / hammer energy compressed 20+') : (_wd ? _wd.name : sp.name) + ' — click / J to attack, R special';
+				if(window.SpellParry){ const _t0 = el.title, _wid = sp.weaponId; el.addEventListener('mouseenter', () => { el.title = _t0 + '\n' + SpellParry.describe(_wid); }); }      // what this weapon can parry
 			el.innerHTML = `<span class="hb-key">${keyLabel}</span>
 				<canvas class="hb-wicon" width="36" height="36" style="width:18px;height:18px;display:block;margin:0 auto"></canvas>
 				<div class="hb-name" style="color:${_magic ? '#e2ccff' : '#ffe6b0'}">${_magic ? (_it ? 'Magic ' + _it.shape : 'Magic item') : (_wd ? _wd.name : sp.name)}</div>
@@ -11001,17 +11107,22 @@ function renderHotbar(){
 				const pct = (spellCooldowns[i] / spellMaxCooldowns[i]) * 100;
 				cdHtml = `<div class="hb-cd-overlay" style="height:${pct}%"></div>`;
 			}
-			el.title = rep.ok ? rep.runeCount + ' runes' : '⚠ ' + rep.errors[0].text;
+			const _prof = magicProfileForGame();
+			const _oo = (!sp.passive && MagicEngine.overOutput) ? MagicEngine.overOutput(rep, _prof) : null;
+			// over Max Output: the energy cost shrinks to the share that fits, and the excess is paid from Total Mana (shown under it)
+			const _vw = window.__magicWorld, _vcm = (_vw && _vw.vowCostMult) ? _vw.vowCostMult('player', sp) : 1;      // vows only ever make spells cheaper
+			const _shownCost = Math.round((_oo ? rep.cost * _oo.scale : rep.cost) * _vcm);
+			el.title = (rep.ok ? rep.runeCount + ' runes' : '⚠ ' + rep.errors[0].text) + (_oo ? '\nOver your Max Output (' + _oo.peak + ' / ' + _oo.max + '): casting it also costs ' + _oo.total + ' Total Mana' : '');
 			el.innerHTML = `<span class="hb-key">${keyLabel}</span>
 				<div class="hb-dot" style="background:${rep.ok ? 'linear-gradient(135deg,#9fe6ff,#8d6bff)' : '#ff5d7a'}"></div>
 				<div class="hb-name" style="${rep.ok ? '' : 'color:#ff8899;text-decoration:line-through'}">${sp.passive ? '∞ ' : ''}${sp.name}</div>
-				<div class="hb-mana" style="${(window.MAGIC_PASSIVES || {})[i] ? 'color:#c9a8ff' : ''}">${sp.passive ? ((window.MAGIC_PASSIVES || {})[i] ? 'ON' : 'passive') + ' · ' : ''}${rep.cost}💧</div>${cdHtml}`;
+				<div class="hb-mana" style="${(window.MAGIC_PASSIVES || {})[i] ? 'color:#c9a8ff' : ''}">${sp.passive ? ((window.MAGIC_PASSIVES || {})[i] ? 'ON' : 'passive') + ' · ' : ''}${_shownCost}💧</div>${_oo ? `<div class="hb-over">+${_oo.total} total</div>` : ''}${cdHtml}`;
 			if((window.MAGIC_PASSIVES || {})[i]) el.style.boxShadow = '0 0 0 1px #c9a8ff, 0 0 12px -2px #c9a8ff';
 		} else if(sp){
 			const displayCost = displayedSpellMana(sp, dungeonManaOpts(i, sp));
 			const req = calcSpellCtrl(sp);
 			const onlineBlocked = isOnlineMatch() && spellUsesControl(sp);
-			const usable = !onlineBlocked && stats.magicControl >= req;
+			const usable = !onlineBlocked && (stats.magicControl >= req || (IS_SANDBOX && !ARCANIST_TRIAL));
 			const color = sp.phases[0]?.color || '#888';
 			let cdHtml = '';
 			if(spellCooldowns[i] > 0){
@@ -14715,6 +14826,7 @@ function spawnRemoteCast(c, remoteFlag){
    MagicEngine. Enemy attacks are untouched and do not use this.
    ============================================================= */
 const MAGIC_WORLD = (typeof MagicEngine !== 'undefined') ? MagicEngine.createWorld() : null;
+window.__magicWorld = MAGIC_WORLD;      // for code that runs before this line (the hotbar's first render)
 let _magicEnemyProjSet = new Set();
 const MAGIC_OWNER = {
 	id: 'player', entity: player,
@@ -14722,10 +14834,12 @@ const MAGIC_OWNER = {
 	alive: () => health > 0
 };
 function magicProfileForGame(){
-	const ctrl = (typeof gearEffectiveControl === 'function') ? gearEffectiveControl() : stats.magicControl;
+	let ctrl = (typeof gearEffectiveControl === 'function') ? gearEffectiveControl() : stats.magicControl;
+	const _vm = window.__vowMods; if(_vm && _vm.ctrl) ctrl = Math.max(0, ctrl + _vm.ctrl);      // Binding Vows: Mana Control
 	return MagicEngine.deriveProfile({
 		magicControl: ctrl, magicPower: stats.magicPower,
-		maxMana: (typeof maxMana === 'number' && isFinite(maxMana)) ? maxMana : 1500,
+		maxMana: (typeof maxMana === 'number' && isFinite(maxMana)) ? maxMana : 500,
+		sandbox: IS_SANDBOX && !ARCANIST_TRIAL,
 		magicProfile: playerData.magicProfile
 	});
 }
@@ -14734,6 +14848,11 @@ function magicProfileForGame(){
    scale that slot's spells, classes keep their identities, and every gear effect hooks in here. */
 const RUNE_BASE_POWER = 10;
 /* Magic Defence wards you against rune magic aimed at you (baseline 8 = ×1; 30 defence ≈ 25% less) */
+/* Defence from gear: every point above the baseline 8 cuts incoming damage ~2.5% (30 defence ≈ 36% less, floor 40%) */
+function generalDefenceMult(){
+	const D = (stats && isFinite(stats.magicDefence)) ? stats.magicDefence : 8;
+	return Math.max(0.4, 1 / (1 + Math.max(0, D - 8) * 0.025));
+}
 function runeWardMult(){
 	const D = (stats && isFinite(stats.magicDefence)) ? stats.magicDefence : 8;
 	return Math.max(0.5, Math.min(1.1, 1 / (1 + (D - 8) * 0.015)));
@@ -14761,6 +14880,7 @@ function runeIsElemental(def){
 /* everything that is not the target: power stat, slot item boost, vows, domain buffs (also sent to PvP) */
 function runeCasterMult(def, slot){
 	let m = runePowerMult();
+	if(window.__vowMods && window.__vowMods.power) m *= window.__vowMods.power;      // Binding Vows: Magic Power
 	// the mythic relics boost the kinds of spell they favour (read from the spell's runes)
 	if(typeof GearRuntime !== 'undefined' && GearRuntime.runeItemBoost) m *= GearRuntime.runeItemBoost(def, playerData.equipment);
 	if(slot != null && slot >= 0){
@@ -14881,6 +15001,7 @@ function magicLaunchPlayer(vx, vy){
 	if(ky < 0) player.onGround = false;
 }
 const MAGIC_HOST = {
+	noFreeze: !!(PVP_MATCH || IS_COOP),      // a held breath cannot be agreed on across the network: online, a domain still gathers and bursts out, but the world keeps moving
 	// a magic error (the engine removed the energy involved and carried on): show it on screen
 	onMagicError: (rec) => { if(typeof window.reportGameError === 'function') window.reportGameError('magic ' + rec.where, rec.msg, rec.at, rec.body); },
 	mouseWorld: () => ({ x: mouseScreenX + camera.x, y: mouseScreenY + camera.y }),
@@ -14902,7 +15023,7 @@ const MAGIC_HOST = {
 	applyImpulse: (ent, ix, iy, opt) => {
 		if(!ent) return;
 		if(ent === player){ if(opt && (opt.self || opt.caster === player)){ player.vy += iy; player.launchVx = (player.launchVx || 0) + ix; } else magicLaunchPlayer(ix, iy); return; }
-		if(typeof resistsForcedMove === 'function' && resistsForcedMove(ent)) return;
+		if(typeof resistsForcedMove === 'function' && resistsForcedMove(ent)){ if(opt && opt.kinetic !== false) bossStrongShove(ent, ix, iy); return; }
 		if(ent.vx != null){ ent.vx += ix; ent.vy = (ent.vy || 0) + iy; }
 		else { ent.x += ix * 3; ent.y += iy * 3; }
 	},
@@ -14951,6 +15072,8 @@ const MAGIC_HOST = {
 		}
 		if(!en) return false;
 		const F = Math.round(dur * 60);
+		const _bossNoStun = isBossEntity(en);      // bosses can be slowed a little, never frozen / stunned / bound
+		if(_bossNoStun && (type === 'bound')) return true;
 		switch(type){
 			case 'burn': {
 				if(!en.dots) return false;
@@ -14966,17 +15089,18 @@ const MAGIC_HOST = {
 				const _my = !st || !st.H || st.H === MAGIC_HOST;
 				const Fc = _my && typeof GearRuntime !== 'undefined' ? Math.round(F * GearRuntime.freezeDurationMult()) : F;
 				en.slowTimer = Math.max(en.slowTimer || 0, Fc);
-				if(mag >= 1){
+				if(_bossNoStun) en.slowTimer = Math.min(en.slowTimer, 40);
+				if(mag >= 1 && !_bossNoStun){
 					en.stunTimer = Math.max(en.stunTimer || 0, Math.min(Fc, 90));      // frozen solid
 					if(_my && typeof GearRuntime !== 'undefined' && !st._gearFrz){ st._gearFrz = true; GearRuntime.onStatusApplied(en, 'freeze', { frame: gearFrame }); }
 				}
 				return true;
 			}
 			case 'slowed': case 'obscured':
-				en.slowTimer = Math.max(en.slowTimer || 0, F); return true;
+				en.slowTimer = Math.max(en.slowTimer || 0, _bossNoStun ? Math.min(F, 40) : F); return true;
 			case 'dazzle':
-				en.slowTimer = Math.max(en.slowTimer || 0, Math.round(F * 0.6));
-				if(!st._stunned){ st._stunned = true; en.stunTimer = Math.max(en.stunTimer || 0, 10); }
+				en.slowTimer = Math.max(en.slowTimer || 0, Math.round(F * (_bossNoStun ? 0.2 : 0.6)));
+				if(!_bossNoStun && !st._stunned){ st._stunned = true; en.stunTimer = Math.max(en.stunTimer || 0, 10); }
 				return true;
 			case 'bound':
 				en.stunTimer = Math.max(en.stunTimer || 0, F); return true;
@@ -15022,7 +15146,6 @@ const MAGIC_HOST = {
 	nudge: (en, dx, dy) => {
 		if(!en || !isFinite(dx) || !isFinite(dy)) return;
 		if(en !== player && typeof resistsForcedMove === 'function' && resistsForcedMove(en)) return;
-		if(en.isBoss || (en.typeDef && en.typeDef.isBoss) || en.bossPhase){ dx *= 0.25; dy *= 0.25; }
 		const w = en.w || 30, h = en.h || 40;
 		const free = (x, y) => !projectilePointBlocked(x + 3, y + 3) && !projectilePointBlocked(x + w - 3, y + 3) && !projectilePointBlocked(x + 3, y + h - 3) && !projectilePointBlocked(x + w - 3, y + h - 3) && !projectilePointBlocked(x + w / 2, y + h / 2);
 		if(dx && free(en.x + dx, en.y)) en.x += dx;
@@ -15038,6 +15161,25 @@ const MAGIC_HOST = {
 	/* "Target attacks or casts": you while you cast or swing; anything else while it is attacking */
 	isAttacking: (e) => e === player ? (player.castTimer > 0 || !!(typeof MeleeMode !== 'undefined' && MeleeMode.atk)) : !!(e && (e.attacking || e.castFlash > 0)),
 	casterHealth: () => (typeof health === 'number' && typeof maxHealth === 'number' && maxHealth > 0) ? health / maxHealth : null,
+	/* Binding Vows: a line of text where a vow is sworn / fulfilled / broken; what your player vows need to watch; a blood sacrifice */
+	vowText: (at, text, color) => { const x = at ? at.x : player.x + player.w / 2, y = at ? at.y - 24 : player.y - 46; dmgNumbers.push({ x, y, text, age: 0, color: color || '#ffd36b' }); },
+	vowPlayer: (owner) => {
+		if(!owner || owner.id !== 'player') return null;
+		const cx = player.x + player.w / 2, cy = player.y + player.h / 2;
+		let near = Infinity;
+		for(const e of enemies){ if(!e || e.dead || e.hp <= 0) continue; const d = Math.hypot(e.x + (e.w || 0) / 2 - cx, e.y + (e.h || 0) / 2 - cy) - (e.w || 0) / 2; if(d < near) near = d; }
+		const sp = playerData && playerData.spells ? playerData.spells[activeSlot] : null;
+		const weapon = sp && sp.kind === 'weapon' ? (sp.weaponId === 'magic' ? 'magic' : 'weapon') : 'none';
+		return { x: cx, y: cy, hp: maxHealth > 0 ? health / maxHealth : 1, weapon, nearestEnemy: near };
+	},
+	vowSacrificeHealth: (owner, frac) => {
+		if(!owner || owner.id !== 'player' || !(health > 1)) return 0;
+		const lose = Math.min(health - 1, Math.round(health * frac));
+		if(lose < 1) return 0;
+		health -= lose; if(typeof updateHealthHUD === 'function') updateHealthHUD();
+		dmgNumbers.push({ x: player.x + player.w / 2, y: player.y - 30, text: '−' + lose + ' ❤ sworn', age: 0, color: '#ff6b7a' });
+		return lose / Math.max(1, health + lose);
+	},
 	knockback: (en, vx, vy, frames) => {
 		if(!en) return;
 		if(en === player){
@@ -15045,7 +15187,7 @@ const MAGIC_HOST = {
 			if(frames >= 22){ player._knockbackVx = Math.max(-22, Math.min(22, vx)); player._knockbackVy = Math.max(-14, Math.min(8, vy)); player._knockbackTimer = frames; player.launchVx = 0; if(vy < 0) player.onGround = false; return; }
 			magicLaunchPlayer(vx, vy); return;
 		}
-		if(typeof resistsForcedMove === 'function' && resistsForcedMove(en)) return;
+		if(typeof resistsForcedMove === 'function' && resistsForcedMove(en)){ bossStrongShove(en, vx, vy); return; }
 		en._kbVx = vx; en._kbVy = vy; en._kbTimer = Math.max(en._kbTimer || 0, frames || 14);
 		en.stunTimer = Math.max(en.stunTimer || 0, 4);
 	}
@@ -15169,7 +15311,7 @@ function updatePassiveSpells(dt){
 	const now = performance.now();
 	for(const k in MAGIC_PASSIVES){
 		const p = MAGIC_PASSIVES[k];
-		const drain = p.cost * PASSIVE_PREMIUM / p.cycle * dt;
+		const drain = p.cost * PASSIVE_PREMIUM / p.cycle * dt * (MAGIC_WORLD.vowPassiveMult ? MAGIC_WORLD.vowPassiveMult(p.inst) * MAGIC_WORLD.vowCostMult('player', p.spell) : 1);
 		if(mana < drain){ mana = 0; stopPassiveSpell(k, '∞ ' + (p.spell.name || 'Passive') + ' — out of energy'); continue; }
 		mana -= drain;
 		if(p.inst.done && now - p.lastCast >= 1000){
@@ -15200,7 +15342,7 @@ function castMagicSpell(spell, slot){
 	}
 	// zone charging drains the rest gradually; vows and gear change the upfront price
 	let cost = rep.upfront != null ? rep.upfront : rep.cost;
-	cost = Math.round(cost * runeManaMult(slot));
+	cost = Math.round(cost * runeManaMult(slot) * (MAGIC_WORLD.vowCostMult ? MAGIC_WORLD.vowCostMult('player', spell) : 1));      // vows only ever make spells cheaper
 	if(GR) cost = GR.modifyManaCost(cost, { spell, slot });
 	/* Max Output: a spell stronger than your output ceiling can only be forced out with Total Mana — 5 × the excess.
 	   Its regular energy cost only covers the part that fits inside your Max Output. */
@@ -15218,6 +15360,9 @@ function castMagicSpell(spell, slot){
 			prof.maxOutput = peakOut + 1;      // this cast is allowed to reach its full output
 		}
 	}
+	// Binding Vows (Deep Reservoir, Unspent Cup): part of your mana is sworn away — a spell may not dip into it
+	{ const _res = window.__vowMods ? window.__vowMods.reserve * maxMana : 0;
+	  if(_res > 0 && mana - cost < _res){ dmgNumbers.push({x:player.x+player.w/2,y:player.y-30,text:'⛓ Vow: keep '+Math.round(_res)+' mana unspent',age:0,color:'#ffd36b'}); return; } }
 	let blood = null;
 	if(mana < cost){
 		if(GR){ const b = GR.bloodPay(cost, mana, health, maxHealth); if(b.used) blood = b; }
@@ -15265,11 +15410,34 @@ function castMagicSpell(spell, slot){
 	spellCooldowns[slot] = cd; spellMaxCooldowns[slot] = cd;
 	player.castTimer = 12; player.castColor = '#9fe6ff';
 }
+/* Binding Vows HUD: what you have sworn, whether it is holding, and the net stat change (under the mana bars) */
+let _vowHudT = 0, _vowHudKey = '', _vowCostKey = '';
+function updateVowHud(VM){
+	if(++_vowHudT % 15) return;
+	const el = document.getElementById('vowHud'); if(!el) return;
+	if(!VM || !VM.list.length){ if(_vowHudKey){ el.style.display = 'none'; el.innerHTML = ''; _vowHudKey = ''; _vowCostKey = ''; if(typeof renderHotbar === 'function') renderHotbar(); } return; }
+	const pc = (x) => (x >= 0 ? '+' : '−') + Math.round(Math.abs(x) * 100) + '%';
+	const sum = [];
+	if(Math.abs(VM.str) > 0.005) sum.push('Str ' + pc(VM.str));
+	if(Math.abs(VM.def - 1) > 0.005) sum.push('Dmg taken ' + pc(VM.def - 1));
+	if(Math.abs(VM.power - 1) > 0.005) sum.push('Power ' + pc(VM.power - 1));
+	if(Math.abs(VM.mana - 1) > 0.005) sum.push('Mana ' + pc(VM.mana - 1));
+	if(Math.abs(VM.regen - 1) > 0.005) sum.push('Regen ' + pc(VM.regen - 1));
+	if(Math.abs(VM.ctrl) > 0.05) sum.push('Control ' + (VM.ctrl > 0 ? '+' : '−') + Math.abs(VM.ctrl).toFixed(VM.ctrl % 1 ? 1 : 0));
+	if(VM.cost < 0.995) sum.push('Cost ' + pc(VM.cost - 1));
+	if(VM.reserve > 0) sum.push(Math.round(VM.reserve * 100) + '% mana sealed');
+	if(VM.noDash) sum.push('no dash');
+	const rows = VM.list.map(v => '<div class="vh-row' + (v.on ? '' : ' off') + '" title="' + (v.why || '').replace(/"/g, '&quot;') + '">⛓ ' + v.name.replace(/^Vow of (the )?/, '') + (v.on ? '' : ' · off ' + Math.ceil(v.sus) + 's') + (v.prog > 0 && v.prog < 1 ? '<span class="vh-bar"><i style="width:' + Math.round(v.prog * 100) + '%"></i></span>' : '') + '</div>').join('');
+	const html = (sum.length ? '<div class="vh-sum">' + sum.join(' · ') + '</div>' : '') + rows;
+	if(html !== _vowHudKey){ el.innerHTML = html; el.style.display = 'block'; _vowHudKey = html; }
+	const ck = VM.cost.toFixed(3) + '|' + VM.list.map(v => v.key + (v.on ? 1 : 0)).join(',');
+	if(ck !== _vowCostKey){ _vowCostKey = ck; if(typeof renderHotbar === 'function') renderHotbar(); }      // costs on the hotbar follow your vows
+}
 function updateMagic(){
 	if(!MAGIC_WORLD) return;
 	updatePassiveSpells(1 / 60);
 	if(typeof window.magicUpkeep === 'function') window.magicUpkeep(1 / 60);
-	if(MAGIC_WORLD.instances.length === 0 && MAGIC_WORLD.bodies.length === 0 && MAGIC_WORLD.sparks.length === 0 && MAGIC_WORLD.rings.length === 0 && MAGIC_WORLD.status.size === 0 && MAGIC_WORLD.fmods.size === 0 && MAGIC_WORLD.reinf.length === 0 && MAGIC_WORLD.constructs.length === 0 && MAGIC_WORLD.debris.length === 0) return;
+	if(MAGIC_WORLD.instances.length === 0 && MAGIC_WORLD.bodies.length === 0 && MAGIC_WORLD.sparks.length === 0 && MAGIC_WORLD.rings.length === 0 && MAGIC_WORLD.status.size === 0 && MAGIC_WORLD.fmods.size === 0 && MAGIC_WORLD.reinf.length === 0 && MAGIC_WORLD.constructs.length === 0 && MAGIC_WORLD.debris.length === 0 && !(MAGIC_WORLD.vows && MAGIC_WORLD.vows.length)) return;      // sworn vows still need their clock
 	_magicEnemyProjSet = new Set(enemyProjectiles);
 	MAGIC_WORLD.update(1 / 60, MAGIC_HOST);      // never throws: the engine catches its own errors and reports them
 }
@@ -21741,9 +21909,11 @@ function resolveOpenSkyEnemyProjHit(p){
 	return true;
 }
 
-function updateEnemyProjectiles(){
+function updateEnemyProjectiles(){ try{ _updateEnemyProjectiles(); } finally { window.__curEProj = null; } }      // __curEProj: the bolt being handled, so a parry can judge the spell that hits you
+function _updateEnemyProjectiles(){
 	for(let i=enemyProjectiles.length-1;i>=0;i--){
 		const p=enemyProjectiles[i];
+		window.__curEProj = p;
 		p.age++;
 		
 		// Homing projectiles track target
@@ -22393,6 +22563,8 @@ function damagePlayer(amount,effects,fxPower){
 	if(player.iFrames>0)return;
 	if(_coopBossDmg) amount *= coopBossDmgMult();
 	const vowDefMult = Math.max(0.3, 1 - vowDefenseBonus * 0.05);
+	amount *= (typeof generalDefenceMult === 'function') ? generalDefenceMult() : 1;      // Defence from gear softens every blow
+	if(window.__vowMods) amount *= window.__vowMods.def;      // Binding Vows: Defense (a Glass Cannon takes more)
 	// Healer class: 20% damage reduction
 	const healerMult = hasClass('healer') ? 0.8 : 1;
 	// Same-shape domain: 35% damage reduction
@@ -24970,8 +25142,25 @@ function updateRaidIndicators(){
    position the host last broadcast and keep purely cosmetic timers
    ticking, so animations stay smooth between the ~12Hz snapshots.
    ============================================================= */
+/* Bosses (and minibosses) shrug off hitstun, knockback and gravity. Only a really strong blow — a high-energy Kinetic
+   impulse — still shoves one a little (bossStrongShove). */
+function isBossEntity(en){
+	if(!en || en === player) return false;
+	if(en.isBoss || en.isMiniBoss || en.isKittenBoss || en._ig) return true;
+	const t = en.typeDef;
+	if(t && (t.isBoss || t.isMiniBoss)) return true;
+	return isCoopBoss(en);
+}
 function resistsForcedMove(en){
-	return !!(typeof challengerBoss !== 'undefined' && challengerBoss && en === challengerBoss);
+	return isBossEntity(en);
+}
+const BOSS_SHOVE_MIN = 14;      // impulse (px/frame) a blow must exceed before a boss moves at all
+function bossStrongShove(en, vx, vy){
+	const m = Math.hypot(vx, vy);
+	if(!(m > BOSS_SHOVE_MIN)) return false;
+	const k = Math.min(6, (m - BOSS_SHOVE_MIN) * 0.3) / m;      // a fraction of the excess, never more than 6 px/frame
+	en._kbVx = vx * k; en._kbVy = vy * k; en._kbTimer = Math.max(en._kbTimer || 0, 10); en._bossKbOK = 10;
+	return true;
 }
 function isCoopBoss(en){
 	if(!en) return false;
@@ -27948,6 +28137,12 @@ function updateEnemies(){
 	// Co-op guests glide enemies toward the host's broadcast positions and run
 	// no AI of their own, so both screens show the same fight.
 	if(COOP_GUEST){ updateCoopRemoteEnemies(); return; }
+	// raid bosses live outside the enemies list: same rule, no hitstun / knockback
+	for(const _rb of [typeof raidBoss !== 'undefined' ? raidBoss : null, typeof chronoBoss !== 'undefined' ? chronoBoss : null, typeof zenithBoss !== 'undefined' ? zenithBoss : null, typeof challengerBoss !== 'undefined' ? challengerBoss : null]){
+		if(!_rb || _rb.dead) continue;
+		if(_rb.stunTimer > 0 && _rb.stunTimer < 85) _rb.stunTimer = 0;
+		if(_rb._bossKbOK > 0) _rb._bossKbOK--; else if(_rb._kbTimer > 0) _rb._kbTimer = 0;
+	}
 	const _cityInside = IS_CITY && typeof EmberfallCity !== 'undefined' && EmberfallCity.isInside && EmberfallCity.isInside();
 	let _aimSnap = null;      // co-op: while this enemy goes after an ally, it sees (and hits) that ally, not you
 	try {
@@ -27956,7 +28151,16 @@ function updateEnemies(){
 		// the open world: everything holds still while you are indoors (the terrain is switched off) or far away
 		if(en._worldFoe && !en.dead && (_cityInside || Math.abs(en.x - player.x) > 2600)) continue;
 		_coopBossDmg = !!(IS_COOP && en.typeDef && en.typeDef.isBoss);
-		if(typeof MeleeMode !== 'undefined' && MeleeMode.hitstop>0 && !en.dead) continue;
+		const _isBossEn = !en.dead && isBossEntity(en);
+		if(typeof MeleeMode !== 'undefined' && MeleeMode.hitstop>0 && !en.dead && !_isBossEn) continue;      // hit-stop freezes the crowd, never a boss
+		if(_isBossEn){
+			// no hitstun: short stuns from hits are dropped (scripted holds — a spawn freeze, a cutscene, a puzzle reward — are 85+ frames)
+			if(en.stunTimer > 0 && en.stunTimer < 85) en.stunTimer = 0;
+			// no knockback unless a really strong Kinetic blow allowed it
+			if(en._bossKbOK > 0) en._bossKbOK--; else if(en._kbTimer > 0) en._kbTimer = 0;
+			if(en.stickyDebuff > 0) en.stickyDebuff = 0;
+			en._stickyFromEnemy = 0; en._stickyStuck = 0;
+		}
 		if(en.dead){
 			en.deathTimer++;
 			// Respawn sylvaris enemies after 60 seconds
@@ -28971,6 +29175,8 @@ let castPressed = false;
 function update(){
 	_simTick++;
 	refreshOnlinePerf();
+	/* A domain opening: for the held breath nothing moves but the opening itself */
+	if(MAGIC_WORLD && MAGIC_WORLD.isFrozen && MAGIC_WORLD.isFrozen()){ updateMagic(); return; }
 
 	/* Necromancer summon selection — open overlay but don't freeze gameplay */
 	if(pendingNecroSummon && !necroSelectOpen){
@@ -30252,6 +30458,16 @@ function update(){
 		}
 	}
 
+	/* Binding Vows: the stat changes of the vows you have sworn (read once a frame; everything else reads window.__vowMods) */
+	if(MAGIC_WORLD && MAGIC_WORLD.vowMods){
+		const VM = MAGIC_WORLD.vowMods('player');
+		window.__vowMods = (VM.list.length ? VM : null);
+		if(isFinite(BASE_MAX_MANA)){
+			const want = Math.max(50, Math.round(BASE_MAX_MANA * (VM.list.length ? VM.mana : 1)));
+			if(want !== maxMana){ maxMana = want; if(mana > maxMana) mana = maxMana; }
+		}
+		if(typeof updateVowHud === 'function') updateVowHud(window.__vowMods);
+	}
 	/* Mana regen */
 	if(IS_SANDBOX && !ARCANIST_TRIAL){
 		// Infinite mana in sandbox mode
@@ -30260,7 +30476,7 @@ function update(){
 		updateTotalManaHUD();
 	} else {
 		const gearRegen = (typeof GearRuntime !== 'undefined') ? GearRuntime.manaRegenMult() : 1;
-		const curRegen=baseManaRegen*(playerBuffs.manaRegenTimer>0?playerBuffs.manaRegenMult:1)*(player.transformActive?1.4:1)*gearRegen;
+		const curRegen=baseManaRegen*(playerBuffs.manaRegenTimer>0?playerBuffs.manaRegenMult:1)*(player.transformActive?1.4:1)*gearRegen*(window.__vowMods ? window.__vowMods.regen : 1);
 		mana=Math.min(maxMana,mana+curRegen);
 	}
 	updateManaHUD();
@@ -30622,8 +30838,8 @@ function update(){
 	_coopBossDmg = IS_COOP;
 	{ const _s = (typeof raidBoss !== 'undefined' && raidBoss && !raidBoss.dead) ? coopAimBegin(raidBoss) : null; try { updateRaidBoss(); } finally { if(_s) coopAimEnd(_s); } }
 	{ const _s = (typeof chronoBoss !== 'undefined' && chronoBoss && !chronoBoss.dead) ? coopAimBegin(chronoBoss) : null; try { updateChronoBoss(); } finally { if(_s) coopAimEnd(_s); } }
-	updateZenithBoss();
-	if(typeof updateChallengerBoss === 'function') updateChallengerBoss();
+	{ const _s = (typeof zenithBoss !== 'undefined' && zenithBoss && !zenithBoss.dead) ? coopAimBegin(zenithBoss) : null; try { updateZenithBoss(); } finally { if(_s) coopAimEnd(_s); } }
+	{ const _s = (typeof challengerBoss !== 'undefined' && challengerBoss && !challengerBoss.dead) ? coopAimBegin(challengerBoss) : null; try { if(typeof updateChallengerBoss === 'function') updateChallengerBoss(); } finally { if(_s) coopAimEnd(_s); } }
 	_coopBossDmg = false;
 	if(typeof MeleeMode !== 'undefined') MeleeMode.lateUpdate();
 	if(IS_SURVIVAL && window.SurvivalMode) SurvivalMode.tick();
@@ -30780,6 +30996,8 @@ function drawColosseumWall(wallBottom){
 }
 
 function render(){
+	glowBudgetFrame();
+	if(IS_ZENITH) LAZY_IMG.need('zenith-sheet');
 	ctx.clearRect(0,0,canvas.width,canvas.height);
 	if(_onlineLite) ctx.imageSmoothingEnabled = _onlineParty < 3;
 	
@@ -36739,6 +36957,25 @@ function render(){
 		ctx.fillRect(0,0,canvas.width,canvas.height);
 	}
 
+	/* Rune Domain Expansion: the domain's own world (sky, landmark, floor) replaces the level inside it — painted behind the terrain and every creature */
+	if(MAGIC_WORLD && MAGIC_WORLD.drawDomainBackdrop && MAGIC_WORLD.domains.length){
+		MAGIC_WORLD.hostDrawsDomainBackdrop = true;
+		MAGIC_WORLD.drawDomainBackdrop(ctx, camera.x, camera.y, performance.now() / 1000);
+		// arenas draw their platforms with the background: show them again, inside the domain, so you still see where you can stand
+		if(sandboxPlatforms.length && MAGIC_WORLD.clipToDomains){
+			ctx.save();
+			if(MAGIC_WORLD.clipToDomains(ctx, camera.x, camera.y)){
+				for(const plat of sandboxPlatforms){
+					const px = plat.x - camera.x, py = plat.y - camera.y;
+					if(px + plat.w < -50 || px > canvas.width + 50) continue;
+					ctx.fillStyle = 'rgba(8,8,14,0.62)'; ctx.fillRect(px, py, plat.w, plat.h);
+					ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fillRect(px, py, plat.w, 2);
+				}
+			}
+			ctx.restore();
+		}
+	}
+
 	/* Render tilemap (only visible tiles) - skip for sandbox/raid/openworld/chronoraid/colosseum/challenger */
 	if(!IS_SANDBOX && !IS_RAID && !IS_OPENWORLD && !IS_CITY && !IS_OBSERVATORY && !IS_DRAGONGRAVEYARD && !IS_ARCANERUINS && !IS_CHRONORAID && !IS_ZENITH && !IS_CHALLENGER && !IS_COLOSSEUM && !IS_SURVIVAL){
 		const sylvarisGroundRow = IS_SYLVARIS ? Math.floor(SYLVARIS_CONFIG.groundY / TILE) : IS_STORMISLANDS ? Math.floor(STORMISLANDS_CONFIG.groundY / TILE) : IS_BLACKSANDS ? Math.floor(BLACKSANDS_CONFIG.groundY / TILE) : 0;
@@ -37859,6 +38096,12 @@ break;}
 		ctx.fillText(dn.text,dn.x-camera.x,dn.y-camera.y);
 	}
 	ctx.globalAlpha=1;
+	/* Domains: from outside a sealed one you cannot see in; the opening takes over the screen */
+	if(MAGIC_WORLD && MAGIC_WORLD.drawDomainVeil && MAGIC_WORLD.domains.length){
+		const _dv = { x: player.x + player.w / 2, y: player.y + player.h / 2 }, _dt = performance.now() / 1000;
+		MAGIC_WORLD.drawDomainVeil(ctx, camera.x, camera.y, _dt, _dv);
+		MAGIC_WORLD.drawDomainCine(ctx, canvas.width, canvas.height, camera.x, camera.y, _dt, _dv);
+	}
 
 	/* Gravity wells */
 	if(!_onlineLite){
@@ -39674,6 +39917,7 @@ function drawSpriteEnemy(en, img){
    DRAW ENEMY
    ============================================================= */
 function drawEnemy(en){
+	if(en && !en._sheetAsked){ en._sheetAsked = 1; const _t = en.necroType || en.type; if(_t !== 'fireDragon') ENEMY_SPRITE_SHEETS[_t];      /* Ignaroth is drawn by his rig */ if(LAZY_SET_SLUG[_t]) LAZY_IMG.need(LAZY_SET_SLUG[_t]); }
 	if(en._wardenDormant || en.isDormant) return;
 	if(en._jungleHidden || en._jungleDormant) return;
 	if(en._fireHidden || en._iceHidden || en._earthHidden || en._wildesHidden || en._lateHidden || en._rosterHidden) return;
@@ -42516,7 +42760,7 @@ function updateDebugPanel(){
 </script>
 <script src="player-rig.js?v=5"></script>
 <script src="melee-weapons.js?v=2"></script>
-<script src="melee-combat.js?v=45"></script>
+<script src="melee-combat.js?v=48"></script>
 <script>
 /* Reinforcement → the physical/combat properties that already exist (no separate "magic melee" system) */
 (function(){
@@ -42529,9 +42773,9 @@ function updateDebugPanel(){
 		if(!MAGIC_WORLD || ev.source !== player) return;
 		const wk = WK(ev.weaponId);
 		const heavy = R(wk, 'heavyWeapon'), light = R(wk, 'lightWeapon');      // Gravity on the weapon: heavier / lighter
-		const strMul = 1 + ((typeof stats !== 'undefined' && stats && stats.strength) || 0) * 0.04;      // Strength: +4% melee damage per point (uncapped)
+		const strMul = (1 + ((typeof stats !== 'undefined' && stats && stats.strength) || 0) * 0.04) * Math.max(0.4, 1 + ((window.__vowMods && window.__vowMods.str) || 0));      // Strength: +4% melee damage per point (uncapped) · Binding Vows: Strength
 		const dmgMul = (1 + R(player, 'meleeDamage') + R(wk, 'impact')) * (1 + heavy * 0.9) * (1 - light * 0.75) * strMul;      // also outweighs the plain impact any weapon reinforcement gives
-		const kbMul = 1 + R(wk, 'forceTransfer');
+		const kbMul = (1 + R(wk, 'forceTransfer')) * ((window.__vowMods && window.__vowMods.kb) || 1);
 		ev.amount *= dmgMul;
 		if(ev.knockback){ ev.knockback.x *= kbMul; ev.knockback.y *= kbMul; }
 		if(dmgMul > 1.001 || kbMul > 1.001) ev.poiseDamage = (ev.poiseDamage || 1) * (1 + (dmgMul - 1) * 0.4 + (kbMul - 1) * 0.6);
@@ -42556,6 +42800,8 @@ function updateDebugPanel(){
 		const per = (cost - Math.max(0, mana)) / Math.max(1, list.length); mana = Math.max(0, mana - cost);
 		for(const st of list) st.energy -= per;
 	}
+	window.vowNoDash = () => !!(window.__vowMods && window.__vowMods.noDash);      // Vow of the Open Gate
+	MeleeMode.on('attackStart', function(){ if(MAGIC_WORLD && MAGIC_WORLD.vowNote) MAGIC_WORLD.vowNote('player', 'melee'); });
 	MeleeMode.on('attackStart', function(){
 		if(!MAGIC_WORLD || !MAGIC_WORLD.reinf.length) return;
 		const arms = reinfOn(st => st.kind === 'arms' && st.ref === player);
@@ -43023,8 +43269,9 @@ function updateDebugPanel(){
 	};
 })();
 </script>
+<script src="spell-parry.js?v=2"></script>
 <script src="fire-dungeon-kit.js?v=5"></script>
-<script src="ignaroth-rig.js?v=1"></script>
+<script src="ignaroth-rig.js?v=3"></script>
 <script src="ignaroth-kit.js?v=10"></script>
 <script src="frostbound-knight-kit.js?v=8"></script>
 <script src="ice-dungeon-kit.js?v=4"></script>
@@ -43046,18 +43293,18 @@ function updateDebugPanel(){
 <script src="dungeon-interact-art.js?v=7"></script>
 <script src="chest-loot.js?v=4"></script>
 <script src="dungeon-fluid.js?v=23"></script>
-<script src="fire-lava.js?v=1"></script>
+<script src="fire-lava.js?v=2"></script>
 <script src="fire-puzzle-kit.js?v=5"></script>
 <script src="ice-puzzle-kit.js?v=4"></script>
 <script src="fire-setpiece.js?v=4"></script>
 <script src="special-rooms.js?v=6"></script>
-<script src="dungeon-env.js?v=57"></script>
+<script src="dungeon-env.js?v=58"></script>
 <script src="dungeon-vision.js?v=11"></script>
 <script src="dungeon-skin.js?v=2"></script>
 <script src="where-map.js?v=2"></script>
 <script src="tutorial-coach.js?v=1"></script>
-<script src="challenger-raid.js?v=37"></script>
-<script src="survival-mode.js?v=4"></script>
+<script src="challenger-raid.js?v=40"></script>
+<script src="survival-mode.js?v=6"></script>
 <script>
 const DUNGEON_MAP_KEY = 'magicBattle_showDungeonMap';
 const DUNGEON_MAP_VIEW = 10;
@@ -43362,9 +43609,13 @@ function guarded(where, fn){
 	try { fn(); }
 	catch(e){ window.reportGameError(where, (e && e.message) || String(e), e && e.stack ? String(e.stack).split('\n').slice(1, 3).map(s => s.trim().replace(/^at /, '')).join(' ← ') : ''); }
 }
+let _rafLast = 0, _rafDtEma = 16.7;
 function loop(){
 	requestAnimationFrame(loop);          // scheduled first: nothing below can stop the next frame
 	const t0=performance.now();
+	// the real frame interval (includes the GPU / compositor, which _frameCostEma — JS time only — can't see)
+	if(_rafLast){ const dt = Math.min(100, t0 - _rafLast); if(document.visibilityState === 'visible') _rafDtEma = _rafDtEma * 0.92 + dt * 0.08; }
+	_rafLast = t0;
 	// the N map pauses the world (except in co-op, where the others keep playing)
 	if(!(window.__whereMapOpen && !(typeof IS_COOP !== 'undefined' && IS_COOP))) guarded('update', update);
 	guarded('debug panel', updateDebugPanel);
@@ -43392,7 +43643,7 @@ loop();
 <script src="supabase-config.js?v=3"></script>
 <script src="cloud-save.js?v=6"></script>
 <script src="pvp-net.js?v=10"></script>
-<script src="coop-net.js?v=5"></script>
+<script src="coop-net.js?v=6"></script>
 <script>
 /* ===== Colosseum PvP: maps, rune spells, melee and netcode live in pvp-arena.js ===== */
 if(typeof IS_COLOSSEUM !== 'undefined' && IS_COLOSSEUM && window.PvpArena) PvpArena.boot();
@@ -43448,8 +43699,7 @@ if(typeof IS_COLOSSEUM !== 'undefined' && IS_COLOSSEUM && window.PvpArena) PvpAr
 		lastOutgoingCast = c;
 		lastOutgoingUntil = performance.now() + 1400;
 		if(net && net.sendCast){
-			setTimeout(function(){ if(net && net.sendCast) net.sendCast(c); }, 90);
-			setTimeout(function(){ if(net && net.sendCast) net.sendCast(c); }, 240);
+			setTimeout(function(){ if(net && net.sendCast) net.sendCast(c); }, 160);      // one resend in case the first was dropped
 		}
 	};
 
@@ -43551,6 +43801,16 @@ if(typeof IS_COLOSSEUM !== 'undefined' && IS_COLOSSEUM && window.PvpArena) PvpAr
 				if(w.boss.dead && !boss.dead){ boss.hp = 0; boss.dead = true; boss.deathTimer = 0; }
 			}
 		}
+		if(w.ek && typeof enemies !== 'undefined'){
+			var keep = Object.create(null);
+			if(w.en) for(var ki = 0; ki < w.en.length; ki++) keep[w.en[ki].k] = 1;
+			for(var ri = enemies.length - 1; ri >= 0; ri--){
+				var re = enemies[ri];
+				if(!re || !re._coopKey || keep[re._coopKey]){ if(re) re._coopMiss = 0; continue; }
+				re._coopMiss = (re._coopMiss || 0) + 1;
+				if(re._coopMiss >= 2) enemies.splice(ri, 1);      // gone from two snapshots in a row: the host no longer has it
+			}
+		}
 		if(w.en){
 			for(var i = 0; i < w.en.length; i++){
 				var e = w.en[i];
@@ -43579,9 +43839,11 @@ if(typeof IS_COLOSSEUM !== 'undefined' && IS_COLOSSEUM && window.PvpArena) PvpAr
 	   buff multipliers are not applied a second time. */
 	function applyProjectiles(msg){
 		if(!msg || !msg.list || COOP_HOST) return;
+		var cap = (typeof onlineEnemyProjCap === 'function' ? onlineEnemyProjCap() : 70) + 20;
 		for(var i = 0; i < msg.list.length; i++){
 			var p = msg.list[i];
 			if(!p) continue;
+			if(enemyProjectiles.length >= cap) break;      // a burst bigger than this screen can show: keep the frame rate
 			p.effects = p.effects || [];
 			enemyProjectiles.push(p);
 		}
@@ -43597,6 +43859,8 @@ if(typeof IS_COLOSSEUM !== 'undefined' && IS_COLOSSEUM && window.PvpArena) PvpAr
 				var ev = list[i], d = ev.data || {};
 				if(ev.type === 'warn') showRaidWarning(d.text, d.duration);
 				else if(ev.type === 'ind') addRaidIndicator(d.x, d.y, d.w, d.h, d.d, d.c, d.t);
+				else if(ev.type === 'beamInd'){ if(typeof addRaidBeamIndicator === 'function') addRaidBeamIndicator(d.ox, d.oy, d.angle, d.length, d.d, d.c); }
+				else if(ev.type === 'chit'){ if(typeof window.__challengerAddHit === 'function') window.__challengerAddHit(d); }
 				else if(ev.type === 'hit'){
 					// an enemy the host runs went after YOU: the damage is applied here, with your own defences and i-frames
 					if(net && d.to === net.id){ CoopSync.applying = false; const _b = _coopBossDmg; _coopBossDmg = !!d.b; window.__survRemoteHit = true; try { damagePlayer(d.d, d.e || []); } finally { window.__survRemoteHit = false; _coopBossDmg = _b; CoopSync.applying = true; } }
@@ -43632,19 +43896,25 @@ if(typeof IS_COLOSSEUM !== 'undefined' && IS_COLOSSEUM && window.PvpArena) PvpAr
 				a.snap = { x: s.x, y: s.y, t: performance.now() };
 				if(!a.init){ a.renderX = s.x; a.renderY = s.y; a.x = s.x; a.y = s.y; a.init = true; }
 				if(s.cast) replayIncomingCast(s.cast);
+				if(typeof window.__coopOnState === 'function') window.__coopOnState(a, s);
 			},
 			onCast: function(c){
+				if(typeof window.__coopOnCombat === 'function' && window.__coopOnCombat(c)) return;      // a rune spell or a melee swing (coop-combat.js)
 				replayIncomingCast(c);
 			},
 			onEnemyDmg: function(d){
 				// Only the host applies damage; its snapshot then corrects everyone.
 				if(!COOP_HOST || !d) return;
-				var target = d.boss ? getCoopBoss() : findCoopEnemy(d.key);
-				if(!target || target.dead) return;
-				target.hp -= (d.dmg || 0);
-				target.flash = 8;
-				coopThreat(target, d.from || 'guest', d.dmg || 0);      // their damage draws the enemy's attention
-				if(target.hp <= 0 && !isCoopBoss(target)){ target.hp = 0; target.dead = true; target.deathTimer = 0; }
+				function hitOne(key, boss, dmg){
+					var target = boss ? getCoopBoss() : findCoopEnemy(key);
+					if(!target || target.dead || !(dmg > 0)) return;
+					target.hp -= dmg;
+					target.flash = 8;
+					coopThreat(target, d.from || 'guest', dmg);      // their damage draws the enemy's attention
+					if(target.hp <= 0 && !isCoopBoss(target)){ target.hp = 0; target.dead = true; target.deathTimer = 0; }
+				}
+				if(d.list){ for(var li = 0; li < d.list.length; li++){ var it = d.list[li]; hitOne(it[0], it[0] === '#boss', it[1]); } return; }      // batched (one message per ~0.1 s)
+				hitOne(d.key, !!d.boss, d.dmg || 0);
 			},
 			onWorld: applyWorld,
 			onProjectiles: applyProjectiles,
@@ -43656,6 +43926,25 @@ if(typeof IS_COLOSSEUM !== 'undefined' && IS_COLOSSEUM && window.PvpArena) PvpAr
 				}
 			},
 		});
+		// Bandwidth: the realtime channel drops anything past its per-second budget, which is what made allies
+		// miss boss attacks and casts. The host never needs to report damage (it applies its own), and a guest's
+		// hits are summed per enemy and sent ten times a second instead of once per hit.
+		(function(){
+			var rawDmg = net.sendEnemyDmg, pend = Object.create(null), pendN = 0, lastFlush = 0;
+			net.sendEnemyDmg = function(d){
+				if(COOP_HOST || !d) return;
+				var k = d.boss ? '#boss' : d.key; if(!k) return;
+				pend[k] = (pend[k] || 0) + (d.dmg || 0); pendN++;
+			};
+			net.flushDmg = function(force){
+				var t = performance.now();
+				if(!pendN || (!force && t - lastFlush < 100)) return;
+				lastFlush = t;
+				var list = []; for(var k in pend){ list.push([k, Math.round(pend[k])]); }
+				pend = Object.create(null); pendN = 0;
+				if(list.length) rawDmg.call(net, { list: list });
+			};
+		})();
 		window.__coopNet = net;
 		CoopSync.net = net;
 	}
@@ -43711,6 +44000,10 @@ if(typeof IS_COLOSSEUM !== 'undefined' && IS_COLOSSEUM && window.PvpArena) PvpAr
 				list.push(rec);
 			}
 			if(list.length) out.en = list;
+			// the list holds every enemy the host has: guests drop whatever is not in it (a skipped wave, a cleared arena …)
+			if(list.length < 60) out.ek = 1;
+		} else if(typeof enemies !== 'undefined'){
+			out.ek = 1;
 		}
 		return out;
 	}
@@ -43732,6 +44025,7 @@ if(typeof IS_COLOSSEUM !== 'undefined' && IS_COLOSSEUM && window.PvpArena) PvpAr
 					maxHp: Math.round(maxHealth),
 					name: (window.CloudSave && CloudSave.displayName) || 'Mage'
 				};
+				if(typeof window.__coopStateExtra === 'function'){ try { Object.assign(cst, window.__coopStateExtra()); } catch(_e){} }
 				net.sendState(cst);
 			}
 			if(COOP_HOST){
@@ -43740,20 +44034,24 @@ if(typeof IS_COLOSSEUM !== 'undefined' && IS_COLOSSEUM && window.PvpArena) PvpAr
 					lastWorldSent = now;
 					net.sendWorld(buildWorldSnapshot());
 				}
-				// Flush spawns/telegraphs the same frame they happen.
-				if(CoopSync.projQueue.length){
+				// Flush spawns/telegraphs in small batches (~15 a second), not every frame: the channel has a message budget.
+				var batchDue = now - (CoopSync._lastFlush || 0) > 66;
+				if(batchDue) CoopSync._lastFlush = now;
+				if(batchDue && CoopSync.projQueue.length){
 					var batch = CoopSync.projQueue.splice(0, party >= 3 ? 18 : 32);
 					net.sendProjectiles({ list: batch.map(function(p){ return CoopSync.serializeProj(p); }) });
 				}
-				if(CoopSync.eventQueue.length){
+				if(batchDue && CoopSync.eventQueue.length){
 					net.sendEvent({ list: CoopSync.eventQueue.splice(0, CoopSync.eventQueue.length) });
 				}
 			} else {
+				if(net.flushDmg) net.flushDmg();
 				// Guests never transmit world data; drop anything that queued up.
 				CoopSync.projQueue.length = 0;
 				CoopSync.eventQueue.length = 0;
 			}
 		}
+		if(window.CoopCombat) CoopCombat.tick();
 		// Smooth every ally toward its latest snapshot with light extrapolation.
 		for(var id in allies){
 			var a = allies[id];
@@ -43788,11 +44086,12 @@ if(typeof IS_COLOSSEUM !== 'undefined' && IS_COLOSSEUM && window.PvpArena) PvpAr
 		for(var id in allies){
 			var a = allies[id];
 			if(!a.active) continue;
-			drawNetMage(a, a.colorIdx, ALLY_W, ALLY_H);
+			if(!(typeof window.__coopDrawAlly === 'function' && window.__coopDrawAlly(a, ALLY_W, ALLY_H))) drawNetMage(a, a.colorIdx, ALLY_W, ALLY_H);
 		}
 	};
 
 })();
 </script>
+<script src="coop-combat.js?v=1"></script>
 </body>
 </html>

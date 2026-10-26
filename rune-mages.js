@@ -151,7 +151,7 @@
 		// again (a binding vow makes it brief); no rules — the Overwhelm is the attack, he follows it with a single strike
 		domain: { name: 'Domain: Endless Expanse', cd: 0.5, wind: 0, tree:
 			N('zone', { radius: 820, spawn: 'caster' }, null,
-				N('domain', { form: 'closed', duration: 3, sureHit: 'yes', vow: 'brief', opening: 'overwhelm', fuel: 'self', selfFuel: 520 })) }
+				N('domain', { form: 'closed', duration: 3, sureHit: 'yes', vow: 'brief', opening: 'overwhelm', fuel: 'self', selfFuel: 520, cinematic: 'none' })) }
 	};
 
 	/* melee energy: a fist or a blade thrown at point-blank range that bursts where its reach ends (a blow, not a shot) */
@@ -332,7 +332,7 @@
 				court: { name: 'Domain: Crushing Court', cd: 30, tree:
 					N('zone', { radius: 340, spawn: 'caster' }, null,
 						N('target', { kind: 'environment' }, null, N('drawOut', { duration: 1.4, from: 'target', infAmount: 420 })),
-						N('domain', { form: 'closed', duration: 7, sureHit: 'yes', vow: 'none' }, L.d(1.55),
+						N('domain', { form: 'closed', duration: 7, sureHit: 'yes', vow: 'none', cinematic: 'none' }, L.d(1.55),
 							gen(30, L.d(1.1), comp(6, 'spike', null, toFoe())),
 							gen(60, L.c('targetMoving', {}, 30), tech('gravity', 6, { gravity_you: 'no' }, null, N('redirect', { toward: 'caster', arrive: 'stop', speedPct: 60 }))))) }
 			}

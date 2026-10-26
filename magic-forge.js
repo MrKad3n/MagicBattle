@@ -1,6 +1,6 @@
 /*
  * RUNE FORGE — visual editor for MagicEngine spell trees.
- * A giant pan/zoom canvas of rune slots. Every slot has four "+" sockets;
+ * A giant pan/zoom canvas of rune slots. Every slot has eight "+" sockets (N NE E SE S SW W NW);
  * every parent→child edge carries a connector (Instant / Delay / Condition).
  * The editor only builds the definition; MagicEngine validates and runs it.
  */
@@ -38,7 +38,7 @@
 		S = {
 			opts, def, profile: opts.profile || ME.deriveProfile({}),
 			sel: null, view: { x:0, y:0, z:1, tx:0, ty:0, tz:1 }, undo: [], redo: [], dirty: false,
-			nodeEls: {}, linkEls: {}, occupied: {}, idx: ME.indexOf(def), report: null,
+			nodeEls: {}, linkEls: {}, loopEls: {}, occupied: {}, idx: ME.indexOf(def), report: null,
 			debug: false, raf: 0, justCreated: null, newLink: null, hoverPath: null, search: { q:'', hits:[], i:0 },
 			preview: null, editing: false
 		};
@@ -212,7 +212,13 @@
 		const a = nodePos(p), b = nodePos(c);
 		const dx = b.x - a.x, dy = b.y - a.y;
 		let sx, sy, ex, ey, c1x, c1y, c2x, c2y;
-		if(Math.abs(dx) * GY >= Math.abs(dy) * GX){
+		const gdx = c.gx - p.gx, gdy = c.gy - p.gy;
+		if(gdx && gdy && Math.abs(gdx) === Math.abs(gdy)){      // a diagonal socket: corner to corner
+			const qx = Math.sign(dx), qy = Math.sign(dy);
+			sx = a.x + qx * HW; sy = a.y + qy * HH; ex = b.x - qx * HW; ey = b.y - qy * HH;
+			const k = Math.max(40, Math.abs(ex - sx) * 0.45);
+			c1x = sx + qx * k; c1y = sy; c2x = ex - qx * k; c2y = ey;
+		} else if(Math.abs(dx) * GY >= Math.abs(dy) * GX){
 			const s = Math.sign(dx) || 1;
 			sx = a.x + s * HW; sy = a.y; ex = b.x - s * HW; ey = b.y;
 			const k = Math.max(40, Math.abs(ex - sx) * 0.5);
@@ -232,6 +238,7 @@
 		if(!n.parent) return null;
 		const p = S.def.nodes[n.parent]; if(!p) return null;
 		const dx = p.gx - n.gx, dy = p.gy - n.gy;
+		if(dx && dy && Math.abs(dx) === Math.abs(dy)) return (dy > 0 ? 's' : 'n') + (dx > 0 ? 'e' : 'w');      // a diagonal parent
 		if(Math.abs(dx) >= Math.abs(dy)) return dx > 0 ? 'e' : 'w';
 		return dy > 0 ? 's' : 'n';
 	}
@@ -241,8 +248,10 @@
 		const world = S.els.world, svg = S.els.svg;
 		for(const id in S.nodeEls) S.nodeEls[id].remove();
 		for(const id in S.linkEls) if(S.linkEls[id].badge) S.linkEls[id].badge.remove();
+		for(const id in (S.loopEls || {})) if(S.loopEls[id].badge) S.loopEls[id].badge.remove();
 		svg.innerHTML = '';
-		S.nodeEls = {}; S.linkEls = {}; S.occupied = {};
+		S.nodeEls = {}; S.linkEls = {}; S.loopEls = {}; S.occupied = {};
+		for(const n of nodesArr()) if(n.loop && n.loop.to && !S.def.nodes[n.loop.to]) n.loop.to = null;      // the rune it returned to is gone
 		const rep = S.report, cap = S.profile.runeCapacity, full = count() >= cap;
 		for(const n of nodesArr()) S.occupied[key(n.gx, n.gy)] = n.id;
 
@@ -274,6 +283,32 @@
 			frag.appendChild(badge);
 			S.linkEls[n.id] = { path, glow, flow, badge };
 		}
+		// loop return branches: a dashed arrow from a Loop rune back to the earlier rune it repeats from
+		{
+			const NS = 'http://www.w3.org/2000/svg';
+			const defs = document.createElementNS(NS, 'defs');
+			defs.innerHTML = '<marker id="mfLoopHead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="' + LOOP_COL + '"/></marker>';
+			svg.appendChild(defs);
+			for(const n of nodesArr()){
+				if(n.type !== 'loop' || !n.loop || !n.loop.to || isHidden(n.id) || isHidden(n.loop.to)) continue;
+				const t = S.def.nodes[n.loop.to]; if(!t) continue;
+				const g = loopGeom(n, t);
+				const bad = rep.byLink['loop:' + n.id];
+				const glow = document.createElementNS(NS, 'path'); glow.setAttribute('d', g.d); glow.setAttribute('class', 'mf-loop-glow');
+				const path = document.createElementNS(NS, 'path'); path.setAttribute('d', g.d); path.setAttribute('class', 'mf-loop' + (bad ? ' err' : '')); path.setAttribute('marker-end', 'url(#mfLoopHead)');
+				const flow = document.createElementNS(NS, 'path'); flow.setAttribute('d', g.d); flow.setAttribute('class', 'mf-loop-flow');
+				svg.appendChild(glow); svg.appendChild(path); svg.appendChild(flow);
+				const badge = h('div', 'mf-badge loop' + (bad ? ' err' : '') + (S.sel && S.sel.type === 'loop' && S.sel.id === n.id ? ' selected' : ''));
+				badge.style.left = g.mx + 'px'; badge.style.top = g.my + 'px';
+				badge.innerHTML = '<i>↻</i><span>' + esc(loopLabel(n)) + '</span>';
+				badge.title = bad ? bad.map(e => '⚠ ' + e.text).join('\n') : loopTitle(n);
+				badge.addEventListener('pointerdown', e => e.stopPropagation());
+				badge.addEventListener('click', e => { e.stopPropagation(); select({ type:'loop', id:n.id }); });
+				badge.addEventListener('contextmenu', e => { e.preventDefault(); e.stopPropagation(); select({ type:'loop', id:n.id }); loopMenu(n.id, e); });
+				frag.appendChild(badge);
+				S.loopEls[n.id] = { path, glow, flow, badge };
+			}
+		}
 		// nodes
 		for(const n of nodesArr()){
 			if(isHidden(n.id)) continue;
@@ -287,6 +322,86 @@
 		S.els.hint.style.opacity = empty ? 1 : 0;
 		S.els.hint.textContent = empty ? 'Every spell begins with one rune slot. Choose its rune, then grow the tree with the + sockets.' : '';
 		if(S.hoverPath) highlightPath(S.hoverPath);
+	}
+
+	/* ------------------------------------------------------------------ loop return branch */
+	const LOOP_COL = '#ffe08a';
+	function loopGeom(n, t){
+		const a = nodePos(n), b = nodePos(t), O = 6000;
+		let sx, sy, ex, ey, c1x, c1y, c2x, c2y;
+		if(Math.abs(a.x - b.x) < GX * 0.5){      // straight above it: out of the right-hand side and back in
+			sx = a.x + HW; sy = a.y; ex = b.x + HW; ey = b.y;
+			const k = 110 + Math.min(120, Math.abs(ey - sy) * 0.1);
+			c1x = sx + k; c1y = sy; c2x = ex + k; c2y = ey;
+		} else {                                  // a different column: an arc under the runes, from this one's bottom to that one's bottom
+			sx = a.x; sy = a.y + HH; ex = b.x; ey = b.y + HH;
+			const k = 70 + Math.min(150, Math.abs(ex - sx) * 0.12);
+			c1x = sx; c1y = sy + k; c2x = ex; c2y = ey + k;
+		}
+		const mx = 0.125 * sx + 0.375 * c1x + 0.375 * c2x + 0.125 * ex, my = 0.125 * sy + 0.375 * c1y + 0.375 * c2y + 0.125 * ey;
+		return { d: `M${sx + O},${sy + O} C${c1x + O},${c1y + O} ${c2x + O},${c2y + O} ${ex + O},${ey + O}`, mx, my };
+	}
+	function loopLabel(n){
+		const L = n.loop || {}, p = n.params || {};
+		let s = '×' + (p.times | 0);
+		if(L.mode === 'condition'){ const c = ME.Conditions[L.cond && L.cond.type]; s += (L.check === 'now' ? ' while ' : ' on ') + (c ? c.name.toLowerCase() : '?'); }
+		return s;
+	}
+	function loopTitle(n){
+		const L = n.loop || {}, p = n.params || {}, t = L.to && S.def.nodes[L.to];
+		let s = 'Loop — runs from ' + runeName(t) + ' down to here again, ' + (p.times | 0) + ' time' + ((p.times | 0) === 1 ? '' : 's') + '. Each repeat costs the repeated runes\' mana × ' + ME.CONFIG.loopFee + '.';
+		if(L.mode === 'condition'){ const c = ME.Conditions[L.cond && L.cond.type]; s += L.check === 'now' ? ' It repeats only while "' + (c ? c.name : '?') + '" is still true.' : ' Each repeat waits until "' + (c ? c.name : '?') + '" happens (gives up after ' + fmt(L.cond.timeout) + 's).'; }
+		return s;
+	}
+	function loopMenu(id, e){
+		const n = S.def.nodes[id];
+		menu(e, [
+			{ label:'⚙ Edit the return branch', fn: () => select({ type:'loop', id }) },
+			{ label:'↻ Repeat at once', fn: () => { pushUndo(); n.loop.mode = 'instant'; markDirty(); refresh(); } },
+			{ label:'◆ Only when something happens…', fn: () => { pushUndo(); n.loop.mode = 'condition'; markDirty(); refresh(); } },
+			'-',
+			{ label:'✕ Disconnect the return branch', cls:'danger', fn: () => disconnectLoop(id) }
+		]);
+	}
+	function disconnectLoop(id){ const n = S.def.nodes[id]; if(!n || !n.loop || !n.loop.to) return; pushUndo(); n.loop.to = null; markDirty(); if(S.sel && S.sel.type === 'loop') S.sel = { type:'node', id }; refresh(); toast('Return branch disconnected'); }
+	/* pull the ⟲ handle onto an earlier rune on this branch: the Loop will return there */
+	function onLoopHandleDown(e, id){
+		if(e.button === 2) return;
+		e.stopPropagation(); e.preventDefault(); closeMenus();
+		const n = S.def.nodes[id]; if(!n) return;
+		const behind = ancestors(id).slice(1);
+		const NS = 'http://www.w3.org/2000/svg';
+		const guide = document.createElementNS(NS, 'path'); guide.setAttribute('class', 'mf-loop pulling'); guide.setAttribute('marker-end', 'url(#mfLoopHead)');
+		S.els.svg.appendChild(guide);
+		for(const k of behind){ const el = S.nodeEls[k]; if(el) el.classList.add('loop-ok'); }
+		const vp = S.els.vp, a = nodePos(n);
+		let over = null;
+		const toWorld = (cx, cy) => { const r = vp.getBoundingClientRect(), v = S.view; return { x: (cx - r.left - v.x) / v.z, y: (cy - r.top - v.y) / v.z }; };
+		const onMove = ev => {
+			const w = toWorld(ev.clientX, ev.clientY), O = 6000, sx = a.x + HW, sy = a.y;
+			const cx = sx + 60 + Math.max(0, (w.x - sx) * 0.4);
+			guide.setAttribute('d', `M${sx + O},${sy + O} C${cx + O},${sy + O} ${w.x - 60 + O},${w.y + O} ${w.x + O},${w.y + O}`);
+			const el = document.elementFromPoint(ev.clientX, ev.clientY), nd = el && el.closest && el.closest('.mf-node');
+			const id2 = nd ? nd.dataset.id : null;
+			if(over && S.nodeEls[over]) S.nodeEls[over].classList.remove('loop-hot');
+			over = id2 && behind.indexOf(id2) >= 0 ? id2 : null;
+			if(over && S.nodeEls[over]) S.nodeEls[over].classList.add('loop-hot');
+			guide.classList.toggle('bad', !!id2 && !over && id2 !== id);
+		};
+		const onUp = ev => {
+			window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp);
+			guide.remove();
+			for(const k in S.nodeEls) S.nodeEls[k].classList.remove('loop-ok', 'loop-hot');
+			const el = document.elementFromPoint(ev.clientX, ev.clientY), nd = el && el.closest && el.closest('.mf-node');
+			const id2 = nd ? nd.dataset.id : null;
+			if(id2 && behind.indexOf(id2) >= 0){
+				pushUndo(); n.loop = n.loop || ME.defaultLoop(); n.loop.to = id2; markDirty();
+				select({ type:'loop', id }, true); refresh();
+				toast('↻ Loop returns to ' + runeName(S.def.nodes[id2]) + ' — click the ↻ badge to give it a condition');
+			} else if(id2 && id2 !== id) toast('⚠ A loop can only return to a rune BEFORE it on its own branch', 'err');
+			else if(!id2) select({ type:'node', id });
+		};
+		window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp);
 	}
 
 	function linkLabel(l){
@@ -342,10 +457,10 @@
 			t.addEventListener('click', e => { e.stopPropagation(); toggleCollapse(n.id); });
 			el.appendChild(t);
 		}
-		// four + sockets
+		// eight + sockets
 		if(!(n.ui && n.ui.collapsed)){
 			const ps = parentSide(n);
-			for(const d of ['n','e','s','w']){
+			for(const d of ['n','ne','e','se','s','sw','w','nw']){
 				if(d === ps) continue;
 				const v = ME.DIRS[d];
 				if(S.occupied[key(n.gx + v.x, n.gy + v.y)]) continue;
@@ -355,6 +470,12 @@
 				b.addEventListener('click', e => { e.stopPropagation(); addChild(n.id, d); });
 				el.appendChild(b);
 			}
+		}
+		if(n.type === 'loop'){
+			const hd = h('button', 'mf-loophandle' + (n.loop && n.loop.to ? ' on' : ''), '⟲');
+			hd.title = n.loop && n.loop.to ? 'Drag onto a different earlier rune to change where this loop returns' : 'Drag this onto an EARLIER rune on this branch: the loop will repeat from there';
+			hd.addEventListener('pointerdown', e => onLoopHandleDown(e, n.id));
+			el.appendChild(hd);
 		}
 		const card = el.querySelector('.mf-card');
 		card.addEventListener('pointerdown', e => onNodeDown(e, n.id));
@@ -387,6 +508,7 @@
 		pushUndo();
 		S.def.seq = (S.def.seq | 0) + 1;
 		const n = ME.makeNode(null, pid, dir, gx, gy, S.def.seq);
+		if(p.type === 'conditional') n.link.mode = 'condition';      // a branch of a Conditional is a rule: "when this happens"
 		S.def.nodes[n.id] = n;
 		S.justCreated = n.id; S.newLink = n.id;
 		markDirty();
@@ -436,6 +558,8 @@
 		const n = S.def.nodes[id];
 		pushUndo();
 		n.type = type; n.params = ME.paramDefaults(type);
+		if(type === 'loop') n.loop = ME.defaultLoop(); else if(n.loop) delete n.loop;
+		if(type === 'conditional') for(const k of kidsOf(id)){ const c = S.def.nodes[k]; if(c.link && c.link.mode === 'instant') c.link.mode = 'condition'; }      // its branches wait for their own conditions
 		if(type === 'technique'){
 			const usable = ME.Techniques.list().filter(t => ME.Techniques.canUse(S.profile, t.id));
 			if(usable[0]) n.params.technique = usable[0].id;
@@ -520,6 +644,7 @@
 		if(!silent){
 			for(const id in S.nodeEls) S.nodeEls[id].classList.toggle('selected', !!(sel && sel.type === 'node' && sel.id === id));
 			for(const id in S.linkEls) S.linkEls[id].badge.classList.toggle('selected', !!(sel && sel.type === 'link' && sel.id === id));
+			for(const id in S.loopEls) S.loopEls[id].badge.classList.toggle('selected', !!(sel && sel.type === 'loop' && sel.id === id));
 			renderInspector();
 		}
 	}
@@ -836,10 +961,11 @@
 			m.classList.toggle('over', val > max);
 		};
 		set('runes', rep.runeCount, P.runeCapacity, rep.runeCount + ' / ' + P.runeCapacity);
-		set('cost', rep.cost, P.maxEnergy, rep.cost + ' / ' + P.maxEnergy);
+		const loopE = Math.round(rep.loop || 0);
+		set('cost', rep.cost - loopE, P.maxEnergy, (rep.cost - loopE) + (loopE ? ' +' + loopE + '↻' : '') + ' / ' + P.maxEnergy);
 		set('output', rep.peakOutput, P.maxOutput, rep.peakOutput + ' / ' + P.maxOutput);
 		S.els.meters.runes.title = 'Rune slots used. Your Energy Control allows ' + P.runeCapacity + ' (hard cap ' + ME.CONFIG.maxRunes + ').';
-		S.els.meters.cost.title = 'Energy drawn from your reserve when cast (max reserve ' + P.maxEnergy + ').';
+		S.els.meters.cost.title = 'Energy drawn from your reserve when cast (max reserve ' + P.maxEnergy + ').' + (loopE ? ' Loops cost ' + loopE + ' more, a little at a time: every repeat is paid when it starts.' : '');
 		S.els.meters.output.title = 'Estimated peak simultaneous output, sum of |power| across the whole tree. Max Output ' + P.maxOutput + '.';
 	}
 
@@ -850,6 +976,7 @@
 		const sel = S.sel;
 		if(sel && sel.type === 'node' && S.def.nodes[sel.id]) inspectNode(S.def.nodes[sel.id], head, body);
 		else if(sel && sel.type === 'link' && S.def.nodes[sel.id]) inspectLink(S.def.nodes[sel.id], head, body);
+		else if(sel && sel.type === 'loop' && S.def.nodes[sel.id] && S.def.nodes[sel.id].loop) inspectLoop(S.def.nodes[sel.id], head, body);
 		else inspectSpell(head, body);
 	}
 	function renderInspectorLive(){
@@ -868,7 +995,8 @@
 		const stat = (l, v, bad) => '<div class="mf-stat"><small>' + l + '</small><b style="' + (bad ? 'color:var(--mf-err)' : '') + '">' + v + '</b></div>';
 		let html = '<div class="mf-stats">'
 			+ stat('Runes', rep.runeCount + ' / ' + P.runeCapacity, rep.runeCount > P.runeCapacity)
-			+ stat('Energy cost', rep.cost, rep.cost > P.maxEnergy)
+			+ stat('Energy cost', rep.cost - Math.round(rep.loop || 0), rep.cost - Math.round(rep.loop || 0) > P.maxEnergy)
+			+ (rep.loop ? stat('Loop repeats', '+' + Math.round(rep.loop)) : '')
 			+ stat('Peak output', rep.peakOutput + ' / ' + P.maxOutput, rep.peakOutput > P.maxOutput)
 			+ stat('Energy created', Math.round(rep.energyCreated))
 			+ stat('Efficiency loss', rep.efficiencyLoss)
@@ -955,6 +1083,13 @@
 			b.addEventListener('click', () => { select({ type:'link', id:n.id }); });
 			ls.appendChild(b); body.appendChild(ls);
 		}
+		if(n.type === 'loop' && n.loop){
+			const lp = h('div', 'mf-sec'); lp.innerHTML = '<div class="mf-sec-t">Return branch</div>';
+			const t = n.loop.to && S.def.nodes[n.loop.to];
+			lp.appendChild(h('div', 'mf-hint', t ? 'Returns to <b>' + esc(runeName(t)) + '</b> — ' + esc(loopTitle(n)) : 'Not connected. <b>Pull the ⟲ handle</b> on this rune onto an earlier rune on its branch to choose what it repeats.'));
+			if(t){ const b = h('button', 'mf-btn', '↻ ' + esc(loopLabel(n)) + ' — edit'); b.style.width = '100%'; b.addEventListener('click', () => select({ type:'loop', id:n.id })); lp.appendChild(b); }
+			body.appendChild(lp);
+		}
 		const act = h('div', 'mf-actions');
 		act.innerHTML = '<button class="mf-btn" data-x="change">⇆ Change rune</button><button class="mf-btn" data-x="center">◎ Center</button>'
 			+ (kidsOf(n.id).length ? '<button class="mf-btn" data-x="collapse">' + (n.ui && n.ui.collapsed ? '▸ Expand' : '▾ Collapse') + '</button>' : '')
@@ -996,6 +1131,11 @@
 			// Construction: what the energy will become (size, toughness, lifetime …) or what dismantling gives back
 			const C = X.construct;
 			html += '<div class="mf-sec"><div class="mf-sec-t">Construct</div><div class="mf-kv">' + Object.keys(C).map(k => kv(esc(k), esc(String(C[k])))).join('') + '</div></div>';
+		}
+		if(X.vow){
+			// Binding Vow: the whole contract, in words (condition, commitment, reward, what breaking it costs)
+			const V = X.vow;
+			html += '<div class="mf-sec"><div class="mf-sec-t">⛓ The contract</div><div class="mf-vow">' + Object.keys(V).map(k => '<div' + (k === 'Price' ? ' class="free"' : '') + '><small>' + esc(k) + '</small><span>' + esc(String(V[k])) + '</span></div>').join('') + '</div></div>';
 		}
 		if(info.tech && !X.tech) html += '<div class="mf-okline">Technique state: ' + esc(info.tech) + '</div>';
 		if(errs.length){
@@ -1144,6 +1284,49 @@
 				grid.appendChild(b);
 			}
 			wrap.appendChild(grid);
+		} else if(p.type === 'text'){
+			const inp = h('input', 'mf-text');
+			inp.type = 'text'; inp.maxLength = p.max || 40; inp.spellcheck = false; inp.value = val == null ? '' : String(val); inp.placeholder = p.placeholder || '';
+			inp.addEventListener('focus', begin);
+			inp.addEventListener('input', () => { begin(); n.params[p.key] = inp.value; markDirty(); });
+			inp.addEventListener('change', end);
+			inp.addEventListener('keydown', e => { e.stopPropagation(); if(e.key === 'Enter') inp.blur(); });
+			wrap.appendChild(inp);
+		} else if(p.type === 'domainLook'){
+			// the domain's look: a live thumbnail, the designer, a dice roll
+			const LKm = window.MagicDomainLook, ARTm = window.MagicDomainArt;
+			const box = h('div', 'mf-lookcard');
+			if(!LKm || !ARTm){ box.textContent = 'The domain painter did not load.'; wrap.appendChild(box); return wrap; }
+			const look = val ? LKm.sanitize(val) : LKm.resolve(n.params, true);
+			const cv = document.createElement('canvas'); cv.width = 528; cv.height = 300; cv.className = 'mf-lookprev';
+			box.appendChild(cv);
+			const base = LKm.PRESETS[look.preset];
+			box.appendChild(h('div', 'mf-lookname', val ? (look.preset === 'custom' || !base ? 'Your own look' : 'Your look · from ' + esc(base.name)) : 'From the theme · ' + esc(base ? base.name : 'Void')));
+			const row = h('div', 'mf-lookrow');
+			const design = h('button', 'mf-btn mf-lookbtn', '🎨 Design the look');
+			design.addEventListener('click', () => {
+				if(!window.DomainDesigner){ toast('The Domain Designer did not load', 'err'); return; }
+				window.DomainDesigner.open({ look, title: n.params.title, form: n.params.form,
+					onSave: (L, title) => { pushUndo(); n.params.look = L; if(title) n.params.title = title; markDirty(); refresh(); } });
+			});
+			const dice = h('button', 'mf-btn', '🎲'); dice.title = 'A random look';
+			dice.addEventListener('click', () => { pushUndo(); n.params.look = LKm.random(Math.floor(Math.random() * 1e9)); markDirty(); refresh(); });
+			row.appendChild(design); row.appendChild(dice);
+			if(val){ const clr = h('button', 'mf-btn', '↺'); clr.title = 'Forget this look and use the theme below'; clr.addEventListener('click', () => { pushUndo(); n.params.look = null; markDirty(); refresh(); }); row.appendChild(clr); }
+			box.appendChild(row);
+			wrap.appendChild(box);
+			requestAnimationFrame(() => { try { ARTm.thumbnail(cv.getContext('2d'), look, 528, 300, 2.4, { title: n.params.title }); } catch(e){} });
+		} else if(p.type === 'select' && p.swatches){
+			// a row of looks, each painted in its own colours
+			const grid = h('div', 'mf-swatches mf-looks');
+			for(const c of p.swatches){
+				const b = h('button', 'mf-swatch' + (String(val) === String(c.value) ? ' on' : ''));
+				b.title = c.label; b.dataset.v = c.value;
+				b.innerHTML = '<i style="background:radial-gradient(circle at 50% 50%,' + (c.c2 || '#fff') + ' 0,' + (c.c1 || '#888') + ' 55%,' + (c.bg || '#000') + ' 100%)"></i><span>' + esc(c.label) + '</span>';
+				b.addEventListener('click', () => { pushUndo(); n.params[p.key] = c.value; markDirty(); refresh(); });
+				grid.appendChild(b);
+			}
+			wrap.appendChild(grid);
 		} else if(p.type === 'select' && n.type === 'color' && p.key === 'color' && ME.COLOR_PRESETS){
 			// the Colour rune: a row of swatches (each shows the glow the energy will take)
 			const grid = h('div', 'mf-swatches');
@@ -1158,7 +1341,8 @@
 			wrap.appendChild(grid);
 		} else if(p.type === 'select'){
 			const opts = paramOptionsOf(p, n.params);
-			if(opts.length <= 4){
+			if(opts.length && !opts.some(o => String(o.value) === String(n.params[p.key]))){ n.params[p.key] = opts[0].value; setTimeout(() => refresh({ keepInspector:true }), 0); }      // its choices depend on another field (Binding Vow: the vows of the chosen kind)
+			if(opts.length <= 4 && !opts.some(o => o.group)){
 				const seg = h('div', 'mf-seg');
 				for(const o of opts){
 					const b = h('button', String(val) === String(o.value) ? 'on' : '', esc(o.label));
@@ -1169,7 +1353,12 @@
 				wrap.appendChild(seg);
 			} else {
 				const s = h('select', 'mf-select');
-				for(const o of opts){ const op = h('option', null, esc(o.label)); op.value = o.value; if(String(o.value) === String(val)) op.selected = true; s.appendChild(op); }
+				const groups = new Map();
+				for(const o of opts){
+					const op = h('option', null, esc(o.label)); op.value = o.value; if(String(o.value) === String(val)) op.selected = true;
+					if(o.group){ let g = groups.get(o.group); if(!g){ g = document.createElement('optgroup'); g.label = o.group; groups.set(o.group, g); s.appendChild(g); } g.appendChild(op); }
+					else s.appendChild(op);
+				}
 				s.addEventListener('change', () => { pushUndo(); const hit = opts.find(o => String(o.value) === s.value); n.params[p.key] = hit ? hit.value : s.value; markDirty(); refresh(); });      // keep the option's own type
 				wrap.appendChild(s);
 			}
@@ -1305,24 +1494,7 @@
 			box.appendChild(rangeField('Delay', l.delay, 0.05, 30, 0.05, 's', v => { l.delay = v; }));
 			box.appendChild(h('div', 'mf-hint', 'The wait happens between the two modifications. The spell\'s 2-minute lifetime still applies.'));
 		} else {
-			const s = h('select', 'mf-select');
-			for(const id in ME.Conditions){ const c = ME.Conditions[id]; const op = h('option', null, esc(c.name)); op.value = id; if(id === l.cond.type) op.selected = true; s.appendChild(op); }
-			s.addEventListener('change', () => { pushUndo(); l.cond.type = s.value; l.cond.params = ME.condDefaults(s.value); markDirty(); refresh(); });
-			const f = h('div', 'mf-field'); f.dataset.key = 'cond'; f.innerHTML = '<div class="mf-field-top"><label>Wait until</label></div>'; f.appendChild(s);
-			box.appendChild(f);
-			const cd = ME.Conditions[l.cond.type];
-			if(cd){
-				box.appendChild(h('div', 'mf-desc', esc(cd.description)));
-				// (this used an undefined limit before, which broke the panel for every condition with settings)
-				l.cond.params = l.cond.params || {};
-				const holder = { type: 'cond', params: l.cond.params };
-				for(const cp of cd.params){
-					if(l.cond.params[cp.key] == null) l.cond.params[cp.key] = cp.default;
-					box.appendChild(paramControl(holder, cp));
-				}
-			}
-			box.appendChild(rangeField('Give up after', l.cond.timeout, 0.5, 120, 0.5, 's', v => { l.cond.timeout = v; }));
-			box.appendChild(h('div', 'mf-hint', 'Only checked once execution reaches this connector. If it is never met, only this branch ends — sibling branches keep going.'));
+			condBox(box, l, 'Only checked once execution reaches this connector. If it is never met, only this branch ends — sibling branches keep going.', true);
 		}
 		body.appendChild(box);
 		const errs = S.report.byLink[n.id] || [];
@@ -1332,6 +1504,102 @@
 		act.querySelector('[data-x=insert]').addEventListener('click', () => insertBetween(n.id));
 		act.querySelector('[data-x=parent]').addEventListener('click', () => select({ type:'node', id:n.parent }));
 		act.querySelector('[data-x=child]').addEventListener('click', () => select({ type:'node', id:n.id }));
+		body.appendChild(act);
+	}
+	/* the condition picker (groups, search, settings, give-up time) — shared by connectors and a Loop's return branch */
+	function condBox(box, l, hint, timeout, label){
+		label = label || 'Wait until';
+		/* conditions come in groups (Target, Enemies around, You, This energy, Contact, Spell & time, Zone & domain)
+		   with a search box, so the one you want is a click or a few letters away */
+		const f = h('div', 'mf-field'); f.dataset.key = 'cond'; f.innerHTML = '<div class="mf-field-top"><label>' + label + '</label></div>';
+		const curDef = ME.Conditions[l.cond.type];
+		const groups = (ME.CONDITION_GROUPS || []).filter(g => Object.keys(ME.Conditions).some(k => ME.Conditions[k].group === g.id));
+		if(!S.condGroup || !groups.some(g => g.id === S.condGroup) || (curDef && curDef.group !== S.condGroup && !S.condPinned)) S.condGroup = curDef ? curDef.group : groups[0].id;
+		const search = h('input', 'mf-condsearch'); search.placeholder = 'Search conditions…'; search.spellcheck = false; search.value = S.condQuery || '';
+		const chips = h('div', 'mf-condgroups');
+		const list = h('div', 'mf-condlist');
+		const pickCond = (id) => { pushUndo(); l.cond.type = id; l.cond.params = ME.condDefaults(id); S.condQuery = ''; S.condPinned = false; markDirty(); refresh(); };
+		const paintList = () => {
+			list.innerHTML = '';
+			const q = (search.value || '').trim().toLowerCase();
+			const ids = Object.keys(ME.Conditions).filter(k => { const c = ME.Conditions[k]; return q ? ((c.name + ' ' + (c.description || '')).toLowerCase().indexOf(q) >= 0) : c.group === S.condGroup; });
+			if(!ids.length){ list.appendChild(h('div', 'mf-hint', 'No condition matches “' + esc(q) + '”.')); return; }
+			for(const k of ids){
+				const c = ME.Conditions[k], g = groups.find(x => x.id === c.group);
+				const b = h('button', 'mf-condbtn' + (k === l.cond.type ? ' on' : ''), esc(c.name) + (q && g ? '<small>' + esc(g.label) + '</small>' : ''));
+				b.title = c.description || '';
+				b.addEventListener('click', () => pickCond(k));
+				list.appendChild(b);
+			}
+		};
+		const paintChips = () => {
+			chips.innerHTML = '';
+			for(const g of groups){
+				const n = Object.keys(ME.Conditions).filter(k => ME.Conditions[k].group === g.id).length;
+				const b = h('button', 'mf-condchip' + (g.id === S.condGroup && !(search.value || '').trim() ? ' on' : ''), esc(g.label) + ' <span>' + n + '</span>');
+				b.title = g.hint || '';
+				b.addEventListener('click', () => { S.condGroup = g.id; S.condPinned = true; search.value = ''; S.condQuery = ''; paintChips(); paintList(); });
+				chips.appendChild(b);
+			}
+		};
+		search.addEventListener('input', () => { S.condQuery = search.value; paintChips(); paintList(); });
+		paintChips(); paintList();
+		f.appendChild(search); f.appendChild(chips); f.appendChild(list);
+		f.appendChild(h('div', 'mf-condnow', (label === 'Wait until' ? 'Waiting until' : 'Checks') + ': <b>' + esc(curDef ? curDef.name : 'unknown') + '</b>'));
+		box.appendChild(f);
+		const cd = ME.Conditions[l.cond.type];
+		if(cd){
+			box.appendChild(h('div', 'mf-desc', esc(cd.description)));
+			// (this used an undefined limit before, which broke the panel for every condition with settings)
+			l.cond.params = l.cond.params || {};
+			const holder = { type: 'cond', params: l.cond.params };
+			for(const cp of cd.params){
+				if(l.cond.params[cp.key] == null) l.cond.params[cp.key] = cp.default;
+				box.appendChild(paramControl(holder, cp));
+			}
+		}
+		if(timeout) box.appendChild(rangeField('Give up after', l.cond.timeout, 0.5, 120, 0.5, 's', v => { l.cond.timeout = v; }));
+		if(hint) box.appendChild(h('div', 'mf-hint', hint));
+	}
+	/* the Loop's return branch: where it goes back to, and what has to be true for it to repeat */
+	function inspectLoop(n, head, body){
+		const L = n.loop, t = L.to && S.def.nodes[L.to];
+		head.style.setProperty('--c', LOOP_COL);
+		head.innerHTML = headHtml('↻', 'Return branch', 'Loop  →  ' + (t ? runeName(t) : 'not connected'), LOOP_COL);
+		body.innerHTML = '<div class="mf-desc">The return branch decides <b>when</b> the Loop jumps back to ' + (t ? '<b>' + esc(runeName(t)) + '</b>' : 'the rune it is connected to') + ' and runs everything from there again. It is not a rune and does not use a rune slot. Every repeat costs the repeated runes\' mana × ' + ME.CONFIG.loopFee + '.</div>';
+		const sec = h('div', 'mf-sec'); sec.innerHTML = '<div class="mf-sec-t">Repeat</div>';
+		const seg = h('div', 'mf-seg modes');
+		for(const m of [['instant', '↻ Every time'], ['condition', '◆ Only when…']]){
+			const b = h('button', (L.mode === m[0] ? 'on' : ''), m[1]);
+			b.addEventListener('click', () => { pushUndo(); L.mode = m[0]; markDirty(); refresh(); });
+			seg.appendChild(b);
+		}
+		sec.appendChild(seg); body.appendChild(sec);
+		const box = h('div', 'mf-sec');
+		if(L.mode !== 'condition'){
+			box.innerHTML = '<div class="mf-hint">The loop goes back as soon as it reaches this point (after the pause set on the Loop rune), until its repeats are used up.</div>';
+		} else {
+			const seg2 = h('div', 'mf-seg modes');
+			for(const m of [['wait', '⏳ When it happens'], ['now', '✔ While still true']]){
+				const b = h('button', ((L.check || 'wait') === m[0] ? 'on' : ''), m[1]);
+				b.title = m[0] === 'wait' ? 'Each repeat waits until the condition occurs (and gives up after a while)' : 'Each repeat first checks the condition right now: if it no longer holds, the loop ends';
+				b.addEventListener('click', () => { pushUndo(); L.check = m[0]; markDirty(); refresh(); });
+				seg2.appendChild(b);
+			}
+			box.appendChild(seg2);
+			box.appendChild(h('div', 'mf-hint', (L.check || 'wait') === 'now'
+				? 'Checked at the moment the loop would go back: the target is still alive, the energy is still there, you are still in the air… When it is no longer true the loop ends and the runes after it run.'
+				: 'Every repeat waits for the condition to occur. If it never does, the loop ends after the give-up time and the runes after it run.'));
+			condBox(box, L, '', (L.check || 'wait') !== 'now', (L.check || 'wait') === 'now' ? 'Still true' : 'Wait until');
+		}
+		body.appendChild(box);
+		const errs = S.report.byLink['loop:' + n.id] || [];
+		if(errs.length){ const e = h('div', 'mf-sec'); e.innerHTML = '<div class="mf-sec-t">Problems</div><div class="mf-errlist">' + errs.map(x => '<div class="mf-erritem"><i>⚠</i><span>' + esc(x.text) + '</span></div>').join('') + '</div>'; body.appendChild(e); }
+		const act = h('div', 'mf-actions');
+		act.innerHTML = '<button class="mf-btn" data-x="loop">↻ Loop rune</button><button class="mf-btn" data-x="to">⌖ Returns to</button><button class="mf-btn danger" data-x="off">✕ Disconnect</button>';
+		act.querySelector('[data-x=loop]').addEventListener('click', () => select({ type:'node', id:n.id }));
+		const tb = act.querySelector('[data-x=to]'); if(t) tb.addEventListener('click', () => { select({ type:'node', id:t.id }); ensureVisible(t.id); }); else tb.disabled = true;
+		act.querySelector('[data-x=off]').addEventListener('click', () => disconnectLoop(n.id));
 		body.appendChild(act);
 	}
 	function rangeField(label, val, min, max, step, unit, set){
@@ -1654,6 +1922,8 @@
 		// the shape editor is a window of its own on top of the forge: its keys (Delete, Esc, Enter, Ctrl+Z, letters)
 		// must never reach the forge, or they delete / undo / swap runes behind it
 		if(window.ShapeEditor && window.ShapeEditor._state && window.ShapeEditor._state()) return;
+		if(window.DomainDesigner && window.DomainDesigner.isOpen && window.DomainDesigner.isOpen()) return;      // the Domain Designer handles its own keys
+		if(window.DomainDesigner && window.DomainDesigner.closedAt && performance.now() - window.DomainDesigner.closedAt < 400 && (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape')){ e.preventDefault(); return; }
 		// …nor the Enter / Space that closed it (or follows straight after): that would open the rune picker
 		if(window.ShapeEditor && window.ShapeEditor.closedAt && performance.now() - window.ShapeEditor.closedAt < 600 && (e.key === 'Enter' || e.key === ' ')){ e.preventDefault(); return; }
 		const tag = (e.target && e.target.tagName) || '';
@@ -1694,7 +1964,7 @@
 		if(k === '+' || k === '='){ zoomBy(1.2); return; }
 		if(k === '-'){ zoomBy(1 / 1.2); return; }
 		if(k === 'enter' && S.sel && S.sel.type === 'node'){ e.preventDefault(); openPicker(S.sel.id, 'change'); return; }
-		const dirMap = { arrowup:'n', arrowdown:'s', arrowleft:'w', arrowright:'e' };
+		const dirMap = { arrowup:'n', arrowdown:'s', arrowleft:'w', arrowright:'e', pageup:'ne', pagedown:'se', end:'sw', home:'nw' };
 		if(dirMap[k]){
 			e.preventDefault();
 			if(!S.sel){ select({ type:'node', id:S.def.rootId }); ensureVisible(S.def.rootId); return; }

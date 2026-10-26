@@ -32,7 +32,7 @@
 			surfaceLenBase: 40, surfaceLenPerRootE: 9, surfaceThick: 7, restitution: 0.85,
 			storeToForm: 500 },      // stored Spatial energy (drawn from a Spatial Infinity source or a Spatial zone) opens its portal at this much
 		// pulls: first tuning 0.55 / 0.22 / 0.16 / 0.6 / 0.18, then +15%, ×1.5, ×2 (now 3.45× the first)
-		gravity: { strength: 1, rangeBase: 70, rangePerS: 60, pullEnemy: 1.898, enemyPullMul: 0.4, enemyPullMax: 0.9, infEnemyMul: 3, infEnemyMax: 4, infRange: 1.35, crushEvery: 0.25, pullEnergy: 0.759, pullProjectile: 0.552, focusSteer: 0.05, linkPull: 2.07, fieldMul: 1.4, foreignWeight: 0.621,
+		gravity: { strength: 1, rangeBase: 70, rangePerS: 60, pullEnemy: 1.265, enemyPullMul: 0.4, enemyPullMax: 0.6, infEnemyMul: 3, infEnemyMax: 2.667, infRange: 1.35, crushEvery: 0.25, pullEnergy: 0.506, pullProjectile: 0.368, focusSteer: 0.05, linkPull: 1.38, fieldMul: 1.4, foreignWeight: 0.621,
 			bendGuided: 0.6,            // how much of the pull also bends energy that is flying a set course (Redirect)
 			repelFar: 0.2, repelNear: 1.7, repelCaster: 0.55,   // reverse: a slight push at the edge that grows steeply as you get closer
 			mergeReach: 0.75 },         // gravity energy touching gravity energy of the same sign becomes one
@@ -919,7 +919,7 @@
 	TQ.register({
 		id: 'antimagic', combines: true, name: 'Anti-Magic', reversedName: 'Reverse Anti-Magic (restoration)', antiResist: 1,
 		spriteBlend: (s) => s > 0 ? 'source-over' : 'lighter',      // crowd stamps: a dark mass laid over the scene
-		description: 'Not an element: a substance that opposes magic itself. Anti-Magic energy consumes the magic it touches — raw energy, other techniques, zones, projectiles, reinforcement, portals and Infinity — the weaker side is used up and the stronger keeps the rest. It hardly harms creatures that have no magic. It works on your own spells too. Reversed, it restores and stabilises magic that already exists (weakened energy, suppressed techniques and zones, unstable compression, portals, Infinity) — it never creates energy.',
+		description: 'Not an element: a substance that opposes magic itself. Anti-Magic energy consumes the magic it touches — raw energy, other techniques, zones, projectiles, reinforcement, portals and Infinity — the weaker side is used up and the stronger keeps the rest. It hardly harms creatures that have no magic. It works on your own spells too. Reversed, it restores and stabilises magic that already exists (weakened energy, suppressed techniques and zones, unstable compression, portals, Infinity) — it never creates energy. Reinforcing a body or weapon with it wraps it in a dark shroud. On a weapon it erodes or erases any magic the blade touches (paid for by the reinforcement), bears more when parrying spells, and REFLECTS the spells it parries.',
 		color: '#a0a0a0', reversedColor: '#9ff0c8',
 		palette: { core: '#6a6a6a', mid: '#1c1c1c', outer: '#000000' },
 		reversePalette: { core: '#ffffff', mid: '#9ff0c8', outer: '#3fae8a' },
@@ -2417,7 +2417,7 @@
 				const add = (type, parent, params, link) => { const n = ME.makeNode(type, parent, 's', 0, seq, seq); seq++; n.params = Object.assign(ME.paramDefaults(type), params || {}); if(link) n.link = Object.assign(n.link, link); s.nodes[n.id] = n; return n; };
 				const t = add('target', root.id, { kind: 'environment' });
 				add('drawOut', t.id, { duration: 1.6, infAmount: opt.fuel || 500, flow: 'one' });
-				const d = add('domain', root.id, Object.assign({ form: 'closed', duration: 4 }, opt.domain || {}), { mode: 'delay', delay: 1.8 });
+				const d = add('domain', root.id, Object.assign({ form: 'closed', duration: 4, cinematic: 'none' }, opt.domain || {}), { mode: 'delay', delay: 1.8 });
 				if(opt.rules !== false){
 					const g = add('generate', d.id, { amount: 20 }, opt.ruleLink || { mode: 'delay', delay: 0.5 });
 					const tq = add('technique', g.id, { technique: 'thermal', power: 5 });
@@ -3238,7 +3238,7 @@
 			const res = S.cast(steps);
 			S.step(50);
 			const z = S.W.bodies.find(q => q.alive && q.isZone);
-			const res2 = z ? S.cast([ ['target', { kind: 'zone', select: 'nearCaster', range: 1600 }], ['domain', { form: 'closed', duration: 4, sureHit: 'yes', opening: 'overwhelm' }] ]) : null;
+			const res2 = z ? S.cast([ ['target', { kind: 'zone', select: 'nearCaster', range: 1600 }], ['domain', { form: 'closed', duration: 4, sureHit: 'yes', opening: 'overwhelm', cinematic: 'none' }] ]) : null;
 			S.step(2);
 			const st = S.W.status.get(en);
 			ok('IG4 A domain that opens with Overwhelm stuns a foe inside for a moment', !!(st && st.stunned) && en.stunTimer > 30, (res2 && res2.ok ? 'domain open' : 'domain failed: ' + (res2 ? res2.error : 'no zone')) + ' · stunned ' + (st && st.stunned ? st.stunned.t.toFixed(1) + ' s' : 'no') + ' · stunTimer ' + (en.stunTimer || 0));
@@ -3285,7 +3285,7 @@
 			// IG7 a domain fuelled with your own energy needs no Draw Out
 			const en = dummy(); en.x = 160; en.y = 90;
 			const S = sim({ enemies: [ en ] });
-			const res = S.cast([ ['zone', { radius: 300, spawn: 'caster' }], ['domain', { form: 'closed', duration: 4, sureHit: 'yes', fuel: 'self', selfFuel: 400, opening: 'overwhelm' }] ]);
+			const res = S.cast([ ['zone', { radius: 300, spawn: 'caster' }], ['domain', { form: 'closed', duration: 4, sureHit: 'yes', fuel: 'self', selfFuel: 400, opening: 'overwhelm', cinematic: 'none' }] ]);
 			S.step(2);
 			const D = S.W.domains.find(d => d.alive);
 			ok('IG7 A domain fuelled with your own energy opens at once (no Draw Out)', res.ok && !!D && D.fuel0 >= 300 && !!(S.W.status.get(en) || {}).stunned, (res.ok ? 'cast' : 'failed: ' + res.error) + ' · domain ' + (D ? 'open with ' + r1(D.fuel0) + ' E' : 'not open'));

@@ -700,12 +700,14 @@
 			pits:[{ x:80, w:4240, depth:220 }],
 			platforms:[
 				P('static', 1380, 180, 1640, { central:true }),
-				P('static', 320, 420, 300),
-				P('static', 3780, 420, 300),
-				P('static', 780, 640, 260),
-				P('static', 3360, 640, 260),
-				P('static', 160, 860, 340, { perch:true }),
-				P('static', 3900, 860, 340, { perch:true }),
+				// side ledges as a climbable staircase off each end of the central platform (each step 120 up and
+				// 120 across, inside one jump, never overhanging the take-off) — they used to start 760 px away and 460 px up
+				P('static', 1060, 300, 200),
+				P('static', 3140, 300, 200),
+				P('static', 700, 420, 240),
+				P('static', 3460, 420, 240),
+				P('static', 280, 540, 300, { perch:true }),
+				P('static', 3820, 540, 300, { perch:true }),
 			],
 			pillars:[
 				{ x:980, yFromFloor:0, w:72, h:300 },
