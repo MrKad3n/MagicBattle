@@ -2964,3 +2964,12 @@ More than 24 energies on screen → cached-frame stamps; a spatial grid for meet
 
 ## c79 — Sandbox domains stack
 - In the sandbox (`profile.sandbox`): casting a domain no longer replaces your open one, no burnout is applied when a domain ends (so techniques and the next domain are never blocked), and a zone that holds a live domain is not closed when a new zone opens. Several domains can stand at once. Normal play unchanged. engine v75; tools/domain-tests.js +2 checks.
+
+## c80 — Gravity: cheaper drawing, shorter reach, −40% strength
+- **Drawing:** the singularity (and the reverse-gravity white hole) used ~25 gradient/stroke calls per body per frame. The still parts (glow, accretion disk, lensing, horizon, photon ring / halo, core) are now painted once into a cached sprite per size bucket (8–64 px) and tint, and each frame draws that sprite plus ~6 plain strokes (tiny bodies under 7 px draw only the sprite). Falls back to the old full drawing without a DOM. Gravity shapes and zone fields are unchanged.
+- **Reach:** `rangeBase` 70→38, `rangePerS` 60→28, `infRange` 1.35→1.15 (a strong pull now reaches roughly half as far); Discharge burst radius ×1.35→×0.9.
+- **Strength −40%:** pullEnemy, enemyPullMax, pullEnergy, pullProjectile, focusSteer, linkPull, fieldMul, foreignWeight ×0.6; gravity zone law (heavy 1+1.2k → 1+0.72k; light 1−0.65k → 1−0.39k); Discharge knock/pull ×0.6.
+- Tests IG2 / GR3 in magic-techniques.js re-aimed at the shorter reach (closer targets, GR3 uses power 8). engine v76, techniques v46.
+
+## c81 — Foes stand over the domain
+- The domain's colour grade and drifting particles used to be painted after creatures (`paintForeground`), tinting enemies. They are now `paintAmbient`, painted with the backdrop (behind terrain and every creature) whenever the host sets `hostDrawsDomainBackdrop` (dungeon.html does). Only the edge ring, countdown arc, marks and burst stay on top. The designer thumbnails are unchanged. magic-domain-art v4.

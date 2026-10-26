@@ -1072,6 +1072,18 @@
 		const R0 = D.r, R = Math.max(2, D.rNow != null ? D.rNow : D.r), g = geo(D, L, camX, camY, R0), gR = Object.assign({}, g);
 		const open = opts.open != null ? opts.open : 1, closed = D.form !== 'open', seed = D.seed || 0;
 		c.save();
+		if(!opts.skipAmbient) paintAmbient(c, D, L, camX, camY, t, opts);
+		drawEdge(c, gR, R, L, t, 1, closed, opts.flare || 0);
+		if(opts.burstK != null) drawBurst(c, g.x, g.y, R, L, opts.burstK, t, seed);
+		c.restore();
+		return g;
+	}
+	/* the colour grade and drifting particles inside the domain — the host paints these BEHIND creatures so foes stand over the domain */
+	function paintAmbient(c, D, L, camX, camY, t, opts){
+		opts = opts || {};
+		const R0 = D.r, R = Math.max(2, D.rNow != null ? D.rNow : D.r), g = geo(D, L, camX, camY, R0), gR = Object.assign({}, g);
+		const open = opts.open != null ? opts.open : 1, seed = D.seed || 0;
+		c.save();
 		c.save(); edgePath(c, gR, R, L); c.clip();
 		if(L.ambient === 'dark' || L.ambient === 'dim'){ c.fillStyle = A(L.bg, (L.ambient === 'dark' ? 0.16 : 0.08) * L.immersion * open); c.fillRect(g.x - R, g.y - R, R * 2, R * 2); }
 		c.globalCompositeOperation = 'soft-light'; c.fillStyle = A(L.c1, 0.22 * L.immersion * open); c.fillRect(g.x - R, g.y - R, R * 2, R * 2);
@@ -1079,10 +1091,7 @@
 		drawParticles(c, gR, R, L, L.p1, L.p1n, t, seed, open);
 		drawParticles(c, gR, R, L, L.p2, L.p2n, t, seed + 50, open * 0.9);
 		c.restore();
-		drawEdge(c, gR, R, L, t, 1, closed, opts.flare || 0);
-		if(opts.burstK != null) drawBurst(c, g.x, g.y, R, L, opts.burstK, t, seed);
 		c.restore();
-		return g;
 	}
 	/* the veil: a sealed domain from outside */
 	function paintVeil(c, D, L, camX, camY, t, life){
@@ -1263,6 +1272,8 @@
 				const L = lookOf(D); D.look = L;
 				const flick = D.suspended ? 0.55 + 0.35 * Math.sin(t * 30) : 1;
 				paintBackdrop(ctx, D, L, camX, camY, t, life * flick, nearestFoe(D, camX, camY));
+				// the grade and particles belong to the world too: foes and the player stand over them, not under
+				ctx.save(); ctx.globalAlpha = life * flick; paintAmbient(ctx, D, L, camX, camY, t, { open: D.phase === 'expand' ? clamp(D.rNow / D.r, 0, 1) : 1 }); ctx.restore();
 			}
 		};
 		W.clipToDomains = function(ctx, camX, camY){
@@ -1290,7 +1301,7 @@
 				const flick = D.suspended ? 0.45 + 0.35 * Math.sin(t * 30) : 1;
 				ctx.save(); ctx.globalAlpha = life * flick;
 				if(!W.hostDrawsDomainBackdrop) paintBackdrop(ctx, D, L, camX, camY, t, 0.55, nearestFoe(D, camX, camY));
-				paintForeground(ctx, D, L, camX, camY, t, { open, flare: D.phase === 'expand' ? 1 - open : 0, burstK: D.phase === 'expand' ? clamp(D.ph / Math.max(0.01, D.CT.expand), 0, 1) : null });
+				paintForeground(ctx, D, L, camX, camY, t, { skipAmbient: !!W.hostDrawsDomainBackdrop, open, flare: D.phase === 'expand' ? 1 - open : 0, burstK: D.phase === 'expand' ? clamp(D.ph / Math.max(0.01, D.CT.expand), 0, 1) : null });
 				const R = Math.max(2, D.rNow);
 				if(D.alive && D.phase === 'active'){
 					ctx.globalCompositeOperation = 'lighter';

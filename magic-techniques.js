@@ -32,7 +32,8 @@
 			surfaceLenBase: 40, surfaceLenPerRootE: 9, surfaceThick: 7, restitution: 0.85,
 			storeToForm: 500 },      // stored Spatial energy (drawn from a Spatial Infinity source or a Spatial zone) opens its portal at this much
 		// pulls: first tuning 0.55 / 0.22 / 0.16 / 0.6 / 0.18, then +15%, ×1.5, ×2 (now 3.45× the first)
-		gravity: { strength: 1, rangeBase: 70, rangePerS: 60, pullEnemy: 1.265, enemyPullMul: 0.4, enemyPullMax: 0.6, infEnemyMul: 3, infEnemyMax: 2.667, infRange: 1.35, crushEvery: 0.25, pullEnergy: 0.506, pullProjectile: 0.368, focusSteer: 0.05, linkPull: 1.38, fieldMul: 1.4, foreignWeight: 0.621,
+		// c80: reach roughly halved (rangeBase 70→38, rangePerS 60→28, infRange 1.35→1.15) and every pull −40%
+		gravity: { strength: 1, rangeBase: 38, rangePerS: 28, pullEnemy: 0.759, enemyPullMul: 0.4, enemyPullMax: 0.36, infEnemyMul: 3, infEnemyMax: 2.667, infRange: 1.15, crushEvery: 0.25, pullEnergy: 0.3036, pullProjectile: 0.2208, focusSteer: 0.03, linkPull: 0.828, fieldMul: 0.84, foreignWeight: 0.3726,
 			bendGuided: 0.6,            // how much of the pull also bends energy that is flying a set course (Redirect)
 			repelFar: 0.2, repelNear: 1.7, repelCaster: 0.55,   // reverse: a slight push at the edge that grows steeply as you get closer
 			mergeReach: 0.75 },         // gravity energy touching gravity energy of the same sign becomes one
@@ -1142,7 +1143,7 @@
 		zoneInfo: (rev) => rev ? 'low gravity inside: you float, fall slowly and jump higher' : 'high gravity inside: you are heavier, fall faster and jump lower',
 		zone(T, Z, s, dt){
 			const k = Z.k;
-			for(const e of T.zoneCreatures(Z)) T.zoneMod(e, 'gravity', s > 0 ? 1 + 1.2 * k : Math.max(0.3, 1 - 0.65 * k));
+			for(const e of T.zoneCreatures(Z)) T.zoneMod(e, 'gravity', s > 0 ? 1 + 0.72 * k : Math.max(0.3, 1 - 0.39 * k));
 		},
 		description: 'Manipulates attraction. Gravity energy does no damage and is not used up by touching things: it pulls creatures — you included, unless you switch that off on the rune — toward it and bends the path of other spells and projectiles (reversed: a slight push that grows strong up close). Gravity energy that touches gravity energy combines. It cannot be compressed.',
 		color: '#7a5cff', reversedColor: '#c9b8ff',
@@ -1333,8 +1334,41 @@
 			}
 		}
 	}
+	/* c80: the old look redrew ~25 gradients per gravity body per frame. Now the still parts (glow, disk, lensing, horizon, ring)
+	   are painted once into a small cached sprite per size and tint; each frame only draws that sprite plus a handful of plain strokes. */
+	const GSPR = new Map();
+	function gravSprite(kind, R0){
+		if(typeof document === 'undefined') return null;
+		const key = kind + R0 + TC('#8a6bff') + TC('#ffffff') + TC('#c9b8ff');
+		let c = GSPR.get(key); if(c) return c;
+		const half = Math.ceil(R0 * 2.9), cv = document.createElement('canvas'); cv.width = cv.height = half * 2;
+		const g = cv.getContext('2d'); if(!g) return null;
+		if(kind === 'sing') drawSingularityFull(g, { seed: 0 }, half, half, R0, 1, 0, 1, true);
+		else drawRepulsorFull(g, { seed: 0 }, half, half, R0, 1, 0, 1, true);
+		c = { cv, half, R0 }; if(GSPR.size > 60) GSPR.clear(); GSPR.set(key, c); return c;
+	}
+	const gravBucket = (R) => clamp(Math.round(R / 8) * 8, 8, 64);
 	function drawSingularity(ctx, b, x, y, R, k, t, alpha){
-		const sd = b.seed || 0, spin = 1, tilt = -0.2 + 0.12 * Math.sin(sd) + 0.04 * Math.sin(t * 0.6 + sd), flat = 0.3;
+		const sp = R >= 3 ? gravSprite('sing', gravBucket(R)) : null;
+		if(!sp) return drawSingularityFull(ctx, b, x, y, R, k, t, alpha, false);
+		const sd = b.seed || 0, tilt = -0.2 + 0.12 * Math.sin(sd) + 0.04 * Math.sin(t * 0.6 + sd), sc = R / sp.R0;
+		ctx.save(); ctx.translate(x, y); ctx.rotate(tilt); ctx.scale(sc, sc);
+		ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = alpha;
+		ctx.drawImage(sp.cv, -sp.half, -sp.half);
+		ctx.restore();
+		if(R < 7) return;
+		// a few motes of matter spiralling in (plain strokes — no gradients)
+		ctx.save(); ctx.translate(x, y); ctx.rotate(tilt); ctx.scale(1, 0.3); ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'round';
+		for(let i = 0; i < 6; i++){
+			const u = ((t * 0.4 + i / 6 + sd * 0.13) % 1 + 1) % 1, r1 = R * (2.6 - 1.5 * u), a1 = sd * 3 + i * 2.39 + u * 5;
+			const u2 = Math.max(0, u - 0.06), r2 = R * (2.6 - 1.5 * u2), a2 = sd * 3 + i * 2.39 + u2 * 5;
+			ctx.globalAlpha = alpha * Math.sin(u * Math.PI) * 0.8; ctx.strokeStyle = u > 0.6 ? TC('#ffffff') : TC('#cbb8ff'); ctx.lineWidth = Math.max(0.8, R * 0.06);
+			ctx.beginPath(); ctx.moveTo(Math.cos(a2) * r2, Math.sin(a2) * r2); ctx.lineTo(Math.cos(a1) * r1, Math.sin(a1) * r1); ctx.stroke();
+		}
+		ctx.restore(); ctx.globalAlpha = 1;
+	}
+	function drawSingularityFull(ctx, b, x, y, R, k, t, alpha, still){
+		const sd = b.seed || 0, spin = 1, tilt = still ? 0 : -0.2 + 0.12 * Math.sin(sd) + 0.04 * Math.sin(t * 0.6 + sd), flat = 0.3;
 		const H = R * (0.6 + 0.08 * Math.min(1, k));             // the event horizon
 		// space darkens around it
 		ctx.globalCompositeOperation = 'source-over';
@@ -1378,7 +1412,7 @@
 		gravDiskBand(ctx, R, 0.95, 2.15, 0, Math.PI, t, spin, sd, alpha);
 		// motes of matter spiralling in, each with a short tail
 		ctx.lineCap = 'round';
-		for(let i = 0; i < 10; i++){
+		if(!still) for(let i = 0; i < 10; i++){
 			const u = ((t * 0.4 + i / 10 + sd * 0.13) % 1 + 1) % 1, r = R * (2.6 - 1.5 * u), a = sd * 3 + i * 2.39 + u * 5 * spin;
 			const r2 = R * (2.6 - 1.5 * Math.max(0, u - 0.06)), a2 = sd * 3 + i * 2.39 + Math.max(0, u - 0.06) * 5 * spin;
 			ctx.globalAlpha = alpha * Math.sin(u * Math.PI) * 0.85;
@@ -1389,6 +1423,29 @@
 		ctx.globalAlpha = 1;
 	}
 	function drawRepulsor(ctx, b, x, y, R, k, t, alpha){
+		const sp = R >= 3 ? gravSprite('rep', gravBucket(R)) : null;
+		if(!sp) return drawRepulsorFull(ctx, b, x, y, R, k, t, alpha, false);
+		const sd = b.seed || 0, sc = R / sp.R0;
+		ctx.save(); ctx.translate(x, y); ctx.rotate(t * 0.4 + sd); ctx.scale(sc, sc);
+		ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = alpha; ctx.drawImage(sp.cv, -sp.half, -sp.half);
+		ctx.restore();
+		if(R < 7) return;
+		ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = TC('#f1ecff');
+		for(let i = 0; i < 2; i++){      // two soft shockwaves of pushed space (plain rings)
+			const ph = ((t * 0.6 + i / 2 + sd * 0.1) % 1 + 1) % 1;
+			ctx.globalAlpha = alpha * Math.pow(1 - ph, 1.5) * 0.6; ctx.lineWidth = Math.max(1, R * (0.05 + 0.07 * ph));
+			ctx.beginPath(); ctx.arc(x, y, R * (0.7 + 1.9 * ph), 0, TAU); ctx.stroke();
+		}
+		ctx.lineCap = 'round'; ctx.strokeStyle = TC('#ffffff'); ctx.lineWidth = Math.max(0.8, R * 0.06);
+		for(let i = 0; i < 6; i++){      // motes thrown outward
+			const u = ((t * 0.55 + i / 6 + sd * 0.17) % 1 + 1) % 1, a = sd * 2 + i * 2.39 + u * 0.6;
+			const r0 = R * (0.55 + 2 * u), r1 = Math.max(R * 0.5, r0 - R * (0.25 + 0.35 * u));
+			ctx.globalAlpha = alpha * Math.sin(u * Math.PI) * 0.7;
+			ctx.beginPath(); ctx.moveTo(x + Math.cos(a) * r1, y + Math.sin(a) * r1); ctx.lineTo(x + Math.cos(a) * r0, y + Math.sin(a) * r0); ctx.stroke();
+		}
+		ctx.restore(); ctx.globalAlpha = 1;
+	}
+	function drawRepulsorFull(ctx, b, x, y, R, k, t, alpha, still){
 		const sd = b.seed || 0;
 		ctx.globalCompositeOperation = 'lighter';
 		// a soft bright halo
@@ -1396,7 +1453,7 @@
 		g.addColorStop(0, hexA('#ffffff', 0.5 * alpha)); g.addColorStop(0.22, hexA('#e3d9ff', 0.3 * alpha)); g.addColorStop(0.55, hexA('#9d8bff', 0.1 * alpha)); g.addColorStop(1, hexA('#6d5fd0', 0));
 		ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, R * 2.5, 0, TAU); ctx.fill();
 		// soft shockwaves of pushed space running outward
-		for(let i = 0; i < 3; i++){
+		if(!still) for(let i = 0; i < 3; i++){
 			const ph = ((t * 0.6 + i / 3 + sd * 0.1) % 1 + 1) % 1, rr = R * (0.7 + 1.9 * ph), w = R * (0.18 + 0.25 * ph);
 			const a = alpha * Math.pow(1 - ph, 1.5) * 0.75;
 			g = ctx.createRadialGradient(x, y, Math.max(0, rr - w), x, y, rr + w);
@@ -1405,7 +1462,7 @@
 		}
 		// motes thrown outward, trailing light
 		ctx.lineCap = 'round';
-		for(let i = 0; i < 12; i++){
+		if(!still) for(let i = 0; i < 12; i++){
 			const u = ((t * 0.55 + i / 12 + sd * 0.17) % 1 + 1) % 1, a = sd * 2 + i * 2.39 + u * 0.6;
 			const r0 = R * (0.55 + 2 * u), r1 = Math.max(R * 0.5, r0 - R * (0.25 + 0.35 * u));
 			const la = alpha * Math.sin(u * Math.PI) * 0.8;
@@ -2519,8 +2576,8 @@
 			S2.step(200);
 			const m = ((cb.angle % (Math.PI / 2)) + Math.PI / 2) % (Math.PI / 2);
 			ok('GR2 A block that lands settles flat on a face (it does not stick in)', !cb.stuck && (m < 0.03 || m > Math.PI / 2 - 0.03) && cb.onGround && Math.abs(cb.by1 - FLOOR) < 6, 'angle ' + Math.round(cb.angle * 180 / Math.PI) + '° · bottom ' + r1(cb.by1));
-			const pull = (gAmt, cAmt) => { const S3 = csim(); const k = build(S3, cAmt, 'cube', null, { x: 500, y: 200 }, [ anch ]).k; S3.cast([ gen(gAmt), tech('gravity', 6, { gravity_you: 'no' }), anch ]); const g = S3.live().find(q => ME.techOf(q, 'gravity') > 0); g.x = 575; g.y = 200; S3.step(90); return { dx: k.x - 500, st: k.state }; };
-			const strong = pull(150, 120), weak = pull(12, 600);
+			const pull = (gAmt, cAmt) => { const S3 = csim(); const k = build(S3, cAmt, 'cube', null, { x: 500, y: 200 }, [ anch ]).k; S3.cast([ gen(gAmt), tech('gravity', 8, { gravity_you: 'no' }), anch ]); const g = S3.live().find(q => ME.techOf(q, 'gravity') > 0); g.x = 540; g.y = 200; S3.step(90); return { dx: k.x - 500, st: k.state }; };
+			const strong = pull(600, 120), weak = pull(12, 600);
 			ok('GR3 Gravity energy tears an anchored construct loose and pulls it in; a weak pull cannot move a heavy one', strong.st === 'free' && strong.dx > 15 && weak.st === 'anchored' && Math.abs(weak.dx) < 0.5, 'strong pull: moved ' + r1(strong.dx) + ' px (' + strong.st + ') · weak pull on a heavy block: ' + weak.st);
 			const S4 = csim(); const k4 = build(S4, 150, 'cube', null, { x: 500, y: 200 }, [ anch ]).k;
 			S4.cast([ gen(120), tech('gravity', 7), ['redirect', { toward: 'right', speed: 8 }] ]); const gb = S4.live()[0]; gb.x = 420; gb.y = 200;
@@ -3200,15 +3257,15 @@
 		{
 			// IG2 Gravity drawn from Infinity drags a creature far harder than ordinary gravity, and crushes it at its core
 			const drag = (fromInf) => {
-				const en = dummy(); en.x = 430; en.y = 275;
+				const en = dummy(); en.x = 370; en.y = 275;
 				const S = sim({ enemies: [ en ] }); S.host.nudge = (e, dx, dy) => { e.x += dx; e.y += dy; };
 				let g;
 				if(fromInf){ const s0 = mkSrc(S, 600, 40, [ tech('gravity', 6) ], 1400, 300).b; g = s0 ? drawFrom(S, s0, 200, 0.6) : null; }
 				else g = put(S, 200, [ tech('gravity', 6) ], 300, 300);
 				if(!g) return { moved: 0, hp: 0 };
-				g.x = 300; g.y = 300; g.anchored = true; g.vx = g.vy = 0; en.x = 430; en.y = 275;
+				g.x = 300; g.y = 300; g.anchored = true; g.vx = g.vy = 0; en.x = 370; en.y = 275;
 				S.step(90);
-				return { moved: 430 - en.x, hp: en.maxHp - en.hp };
+				return { moved: 370 - en.x, hp: en.maxHp - en.hp };
 			};
 			const plain = drag(false), inf = drag(true);
 			ok('IG2 Gravity drawn from Infinity drags a creature far harder (and crushes it at its core); ordinary gravity only slows it', inf.moved > plain.moved * 2 && inf.hp > 0 && plain.hp === 0, 'ordinary: dragged ' + r1(plain.moved) + ' px · Infinity: dragged ' + r1(inf.moved) + ' px, crushed for ' + r1(inf.hp));

@@ -3853,7 +3853,7 @@
 		function gravityBurst(inst, x, y, r, b){
 			const gv = b ? techOf(b, 'gravity') : 0;
 			if(Math.abs(gv) < CONFIG.tech.minIntensity) return;
-			const inf = !!(b.infDerived || b.infSource), G = Math.sign(gv), a = clamp(Math.abs(gv), 0.5, 2.4) / 1.5, R2 = r * 1.35;
+			const inf = !!(b.infDerived || b.infSource), G = Math.sign(gv), a = clamp(Math.abs(gv), 0.5, 2.4) / 1.5 * 0.6, R2 = r * 0.9;      // c80: gravity −40%, reach shortened
 			const H = hostFor(inst);
 			for(const e of (H.getEnemies() || [])){
 				if(!e || e.dead) continue;
