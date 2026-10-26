@@ -2951,3 +2951,6 @@ More than 24 energies on screen → cached-frame stamps; a spatial grid for meet
 
 ## c76 — Sandbox ignores build limits
 - `deriveProfile({ sandbox:true })` (set by `magicProfileForGame` when in Sandbox and not the Arcanist trial): the limit errors CAPACITY, RESERVE, DOMAIN_BUDGET, DOMAIN_CONTROL, DOMAIN_RULES, TECH_POINTS and ZONE_SIZE become warnings ("ignored in the sandbox") so any spell casts. Structural errors (missing zone, bad links…) and locked techniques still refuse. Mana is already infinite there; the hotbar no longer greys out spells for missing Control. engine v73.
+
+## c77 — Dungeon load time
+- dungeon.html loaded `js.puter.com` with a blocking `<script>` in the head, so a slow or unreachable puter.com stalled the whole page (measured 7 s DOM-ready with a 6 s puter delay, vs 1.3 s now). It is now injected after the page has loaded (puter is only used for optional NPC chat, guarded by `typeof puter`).

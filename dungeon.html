@@ -361,7 +361,7 @@ body.ai-chat-open #hud{pointer-events:none;opacity:0.45}
 	</div>
 </div>
 
-<script src="https://js.puter.com/v2/" onload="try{puter.quiet=true}catch(e){}"></script>
+<script>/* puter is only used for optional NPC chat — load it in the background so a slow third-party never blocks the game */(function(){function go(){var s=document.createElement("script");s.src="https://js.puter.com/v2/";s.async=true;s.onload=function(){try{puter.quiet=true}catch(e){}};document.head.appendChild(s)}if(document.readyState==="complete")setTimeout(go,1500);else window.addEventListener("load",function(){setTimeout(go,1500)})})();</script>
 <script src="conversational-npc.js"></script>
 <script src="emberfall-props.js?v=10"></script>
 <script src="emberfall-art.js?v=4"></script>
