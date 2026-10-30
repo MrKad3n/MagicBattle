@@ -1010,6 +1010,18 @@
 		} catch(e){}
 		return null;
 	}
+	/* the visible part of the current canvas in local coordinates (so huge radii never rasterise off-screen) */
+	function viewRect(c){
+		try {
+			const cv = c.canvas, tr = c.getTransform ? c.getTransform() : null;
+			if(cv && tr && tr.a > 0 && tr.d > 0 && !tr.b && !tr.c) return { x0: -tr.e / tr.a - 4, y0: -tr.f / tr.d - 4, x1: (cv.width - tr.e) / tr.a + 4, y1: (cv.height - tr.f) / tr.d + 4 };
+		} catch(e){}
+		return { x0: -1e9, y0: -1e9, x1: 1e9, y1: 1e9 };
+	}
+	function fillVis(c, v, x, y, w, h){
+		const x0 = Math.max(x, v.x0), y0 = Math.max(y, v.y0), x1 = Math.min(x + w, v.x1), y1 = Math.min(y + h, v.y1);
+		if(x1 > x0 && y1 > y0) c.fillRect(x0, y0, x1 - x0, y1 - y0);
+	}
 	function paintStatic(c, g, R, L, seed){
 		if(L.floor === 'none'){
 			// no floor of its own: the sky and landmark stop at the real ground
@@ -1020,8 +1032,8 @@
 		paintLandmark(c, g, R, L, seed, 1);
 		paintFloor(c, g, R, L, seed);
 	}
-	function staticLayer(D, L, R, rel){
-		const key = L._key + '|' + Math.round(R) + '|' + Math.round(rel);
+	function staticLayer(D, L, R, rel, bake){
+		const key = L._key + '|' + Math.round(R) + '|' + Math.round(rel) + '|' + (bake ? 1 : 0);
 		if(D._art && D._art.key === key) return D._art;
 		if(D._art && D._art.none) return null;
 		const s = Math.min(1, 1200 / (2 * R)), size = Math.ceil(2 * R * s) + 2;
@@ -1029,25 +1041,15 @@
 		if(!cv){ D._art = { key, none: true }; return null; }
 		const c = cv.getContext('2d'); c.scale(s, s);
 		const g = { x: R, y: R, gy: R + rel, hy: Math.max(R + rel - R * L.horizon, R * 0.1) };
-		c.save(); edgePath(c, g, R, L); c.clip(); paintStatic(c, g, R, L, D.seed || 0); c.restore();
-		D._art = { key, cv, s };
+		c.save(); edgePath(c, g, R, L); c.clip(); paintStatic(c, g, R, L, D.seed || 0); if(bake) paintLighting(c, g, R, R, L, 0, D.seed || 0, 'bake', null); c.restore();
+		D._art = { key, cv, s, bake: !!bake };
 		return D._art;
 	}
-	/* the world behind creatures; R0 full radius, Rn the radius reached so far */
-	function paintBackdrop(c, D, L, camX, camY, t, alpha, lookAt){
-		const R0 = D.r, Rn = Math.max(2, D.rNow != null ? D.rNow : D.r);
-		const g = geo(D, L, camX, camY, R0);
-		const seed = D.seed || 0;
-		c.save(); c.globalAlpha *= alpha * L.immersion;
-		edgePath(c, g, Rn, L); c.clip();
-		const art = staticLayer(D, L, R0, g.gy - g.y);
-		if(art && art.cv){ c.drawImage(art.cv, g.x - R0, g.y - R0, art.cv.width / art.s, art.cv.height / art.s); }
-		else paintStatic(c, g, R0, L, seed);
-		landmarkLive(c, g, R0, L, t, seed, 1, lookAt);
-		floorLive(c, g, R0, L, t, 1);
-		drawSigil(c, g, R0, L, t, seed, 1);
-		// light rays from the landmark or from above
-		if(L.rays > 0){
+	const VIS_ALL = { x0: -1e9, y0: -1e9, x1: 1e9, y1: 1e9 };
+	/* rays, ambience and vignette. mode: 'live' everything now; 'bake' into the cached layer; 'liveBaked' only what the layer could not hold */
+	function paintLighting(c, g, R0, Rn, L, t, seed, mode, vw){
+		
+		if(L.rays > 0 && mode !== 'liveBaked'){
 			c.save(); c.globalCompositeOperation = L.bright ? 'source-over' : 'lighter';
 			const ox = g.x, oy = L.landmark === 'none' ? g.y - R0 * 1.05 : g.hy - lmSize(g, R0, L) * 1.2;
 			for(let i = 0; i < 9; i++){
@@ -1058,11 +1060,31 @@
 			c.restore();
 		}
 		// ambience and vignette
-		const pulse = 1 + L.pulse * 0.25 * Math.sin(t * 2.2);
-		if(L.ambient === 'dark'){ c.fillStyle = 'rgba(0,0,0,' + (0.3 / pulse) + ')'; c.fillRect(g.x - Rn, g.y - Rn, Rn * 2, Rn * 2); }
-		else if(L.ambient === 'dim'){ c.fillStyle = 'rgba(0,0,0,' + (0.14 / pulse) + ')'; c.fillRect(g.x - Rn, g.y - Rn, Rn * 2, Rn * 2); }
-		else if(L.ambient === 'bright'){ c.save(); c.globalCompositeOperation = 'lighter'; c.fillStyle = 'rgba(255,255,255,' + (0.06 * pulse) + ')'; c.fillRect(g.x - Rn, g.y - Rn, Rn * 2, Rn * 2); c.restore(); }
-		if(L.vignette > 0){ const vg = c.createRadialGradient(g.x, g.y, Rn * 0.45, g.x, g.y, Rn); vg.addColorStop(0, A(L.bg, 0)); vg.addColorStop(1, A(L.bright ? mix(L.bg, L.c1, 0.3) : sh(L.bg, -0.5), 0.75 * L.vignette)); c.fillStyle = vg; c.fillRect(g.x - Rn, g.y - Rn, Rn * 2, Rn * 2); }
+		const pulse = 1 + L.pulse * 0.25 * Math.sin(t * 2.2), ambOk = mode === 'live' || (mode === 'bake' ? L.pulse <= 0 : L.pulse > 0);
+		if(!ambOk){} else if(L.ambient === 'dark'){ c.fillStyle = 'rgba(0,0,0,' + (0.3 / pulse) + ')'; fillVis(c, vw || VIS_ALL, g.x - Rn, g.y - Rn, Rn * 2, Rn * 2); }
+		else if(L.ambient === 'dim'){ c.fillStyle = 'rgba(0,0,0,' + (0.14 / pulse) + ')'; fillVis(c, vw || VIS_ALL, g.x - Rn, g.y - Rn, Rn * 2, Rn * 2); }
+		else if(L.ambient === 'bright'){ c.save(); c.globalCompositeOperation = 'lighter'; c.fillStyle = 'rgba(255,255,255,' + (0.06 * pulse) + ')'; fillVis(c, vw || VIS_ALL, g.x - Rn, g.y - Rn, Rn * 2, Rn * 2); c.restore(); }
+		if(L.vignette > 0 && mode !== 'liveBaked'){ const vg = c.createRadialGradient(g.x, g.y, Rn * 0.45, g.x, g.y, Rn); vg.addColorStop(0, A(L.bg, 0)); vg.addColorStop(1, A(L.bright ? mix(L.bg, L.c1, 0.3) : sh(L.bg, -0.5), 0.75 * L.vignette)); c.fillStyle = vg; fillVis(c, vw || VIS_ALL, g.x - Rn, g.y - Rn, Rn * 2, Rn * 2); }
+	}
+	/* the world behind creatures; R0 full radius, Rn the radius reached so far */
+	function paintBackdrop(c, D, L, camX, camY, t, alpha, lookAt){
+		const R0 = D.r, Rn = Math.max(2, D.rNow != null ? D.rNow : D.r);
+		const g = geo(D, L, camX, camY, R0);
+		const seed = D.seed || 0;
+		c.save(); c.globalAlpha *= alpha * L.immersion;
+		edgePath(c, g, Rn, L); c.clip();
+		const art = staticLayer(D, L, R0, g.gy - g.y, Rn >= R0 - 0.5);
+		const vw = viewRect(c);
+		if(art && art.cv){
+			const dx = g.x - R0, dy = g.y - R0, dw = art.cv.width / art.s, dh = art.cv.height / art.s;
+			const x0 = Math.max(dx, vw.x0), y0 = Math.max(dy, vw.y0), x1 = Math.min(dx + dw, vw.x1), y1 = Math.min(dy + dh, vw.y1);
+			if(x1 > x0 && y1 > y0){ const k = art.cv.width / dw; c.drawImage(art.cv, (x0 - dx) * k, (y0 - dy) * k, (x1 - x0) * k, (y1 - y0) * k, x0, y0, x1 - x0, y1 - y0); }
+		}
+		else paintStatic(c, g, R0, L, seed);
+		landmarkLive(c, g, R0, L, t, seed, 1, lookAt);
+		floorLive(c, g, R0, L, t, 1);
+		drawSigil(c, g, R0, L, t, seed, 1);
+		paintLighting(c, g, R0, Rn, L, t, seed, (art && art.cv && art.bake) ? 'liveBaked' : 'live', vw);
 		c.restore();
 		return g;
 	}

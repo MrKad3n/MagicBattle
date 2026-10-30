@@ -1117,7 +1117,7 @@
 	function updateIgnaroth(en){
 		if(!en || en.type !== 'fireDragon' || en.dead) return false;
 		if(en.isNecroSummon || en.necroFriendly) return false;
-		if(!(typeof IS_SURVIVAL !== 'undefined' && IS_SURVIVAL) && (typeof IS_DUNGEON === 'undefined' || !IS_DUNGEON || DUNGEON_TYPE !== 'fire')) return false;
+		if(!(typeof IS_SURVIVAL !== 'undefined' && IS_SURVIVAL || typeof IS_SANDBOX !== 'undefined' && IS_SANDBOX) && (typeof IS_DUNGEON === 'undefined' || !IS_DUNGEON || DUNGEON_TYPE !== 'fire')) return false;
 		const room = igRoom(en);
 		if(!room || room.kind !== 'boss') return false;
 
@@ -1247,7 +1247,7 @@
 	}
 
 	function drawIgnarothWorld(){
-		if(!(typeof IS_SURVIVAL !== 'undefined' && IS_SURVIVAL) && (typeof IS_DUNGEON === 'undefined' || !IS_DUNGEON || DUNGEON_TYPE !== 'fire')) return;
+		if(!(typeof IS_SURVIVAL !== 'undefined' && IS_SURVIVAL || typeof IS_SANDBOX !== 'undefined' && IS_SANDBOX) && (typeof IS_DUNGEON === 'undefined' || !IS_DUNGEON || DUNGEON_TYPE !== 'fire')) return;
 		if(typeof enemies === 'undefined') return;
 		let en = null;
 		for(let i = 0; i < enemies.length; i++){

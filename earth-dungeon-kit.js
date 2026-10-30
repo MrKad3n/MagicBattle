@@ -20,6 +20,7 @@ function kitFloor(x, y){ return (typeof fireKitFloorY === 'function') ? fireKitF
 function kitBlocked(x, y){ return (typeof fireKitBlocked === 'function') ? fireKitBlocked(x, y) : false; }
 function kitShake(a, t){ if(typeof shakeScreen === 'function') shakeScreen(a, t); }
 function kitSpark(x, y, n, color){
+	if(window.EFX){ EFX.sparkRGB(x, y, n, color, 'earth'); return; }
 	if(typeof particles === 'undefined') return;
 	const c = color || { r: 200, g: 160, b: 90 };
 	for(let i = 0; i < Math.min(n || 12, 22); i++){
@@ -34,12 +35,18 @@ function earthSpawn(en, x, y, vx, vy, opts){
 	const p = spawnEnemyProj(x, y, vx, vy, opts);
 	if(p){
 		p._earthStyle = opts._earthStyle || 'rock';
+		p._efxEl = earthStyleEl(p._earthStyle);
 		if(kitFriendly(en)){
 			if(typeof markNecroFriendlyProj === 'function') markNecroFriendlyProj(p, en);
 			else p.necroFriendly = true;
 		}
 	}
 	return p;
+}
+function earthStyleEl(st){ return st === 'crystal' ? 'crystal' : (st === 'web' ? 'silk' : (st === 'mud' ? 'mud' : 'earth')); }
+function earthKitEl(en){
+	const t = en && (en.necroType || en.type);
+	return t === 'vineCrawler' ? 'nature' : (t === 'caveSpider' ? 'silk' : (t === 'crystalMage' ? 'crystal' : (t === 'mudElemental' ? 'mud' : 'earth')));
 }
 function earthHit(en, x, y, r, dmg, effects){
 	r = atkS(r);
@@ -59,7 +66,9 @@ function earthHit(en, x, y, r, dmg, effects){
 	}
 	if(player.iFrames > 0) return false;
 	if(circRect(x, y, r, player.x, player.y, player.w, player.h)){
+		if(window.EFX && EFX.armed(en, x, y, r)) return false;      // fair arming (enemy-fx.js)
 		damagePlayer(dmg, effects || []);
+		if(window.EFX) EFX.hit(player.x + player.w / 2, player.y + player.h / 2, earthKitEl(en), dmg * 0.5);
 		return true;
 	}
 	return false;
@@ -77,6 +86,7 @@ function beginEarthKit(en, kind, extra){
 	en._earthKitBusy = extra && extra.busy === false ? false : true;
 	en.attackAnimTimer = Math.max(en.attackAnimTimer || 0, 36);
 	en.facing = kitAim(en).x >= en.x + en.w / 2 ? 1 : -1;
+	if(window.EFX) EFX.charge(en.x + en.w / 2, en.y + en.h / 2, earthKitEl(en), Math.max(40, en.w * 1.3), 8, 16);
 	if(kind !== 'prismClone'){
 		for(let i = 0; i < earthWorldFX.length; i++){
 			const fx = earthWorldFX[i];
@@ -109,7 +119,7 @@ function castGolemFaultStep(en){
 		kind: 'fault', en, x: sx, y: sy, tx: aim.x, age: 0, max: 64, split: false,
 		lines: [{ x1: sx, y1: sy, x2: sx, y2: sy, alive: true }]
 	});
-	spawnTelegraph(sx - 28, sy - 14, 56, 22, 16, 'rgba(220,160,60,0.45)', 'rect', '');
+	efxTelegraph(sx - 28, sy - 14, 56, 22, 16, 'rgba(220,160,60,0.45)', 'rect', '');
 	kitShake(5, 8);
 	beginEarthKit(en, 'faultStep', { busy: false });
 	setTimeout(function(){ if(en.earthKit && en.earthKit.kind === 'faultStep') earthEnd(en); }, 240);
@@ -160,7 +170,7 @@ function castVineGraspingGround(en){
 	for(let i = 0; i < 6; i++){
 		const a = (i / 6) * Math.PI * 2;
 		roots.push({ x: aim.x + Math.cos(a) * atkS(88), y: kitFloor(aim.x, aim.y) - 4, snap: false });
-		spawnTelegraph(roots[i].x - 16, roots[i].y - 24, 32, 32, 22, 'rgba(90,170,50,0.4)', 'circle', '');
+		efxTelegraph(roots[i].x - 16, roots[i].y - 24, 32, 32, 22, 'rgba(90,170,50,0.4)', 'circle', '');
 	}
 	earthFX({ kind: 'roots', en, roots, age: 0, max: 70, snapped: false });
 	beginEarthKit(en, 'graspingGround', { busy: false });
@@ -335,6 +345,7 @@ function tickSpider(en, kit){
 					color: '#e8d8b8', color2: '#fff8e8', power: 28, width: 48, height: 48,
 					shape: 'circle', maxAge: 50, effects: ['slow'], _earthStyle: 'web'
 				});
+				if(window.EFX){ const fy = en.y + en.h; EFX.burst(en.x + en.w / 2, fy - 10, 'silk', 1.3); EFX.groundWave(en.x + en.w / 2, fy, 90, 'earth'); EFX.debris('earth', en.x + en.w / 2, fy - 4, 6, { speed: 5, floor: fy }); }
 				kitShake(6, 10);
 				earthEnd(en);
 			}
@@ -378,6 +389,7 @@ function tickMud(en, kit){
 		earthFX({ kind: 'mudstrip', x: en.x + en.w / 2, y: kitFloor(en.x, en.y) - 6, w: 70, h: 22, age: 0, max: 220 });
 		if(kit.hitCd <= 0 && earthHit(en, en.x + en.w / 2, en.y + en.h / 2, 50, kitDmg(32), ['horizontalLaunch'])) kit.hitCd = 8;
 		kitSlowSet(0.62);
+		if(window.EFX && kit.t % 2 === 0) EFX.debris('mud', en.x + en.w / 2 - kit.dir * en.w * 0.4, en.y + en.h - 6, 2, { kind: 'drop', speed: 5, ang: -Math.PI / 2 - kit.dir * 0.9, spread: 0.8 });
 		if(kitBlocked(en.x + (kit.dir > 0 ? en.w + 10 : -10), en.y + en.h / 2) || kit.t > 36){
 			en._earthNoHit = false;
 			earthEnd(en);
@@ -405,6 +417,7 @@ function updateEarthDungeonWorld(){
 		else if(fx.kind === 'mudwave') tickMudWaveFX(fx);
 		else if(fx.kind === 'sinkhole') tickSinkFX(fx);
 		else if(fx.kind === 'bog') tickBogFX(fx);
+		else if(fx.kind === 'decoy' && fx.age === fx.max - 1) earthDecoyBurst(fx);
 		else if(fx.kind === 'mudstrip' && circRect(fx.x, fx.y, fx.w * 0.45, player.x, player.y, player.w, player.h)){
 			kitSlowSet(0.58);
 			if(fx.age % 14 === 0) earthHit(fx.en, fx.x, fx.y, 22, kitDmg(10), []);
@@ -415,6 +428,20 @@ function updateEarthDungeonWorld(){
 	}
 }
 
+// the stone decoy bursts into shrapnel when it breaks or expires
+function earthDecoyBurst(fx){
+	const cx = fx.x + fx.w / 2, cy = fx.y + fx.h * 0.45;
+	const aim = kitAim(fx.en);
+	for(let i = 0; i < 6; i++){
+		const a = Math.atan2(aim.y - cy, aim.x - cx) + (i - 2.5) * 0.28;
+		earthSpawn(fx.en, cx, cy, Math.cos(a) * 8, Math.sin(a) * 8 - 2, {
+			color: '#8a7350', color2: '#f0e0b8', power: 18, width: 26, height: 26,
+			shape: 'circle', gravity: 0.2, maxAge: 70, _earthStyle: 'rock'
+		});
+	}
+	if(window.EFX){ EFX.burst(cx, cy, 'earth', 1.8); EFX.debris('earth', cx, cy, 10, { speed: 7 }); EFX.smoke(cx, cy, 4, { size: 16, c: '#5a4a38', a: 0.5 }); }
+	kitShake(5, 8);
+}
 function tickFaultFX(fx){
 	const grow = Math.min(1, fx.age / 16);
 	const midX = fx.x + (fx.tx - fx.x) * 0.5;
@@ -433,6 +460,7 @@ function tickFaultFX(fx){
 		if(L.off) L.x2 += L.off * t;
 		L.y2 = fx.y;
 		const airborne = aim.box && (aim.box.y + aim.box.h < fx.y - 20);
+		if(window.EFX && fx.age % 2 === 0 && fx.age < 24) EFX.debris('earth', L.x2, fx.y - 4, 1, { speed: 5, floor: fx.y, scale: 0.8 });
 		if(!airborne && Math.abs(aim.x - L.x2) < 34 && Math.abs(aim.y - fx.y) < 46){
 			earthHit(fx.en, L.x2, fx.y, 28, kitDmg(26), ['stun']);
 		}
@@ -442,6 +470,7 @@ function tickGripFX(fx){
 	const aim = kitAim(fx.en);
 	for(let i = 0; i < fx.pillars.length; i++){
 		const P = fx.pillars[i];
+		if(fx.age === 1 && window.EFX){ EFX.debris('earth', P.x, P.y - 4, 3, { speed: 5, floor: P.y }); EFX.smoke(P.x, P.y - 6, 1, { size: 12, c: '#6a5a44', a: 0.45 }); }
 		P.h = Math.min(P.maxH, 16 + fx.age * 4.4);
 		if(Math.abs(aim.x - P.x) < 20 && aim.y > P.y - P.h){
 			kitSlowSet(0.7);
@@ -468,7 +497,10 @@ function tickVinePathFX(fx){
 		earthHit(fx.en, last.x, last.y - 24, 48, kitDmg(36), ['stun']);
 		const fake = fx.paths[1 - fx.real], fl = fake[fake.length - 1];
 		earthHit(fx.en, fl.x, fl.y - 20, 36, kitDmg(18), []);
-		kitSpark(last.x, last.y, 16, { r: 80, g: 170, b: 50 });
+		if(window.EFX){
+			EFX.burst(last.x, last.y - 20, 'nature', 1.6); EFX.debris('earth', last.x, last.y - 4, 8, { speed: 7, floor: last.y }); EFX.groundWave(last.x, last.y, 90, 'nature');
+			EFX.debris('earth', fl.x, fl.y - 4, 4, { speed: 5, floor: fl.y }); EFX.smoke(fl.x, fl.y - 6, 2, { size: 12, c: '#5a4a38', a: 0.5 });
+		} else kitSpark(last.x, last.y, 16, { r: 80, g: 170, b: 50 });
 		kitShake(6, 10);
 	}
 }
@@ -481,6 +513,8 @@ function tickRootsFX(fx){
 			earthHit(fx.en, fx.roots[i].x, fx.roots[i].y - 12, 34, kitDmg(22), []);
 		}
 		earthHit(fx.en, aim.x, aim.y, 30, kitDmg(20), ['stun']);
+		fx.snapX = aim.x; fx.snapY = aim.y;
+		if(window.EFX){ EFX.burst(aim.x, aim.y, 'nature', 1.3); for(let i = 0; i < fx.roots.length; i++) EFX.debris('earth', fx.roots[i].x, fx.roots[i].y, 2, { speed: 4, floor: fx.roots[i].y + 4 }); }
 		kitSlowSet(0.55);
 	}
 }
@@ -488,7 +522,7 @@ function tickSeedFX(fx){
 	if(!fx.grown && fx.age > 20){
 		fx.grown = true;
 		fx.h = atkS(62);
-		kitSpark(fx.x, fx.y, 8, { r: 70, g: 160, b: 40 });
+		if(window.EFX){ EFX.debris('earth', fx.x, fx.y, 4, { speed: 4, floor: fx.y + 6 }); EFX.emit('nature', fx.x, fx.y - 20, 6, { speed: 1.5 }); }
 	}
 	if(fx.grown && circRect(fx.x, fx.y - 28, 22, player.x, player.y, player.w, player.h)){
 		kitSlowSet(0.5);
@@ -534,7 +568,7 @@ function tickRelayFX(fx){
 	fx.orb.y += dy / d * 14.2;
 	earthHit(fx.en, fx.orb.x, fx.orb.y, 30, kitDmg(24), []);
 	if(d < 18){
-		kitSpark(fx.orb.x, fx.orb.y, 12, { r: 220, g: 140, b: 255 });
+		if(window.EFX){ EFX.flash(fx.orb.x, fx.orb.y, 30, 'crystal', 8); EFX.sparks('crystal', fx.orb.x, fx.orb.y, 6, { speed: 5 }); }
 		fx.orb.i++;
 		if(fx.orb.i > fx.nodes.length) fx.age = fx.max;
 	}
@@ -551,6 +585,7 @@ function tickRainFX(fx){
 	}
 }
 function tickPrismFX(fx){
+	if(!fx.pending && !fx.volley && fx.age === 110){ fx.pending = 'volley'; fx.copyAt = fx.age; fx.volley = true; }
 	if(fx.pending && fx.age === fx.copyAt){
 		const aim = kitLead(fx.en, 10);
 		const dx = aim.x - fx.x, dy = aim.y - fx.y, d = Math.hypot(dx, dy) || 1;
@@ -571,6 +606,7 @@ function tickPrisonFX(fx){
 	if(fx.age === 38 && !fx.closed){
 		fx.closed = true;
 		let trapped = Math.hypot(aim.x - fx.cx, aim.y - fx.cy) < 42;
+		if(window.EFX){ EFX.flash(fx.cx, fx.cy, 46, 'crystal', 10); EFX.ring(fx.cx, fx.cy, 50, 6, 'crystal', 14, { width: 5 }); }
 		if(trapped){
 			earthHit(fx.en, fx.cx, fx.cy, 48, kitDmg(38), ['stun']);
 			for(let i = 0; i < 10; i++){
@@ -588,6 +624,7 @@ function tickMudWaveFX(fx){
 	if(fx.hitCd > 0) fx.hitCd--;
 	fx.x += fx.dir * 10.6;
 	fx.w = Math.min(atkS(210), fx.w + 4.2);
+	if(window.EFX && fx.age % 2 === 0) EFX.debris('mud', fx.x + fx.dir * fx.w * 0.3, fx.y - 14, 2, { kind: 'drop', speed: 5, ang: -Math.PI / 2 + fx.dir * 0.5, spread: 0.9, floor: fx.y + 6 });
 	earthFX({ kind: 'mudstrip', x: fx.x, y: fx.y, w: 50, h: 18, age: 0, max: 200 });
 	const aim = kitAim(fx.en);
 	if(Math.abs(aim.x - fx.x) < fx.w * 0.48 && Math.abs(aim.y - fx.y) < 36){
@@ -621,6 +658,7 @@ function tickBogFX(fx){
 			shape: 'circle', gravity: 0.14, maxAge: 55, _earthStyle: 'mud'
 		});
 		earthHit(fx.en, fx.x + 16, fx.y + 20, 36, kitDmg(20), []);
+		if(window.EFX){ EFX.burst(fx.x + fx.w / 2, fx.y + fx.h * 0.4, 'mud', 1.4); EFX.debris('mud', fx.x + fx.w / 2, fx.y + fx.h * 0.4, 8, { kind: 'drop', speed: 6 }); }
 	}
 }
 
@@ -630,7 +668,7 @@ function earthKitTryBounce(p){
 	if(kitBlocked(p.x, prevY)){ p.vy = -Math.abs(p.vy) * 0.92; p.y = prevY; }
 	if(kitBlocked(prevX, p.y)){ p.vx = -p.vx * 1.05; p.x = prevX; }
 	p._earthBounces = (p._earthBounces || 0) + 1;
-	kitSpark(p.x, p.y, 12, { r: 180, g: 140, b: 80 });
+	if(window.EFX){ EFX.debris('earth', p.x, p.y + p.height * 0.3, 5, { speed: 5 }); EFX.smoke(p.x, p.y + p.height * 0.3, 2, { size: 14, c: '#6a5a44', a: 0.5 }); EFX.groundWave(p.x, p.y + p.height * 0.4, 70, 'earth', 16); }
 	kitShake(4, 6);
 	if(p.age >= (p._earthSplitAt || 90) || p._earthBounces >= 3){
 		for(let i = 0; i < 5; i++){
@@ -653,7 +691,7 @@ function earthKitInterceptProj(p){
 		if(fx.kind !== 'decoy' || fx.hp <= 0) continue;
 		if(circRect(p.x, p.y, 12, fx.x, fx.y, fx.w, fx.h)){
 			fx.hp--; p.hasHit = true; kitSpark(p.x, p.y, 8, { r: 160, g: 130, b: 80 });
-			if(fx.hp <= 0) fx.age = fx.max;
+			if(fx.hp <= 0){ fx.age = fx.max - 2; }
 			return true;
 		}
 	}
@@ -671,112 +709,166 @@ function earthKitSpriteRow(en){
 	return null;
 }
 
-function drawEarthKitProj(p){
-	const px = p.x - camera.x, py = p.y - camera.y;
-	const r = Math.max(p.width, p.height) * 0.68;
-	const pulse = 0.5 + Math.sin((p.age || 0) * 0.34) * 0.5;
-	const style = p._earthStyle || 'rock';
-	ctx.save();
-	ctx.translate(px, py);
-	ctx.shadowColor = style === 'crystal' ? '#e0a0ff' : (style === 'web' ? '#fff6d8' : '#d4b070');
-	ctx.shadowBlur = 16 + pulse * 8;
-	if(style === 'boulder' || style === 'rock'){
-		ctx.rotate((p.age || 0) * 0.22 * (p.vx >= 0 ? 1 : -1));
-		const g = ctx.createRadialGradient(-r * 0.28, -r * 0.32, r * 0.08, 0, 0, r);
-		g.addColorStop(0, '#fff4d4');
-		g.addColorStop(0.35, p.color2 || '#e8d4b0');
-		g.addColorStop(1, p.color || '#6a5030');
-		ctx.fillStyle = g;
+/* ---------- drawing (EFX) ---------- */
+// a radial spider web, r = radius, spin = rotation
+function earthDrawWeb(x, y, r, spin, a, squash){
+	const sx = x - camera.x, sy = y - camera.y;
+	ctx.save(); ctx.translate(sx, sy); ctx.rotate(spin || 0); ctx.scale(1, squash || 1);
+	ctx.globalAlpha = a == null ? 1 : a;
+	ctx.strokeStyle = 'rgba(250,244,228,0.9)'; ctx.lineWidth = 1.4;
+	ctx.beginPath();
+	for(let i = 0; i < 8; i++){ const an = i / 8 * Math.PI * 2; ctx.moveTo(0, 0); ctx.lineTo(Math.cos(an) * r, Math.sin(an) * r); }
+	ctx.stroke();
+	ctx.lineWidth = 1;
+	for(let k = 1; k <= 3; k++){
+		const rr = r * k / 3.4;
 		ctx.beginPath();
-		ctx.moveTo(-r * 0.9, -r * 0.15);
-		ctx.lineTo(-r * 0.15, -r);
-		ctx.lineTo(r * 0.82, -r * 0.4);
-		ctx.lineTo(r, r * 0.38);
-		ctx.lineTo(r * 0.1, r * 0.95);
-		ctx.lineTo(-r * 0.78, r * 0.48);
-		ctx.closePath(); ctx.fill();
-		ctx.strokeStyle = 'rgba(255,230,170,0.55)'; ctx.lineWidth = 3;
+		for(let i = 0; i <= 8; i++){ const an = i / 8 * Math.PI * 2, sag = (i % 2 ? 0.86 : 1); const px = Math.cos(an) * rr * sag, py = Math.sin(an) * rr * sag; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
 		ctx.stroke();
-	} else if(style === 'crystal'){
-		ctx.rotate((p.age || 0) * 0.12 + Math.atan2(p.vy || 0, p.vx || 1));
-		const g = ctx.createLinearGradient(0, -r, 0, r);
-		g.addColorStop(0, '#ffffff');
-		g.addColorStop(0.3, '#f4d8ff');
-		g.addColorStop(1, p.color || '#b040ee');
-		ctx.fillStyle = g;
-		ctx.beginPath();
-		ctx.moveTo(0, -r * 1.15);
-		ctx.lineTo(r * 0.62, 0);
-		ctx.lineTo(0, r * 1.15);
-		ctx.lineTo(-r * 0.62, 0);
-		ctx.closePath(); ctx.fill();
-		ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 2; ctx.stroke();
-	} else if(style === 'web'){
-		ctx.rotate(Math.atan2(p.vy || 0, p.vx || 1));
-		ctx.strokeStyle = 'rgba(255,245,210,0.9)'; ctx.lineWidth = 2.5;
-		for(let i = 0; i < 6; i++){
-			const a = i * Math.PI / 3;
-			ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); ctx.stroke();
-		}
-		ctx.fillStyle = 'rgba(255,248,230,0.82)';
-		ctx.beginPath(); ctx.ellipse(0, 0, r * 0.82, r * 0.5, 0, 0, Math.PI * 2); ctx.fill();
-	} else if(style === 'mud'){
-		const g = ctx.createRadialGradient(-r * 0.2, -r * 0.25, r * 0.08, 0, 0, r);
-		g.addColorStop(0, '#f0d8a8');
-		g.addColorStop(0.45, '#b89058');
-		g.addColorStop(1, '#3a2814');
-		ctx.fillStyle = g;
-		ctx.beginPath(); ctx.ellipse(0, 0, r * (1.05 + pulse * 0.1), r * 0.82, 0, 0, Math.PI * 2); ctx.fill();
-	} else {
-		ctx.fillStyle = p.color || '#8a7350';
-		ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+	}
+	ctx.globalCompositeOperation = 'lighter';
+	EFX.glowS(0, 0, r * 0.6, '#f4ecd8', 0.25);
+	ctx.restore();
+}
+function earthDrawSpiderling(x, y, t){
+	const sx = x - camera.x, sy = y - camera.y;
+	ctx.save(); ctx.translate(sx, sy);
+	ctx.strokeStyle = '#1a120a'; ctx.lineWidth = 1.4;
+	for(let i = 0; i < 4; i++){
+		const k = Math.sin(t * 0.6 + i * 1.6) * 2;
+		ctx.beginPath(); ctx.moveTo(-2, 0); ctx.lineTo(-7 - i, -4 + i * 2.5 + k); ctx.lineTo(-10 - i, 3 + i * 1.5); ctx.stroke();
+		ctx.beginPath(); ctx.moveTo(2, 0); ctx.lineTo(7 + i, -4 + i * 2.5 - k); ctx.lineTo(10 + i, 3 + i * 1.5); ctx.stroke();
+	}
+	ctx.fillStyle = '#2e2014'; ctx.beginPath(); ctx.ellipse(0, 0, 6, 4.5, 0, 0, Math.PI * 2); ctx.fill();
+	ctx.fillStyle = '#ff5544'; ctx.fillRect(-2.5, -2, 1.6, 1.6); ctx.fillRect(1, -2, 1.6, 1.6);
+	ctx.restore();
+}
+// a thorny vine from (x0,y0) curving to (x1,y1)
+function earthDrawVine(x0, y0, x1, y1, w, a, t){
+	const sx0 = x0 - camera.x, sy0 = y0 - camera.y, sx1 = x1 - camera.x, sy1 = y1 - camera.y;
+	const mx = (sx0 + sx1) / 2 + Math.sin(t * 0.2 + x0) * 18, my = Math.min(sy0, sy1) - 30;
+	ctx.save(); ctx.globalAlpha = a == null ? 1 : a; ctx.lineCap = 'round';
+	ctx.strokeStyle = '#1f3d12'; ctx.lineWidth = w + 3;
+	ctx.beginPath(); ctx.moveTo(sx0, sy0); ctx.quadraticCurveTo(mx, my, sx1, sy1); ctx.stroke();
+	ctx.strokeStyle = '#5aa630'; ctx.lineWidth = w;
+	ctx.stroke();
+	ctx.strokeStyle = '#b8ee66'; ctx.lineWidth = Math.max(1, w * 0.25);
+	ctx.stroke();
+	// thorns along the curve
+	ctx.fillStyle = '#e8ffc0';
+	for(let k = 0.2; k < 0.95; k += 0.18){
+		const u = 1 - k;
+		const px = u * u * sx0 + 2 * u * k * mx + k * k * sx1, py = u * u * sy0 + 2 * u * k * my + k * k * sy1;
+		ctx.beginPath(); ctx.moveTo(px - 3, py); ctx.lineTo(px, py - 7); ctx.lineTo(px + 3, py); ctx.fill();
 	}
 	ctx.restore();
 }
+function drawEarthKitProj(p){
+	if(!window.EFX) return;
+	const style = p._earthStyle || 'rock', r = Math.max(p.width, p.height) * 0.42;
+	if(style === 'boulder' || style === 'rock'){
+		EFX.bolt(p, p.x, p.y, r * 1.05, 'earth', { spin: 0.2 * (p.vx >= 0 ? 1 : -1), moteEvery: style === 'boulder' ? 2 : 4 });
+		if(style === 'boulder' && (p.age & 3) === 0) EFX.debris('earth', p.x, p.y + r * 0.6, 1, { speed: 3, scale: 0.6 });
+	} else if(style === 'crystal'){
+		EFX.bolt(p, p.x, p.y, r * 0.8, 'crystal', { trailLen: 8 });
+	} else if(style === 'web'){
+		const ang = Math.atan2(p.vy || 0, p.vx || 1);
+		const h = EFX.track(p, 6); EFX.trail(h, r * 0.4, 'silk', { ribbon: false, alpha: 0.3 });
+		earthDrawWeb(p.x, p.y, r * 1.05, ang + (p.age || 0) * 0.08, 1, p.width > p.height * 1.6 ? 0.5 : 0.9);
+	} else if(style === 'mud'){
+		EFX.bolt(p, p.x, p.y, r * 0.9, 'mud', { trailLen: 6 });
+	} else EFX.bolt(p, p.x, p.y, r, 'earth');
+}
 
 function drawEarthDungeonWorld(){
+	if(!window.EFX) return;
+	EFX.bind();
 	for(let i = 0; i < earthWorldFX.length; i++){
 		const fx = earthWorldFX[i];
-		const x = fx.x - camera.x, y = fx.y - camera.y;
-		if(fx.kind === 'decoy' || fx.kind === 'bog' || fx.kind === 'prism'){
-			ctx.save();
-			ctx.globalAlpha = fx.kind === 'prism' ? 0.55 : 0.88;
-			ctx.shadowColor = fx.kind === 'prism' ? '#e0a0ff' : '#c4a060';
-			ctx.shadowBlur = 12;
-			const w = fx.w || 32, h = fx.h || 44;
-			const g = ctx.createLinearGradient(x, y, x + w, y + h);
-			if(fx.kind === 'prism'){ g.addColorStop(0, '#fff0ff'); g.addColorStop(1, '#8a30cc'); }
-			else if(fx.kind === 'bog'){ g.addColorStop(0, '#d4b888'); g.addColorStop(1, '#3a2814'); }
-			else { g.addColorStop(0, '#ead8b0'); g.addColorStop(1, '#5a4020'); }
-			ctx.fillStyle = g; ctx.fillRect(x, y, w, h);
+		const u = fx.max ? fx.age / fx.max : 0;
+		const fade = u > 0.85 ? (1 - u) / 0.15 : 1;
+		if(fx.kind === 'decoy'){
+			// a stacked-stone likeness of the golem; cracks spread as it is hit
+			const cx = fx.x + fx.w / 2, by = fx.y + fx.h;
+			const s1 = fx.w * 0.62, s2 = fx.w * 0.5, s3 = fx.w * 0.34;
+			ctx.save(); ctx.globalAlpha = Math.min(1, fx.age / 10) * fade;
+			ctx.drawImage(EFX.rockSprite('earth', 1), cx - s1 - camera.x, by - s1 * 1.7 - camera.y, s1 * 2, s1 * 2);
+			ctx.drawImage(EFX.rockSprite('earth', 4), cx - s2 - camera.x, by - s1 * 1.7 - s2 * 1.4 - camera.y, s2 * 2, s2 * 2);
+			ctx.drawImage(EFX.rockSprite('earth', 6), cx - s3 - camera.x, by - s1 * 1.7 - s2 * 1.4 - s3 * 1.2 - camera.y, s3 * 2, s3 * 2);
+			const dmg = 1 - Math.max(0, fx.hp) / 6;
+			if(dmg > 0){ ctx.strokeStyle = 'rgba(30,20,10,0.9)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(cx - camera.x - 8, fx.y + 10 - camera.y); ctx.lineTo(cx - camera.x + 4, fx.y + 10 + fx.h * dmg * 0.6 - camera.y); ctx.lineTo(cx - camera.x - 6, fx.y + fx.h * dmg - camera.y); ctx.stroke(); }
 			ctx.restore();
+		} else if(fx.kind === 'bog'){
+			// a dripping mud double rising out of a puddle
+			const rise = Math.min(1, fx.age / 16), cx = fx.x + fx.w / 2 - camera.x, by = fx.y + fx.h - camera.y;
+			const H = fx.h * rise, W = fx.w, sway = Math.sin(fx.age * 0.15) * 3;
+			ctx.save(); ctx.globalAlpha = fade;
+			ctx.fillStyle = '#3e2a14'; ctx.beginPath(); ctx.ellipse(cx, by + 2, W * 0.9, 6, 0, 0, Math.PI * 2); ctx.fill();
+			const g = ctx.createLinearGradient(cx - W / 2, by - H, cx + W / 2, by);
+			g.addColorStop(0, '#b89058'); g.addColorStop(0.5, '#7a5430'); g.addColorStop(1, '#3a2614');
+			ctx.fillStyle = g;
+			ctx.beginPath();
+			ctx.moveTo(cx - W * 0.55, by);
+			ctx.quadraticCurveTo(cx - W * 0.62, by - H * 0.55, cx - W * 0.32 + sway, by - H * 0.78);
+			ctx.lineTo(cx - W * 0.62 + sway, by - H * 0.5);
+			ctx.lineTo(cx - W * 0.42 + sway, by - H * 0.46);
+			ctx.quadraticCurveTo(cx - W * 0.25 + sway, by - H * 0.98, cx + sway, by - H);
+			ctx.quadraticCurveTo(cx + W * 0.28 + sway, by - H * 0.98, cx + W * 0.36 + sway, by - H * 0.74);
+			ctx.lineTo(cx + W * 0.66 + sway, by - H * 0.42);
+			ctx.lineTo(cx + W * 0.44 + sway, by - H * 0.4);
+			ctx.quadraticCurveTo(cx + W * 0.62, by - H * 0.4, cx + W * 0.55, by);
+			ctx.closePath(); ctx.fill();
+			// eyes and a glossy streak
+			ctx.fillStyle = 'rgba(255,220,140,' + (0.8 * rise) + ')';
+			ctx.fillRect(cx - 6 + sway, by - H * 0.82, 3, 3); ctx.fillRect(cx + 3 + sway, by - H * 0.82, 3, 3);
+			ctx.strokeStyle = 'rgba(240,215,170,0.45)'; ctx.lineWidth = 2;
+			ctx.beginPath(); ctx.moveTo(cx - W * 0.2 + sway, by - H * 0.7); ctx.quadraticCurveTo(cx - W * 0.3, by - H * 0.4, cx - W * 0.25, by - H * 0.15); ctx.stroke();
+			ctx.restore();
+			if(fx.age % 4 === 0) EFX.add({ k: 'drop', x: fx.x + fx.w / 2 + (Math.random() - 0.5) * W, y: fx.y + fx.h - H * (0.3 + Math.random() * 0.5), vx: 0, vy: 0.5, g: 0.25, drag: 0.99, size: 2, c: '#7a5430', c2: '#e8d0a0', max: 24 });
+		} else if(fx.kind === 'prism'){
+			EFX.ghost(fx.x + fx.w / 2, fx.y + fx.h / 2, fx.w, fx.h, 'crystal', 0.8 * fade, fx.age);
+			ctx.save(); ctx.globalAlpha = 0.7 * fade; ctx.translate(fx.x + fx.w / 2 - camera.x, fx.y + fx.h * 0.3 - camera.y); ctx.rotate(fx.age * 0.05);
+			ctx.strokeStyle = '#f2dcff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(0, -16); ctx.lineTo(14, 8); ctx.lineTo(-14, 8); ctx.closePath(); ctx.stroke();
+			ctx.restore();
+			if(fx.pending) EFX.charge(fx.x + fx.w / 2, fx.y + fx.h * 0.3, 'crystal', 30, 1, 10);
 		} else if(fx.kind === 'seed'){
+			if(!fx.grown){
+				const k = fx.age / 20, sx = fx.x - camera.x, sy = fx.y - camera.y;
+				ctx.save(); ctx.fillStyle = '#6a4a1c'; ctx.beginPath(); ctx.ellipse(sx, sy, 6, 5, 0, 0, Math.PI * 2); ctx.fill();
+				ctx.globalCompositeOperation = 'lighter'; EFX.glowS(sx, sy, 10 + 8 * k, '#8edc48', 0.3 + 0.5 * k * (0.5 + 0.5 * Math.sin(fx.age * 0.8))); ctx.restore();
+			} else {
+				// a thorn bush: three curling stalks with barbs
+				const h = (fx.h || 50) * Math.min(1, (fx.age - 20) / 10) * fade;
+				for(let k = -1; k <= 1; k++) earthDrawVine(fx.x + k * 6, fx.y + 4, fx.x + k * 16 + Math.sin(fx.age * 0.05 + k) * 4, fx.y - h * (k ? 0.8 : 1), 4, fade, fx.age + k * 10);
+			}
+		} else if(fx.kind === 'mudstrip'){
+			const sx = fx.x - camera.x, sy = fx.y - camera.y + 4, a = Math.min(1, fx.age / 6) * (u > 0.7 ? (1 - u) / 0.3 : 1);
+			ctx.save(); ctx.globalAlpha = 0.85 * a;
+			ctx.fillStyle = '#3e2a14'; ctx.beginPath(); ctx.ellipse(sx, sy, fx.w * 0.62, 8, 0, 0, Math.PI * 2); ctx.fill();
+			ctx.fillStyle = 'rgba(232,208,160,0.35)'; ctx.beginPath(); ctx.ellipse(sx - fx.w * 0.1, sy - 3, fx.w * 0.3, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+			ctx.restore();
+			if(fx.age % 23 === 0) EFX.mote('mud', fx.x + (Math.random() - 0.5) * fx.w, fx.y, 0, -1);
+		} else if(fx.kind === 'eggsac'){
+			const sx = fx.x - camera.x, sy = fx.y - camera.y, beat = 1 + 0.06 * Math.sin(fx.age * (fx.age > 14 ? 0.9 : 0.3));
 			ctx.save();
-			ctx.shadowColor = '#66cc44'; ctx.shadowBlur = fx.grown ? 10 : 0;
-			ctx.fillStyle = fx.grown ? '#2a6a1c' : '#8a6828';
-			ctx.fillRect(x - 10, y - (fx.grown ? 52 : 12), 20, fx.grown ? 52 : 12);
-			if(fx.grown){
-				ctx.strokeStyle = '#b8ee66'; ctx.lineWidth = 3;
-				ctx.beginPath(); ctx.moveTo(x, y - 44); ctx.lineTo(x - 18, y - 62); ctx.moveTo(x, y - 36); ctx.lineTo(x + 20, y - 58); ctx.stroke();
+			const g = ctx.createRadialGradient(sx - 5, sy - 6, 2, sx, sy, 18 * beat);
+			g.addColorStop(0, '#fffaf0'); g.addColorStop(0.6, '#e8d8b0'); g.addColorStop(1, '#8a6840');
+			ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(sx, sy, 16 * beat, 19 * beat, 0, 0, Math.PI * 2); ctx.fill();
+			ctx.strokeStyle = 'rgba(255,250,235,0.7)'; ctx.lineWidth = 1;
+			for(let k = 0; k < 4; k++){ ctx.beginPath(); ctx.ellipse(sx, sy, 16 * beat * (0.3 + k * 0.22), 19 * beat, 0, 0, Math.PI * 2); ctx.stroke(); }
+			ctx.beginPath(); ctx.moveTo(sx, sy - 19); ctx.lineTo(sx, sy - 80); ctx.stroke();
+			ctx.restore();
+		} else if(fx.kind === 'spiderling'){
+			earthDrawSpiderling(fx.x, fx.y, fx.age);
+		} else if(fx.kind === 'thorntrail'){
+			// scattered thorn caltrops
+			const sx = fx.x - camera.x, sy = fx.y - camera.y, a = 1 - u;
+			ctx.save(); ctx.globalAlpha = a; ctx.fillStyle = '#4f8a26'; ctx.strokeStyle = '#d8ff9a'; ctx.lineWidth = 1;
+			for(let k = 0; k < 3; k++){
+				const an = k * 2.1 + fx.x * 0.1;
+				ctx.beginPath(); ctx.moveTo(sx + Math.cos(an) * 7, sy + Math.sin(an) * 7); ctx.lineTo(sx + Math.cos(an + 2.6) * 3, sy + Math.sin(an + 2.6) * 3); ctx.lineTo(sx + Math.cos(an - 2.6) * 3, sy + Math.sin(an - 2.6) * 3); ctx.closePath(); ctx.fill(); ctx.stroke();
 			}
 			ctx.restore();
-		} else if(fx.kind === 'mudstrip'){
-			ctx.save(); ctx.globalAlpha = 0.72;
-			const g = ctx.createLinearGradient(x, y - 10, x, y + 10);
-			g.addColorStop(0, '#c4a060'); g.addColorStop(1, '#2a1c0c');
-			ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x, y, fx.w * 0.62, 13, 0, 0, Math.PI * 2); ctx.fill();
-			ctx.restore();
-		} else if(fx.kind === 'eggsac'){
-			ctx.save(); ctx.shadowColor = '#e8c890'; ctx.shadowBlur = 10;
-			const g = ctx.createRadialGradient(x - 4, y - 5, 2, x, y, 16);
-			g.addColorStop(0, '#fff6e0'); g.addColorStop(1, '#8a6840');
-			ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, 16, 0, Math.PI * 2); ctx.fill(); ctx.restore();
-		} else if(fx.kind === 'spiderling'){
-			ctx.fillStyle = '#2a1c10'; ctx.fillRect(x - 7, y - 5, 14, 10);
-			ctx.strokeStyle = '#110c08'; ctx.beginPath(); ctx.moveTo(x - 10, y); ctx.lineTo(x + 10, y); ctx.stroke();
-		} else if(fx.kind === 'thorntrail'){
-			ctx.save(); ctx.strokeStyle = 'rgba(160,220,70,0.75)'; ctx.lineWidth = 3;
-			ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
 		} else if(fx.kind === 'fault') drawFaultFX(fx);
 		else if(fx.kind === 'grip') drawGripFX(fx);
 		else if(fx.kind === 'vinepath') drawVinePathFX(fx);
@@ -785,11 +877,19 @@ function drawEarthDungeonWorld(){
 		else if(fx.kind === 'relay') drawRelayFX(fx);
 		else if(fx.kind === 'prison') drawPrisonFX(fx);
 		else if(fx.kind === 'sinkhole') drawSinkFX(fx);
-		else if(fx.kind === 'mudwave'){
-			ctx.save(); ctx.globalAlpha = 0.8;
-			const g = ctx.createLinearGradient(x - fx.w / 2, y, x + fx.w / 2, y);
-			g.addColorStop(0, 'rgba(80,50,20,0)'); g.addColorStop(0.5, '#c4a060'); g.addColorStop(1, 'rgba(80,50,20,0)');
-			ctx.fillStyle = g; ctx.fillRect(x - fx.w / 2, y - 18, fx.w, 32); ctx.restore();
+		else if(fx.kind === 'rain'){
+			EFX.warnCircle(fx.cx, kitFloor(fx.cx, fx.cy) - 2, atkS(130), Math.min(1, fx.age / 20), 'crystal', { flat: 0.25, alpha: 1 - u });
+		} else if(fx.kind === 'mudwave'){
+			// a rolling crest of mud
+			const P = EFX.pal('mud'), sx = fx.x - camera.x, sy = fx.y - camera.y + 6;
+			ctx.save();
+			for(let k = 0; k < 5; k++){
+				const off = (k - 2) * fx.w * 0.17, hh = (26 + 10 * Math.sin(fx.age * 0.5 + k)) * (1 - Math.abs(k - 2) * 0.22);
+				const g = ctx.createLinearGradient(0, sy - hh, 0, sy);
+				g.addColorStop(0, P.core); g.addColorStop(0.35, P.mid); g.addColorStop(1, P.outer);
+				ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(sx + off + fx.dir * 6, sy - hh * 0.4, fx.w * 0.17, hh * 0.7, fx.dir * 0.3, 0, Math.PI * 2); ctx.fill();
+			}
+			ctx.restore();
 		}
 	}
 	if(typeof enemies !== 'undefined') for(let i = 0; i < enemies.length; i++) drawEarthEnemyFX(enemies[i]);
@@ -797,118 +897,137 @@ function drawEarthDungeonWorld(){
 }
 
 function drawFaultFX(fx){
-	ctx.save(); ctx.lineCap = 'round';
+	const heat = fx.age < 20 ? 1 : Math.max(0, 1 - (fx.age - 20) / 40);
 	for(let i = 0; i < fx.lines.length; i++){
 		const L = fx.lines[i];
 		if(i === 0 && fx.split) continue;
-		ctx.strokeStyle = 'rgba(70,40,10,0.95)'; ctx.lineWidth = 14;
-		ctx.beginPath(); ctx.moveTo(L.x1 - camera.x, L.y1 - camera.y); ctx.lineTo(L.x2 - camera.x, L.y2 - camera.y); ctx.stroke();
-		ctx.strokeStyle = 'rgba(255,200,80,0.9)'; ctx.lineWidth = 5;
-		ctx.beginPath(); ctx.moveTo(L.x1 - camera.x, L.y1 - camera.y); ctx.lineTo(L.x2 - camera.x, L.y2 - camera.y); ctx.stroke();
+		const n = 8, pts = [];
+		for(let k = 0; k <= n; k++){ const t = k / n; pts.push(L.x1 + (L.x2 - L.x1) * t + (k % 2 ? 4 : -3), L.y1 + (k % 3 === 1 ? 2 : 0)); }
+		EFX.crack(pts, 'sand', { width: 5, heat });
+		if(fx.age < 30) EFX.spike(L.x2, L.y2 + 3, 26 * heat, 18, 'earth', { lean: Math.sign(L.x2 - L.x1) * 0.25 });
 	}
-	ctx.restore();
 }
 function drawGripFX(fx){
+	EFX.warnCircle(fx.cx, fx.cy, atkS(96), Math.min(1, fx.age / 12), 'earth', { flat: 0.25, alpha: Math.max(0, 1 - fx.age / 60) });
 	for(let i = 0; i < fx.pillars.length; i++){
 		const P = fx.pillars[i];
-		const px = P.x - 14 - camera.x, py = P.y - P.h - camera.y;
-		ctx.save(); ctx.shadowColor = '#e8c880'; ctx.shadowBlur = 8;
-		const g = ctx.createLinearGradient(px, py, px + 28, py + P.h);
-		g.addColorStop(0, '#f4e4c0'); g.addColorStop(1, '#5a4020');
-		ctx.fillStyle = g; ctx.fillRect(px, py, 28, P.h); ctx.restore();
+		EFX.spike(P.x, P.y + 4, P.h, 30, 'earth', { lean: (fx.cx - P.x) / 600 });
 	}
 }
 function drawVinePathFX(fx){
-	ctx.save(); ctx.lineWidth = 7; ctx.lineCap = 'round';
 	for(let p = 0; p < fx.paths.length; p++){
-		ctx.strokeStyle = 'rgba(90,190,60,0.75)';
-		ctx.beginPath();
-		const vis = Math.max(1, Math.floor(fx.paths[p].length * Math.min(1, fx.age / 20)));
-		for(let i = 0; i < vis; i++){
-			const pt = fx.paths[p][i];
-			if(i === 0) ctx.moveTo(pt.x - camera.x, pt.y - camera.y);
-			else ctx.lineTo(pt.x - camera.x, pt.y - camera.y);
+		const path = fx.paths[p], vis = Math.min(1, fx.age / 20);
+		const pts = [];
+		for(let i = 0; i < path.length; i++) pts.push(path[i].x, path[i].y + 2);
+		if(!fx.erupted){
+			EFX.crack(pts, 'nature', { progress: vis, width: 3, heat: 0.6 });
+			// the burrowing tip throws up dirt
+			const seg = Math.min(path.length - 1, Math.floor(vis * (path.length - 1)));
+			const a = path[seg], b = path[Math.min(path.length - 1, seg + 1)], k = vis * (path.length - 1) - seg;
+			const hx = a.x + (b.x - a.x) * k;
+			if(fx.age % 2 === 0) EFX.debris('earth', hx, a.y - 2, 1, { speed: 3, floor: a.y, scale: 0.6 });
 		}
-		ctx.stroke();
 	}
-	ctx.restore();
+	if(fx.erupted && fx.age < fx.max){
+		const real = fx.paths[fx.real], last = real[real.length - 1], k = Math.min(1, (fx.age - 28) / 6), a = 1 - Math.max(0, (fx.age - 40) / 30);
+		for(let j = -1; j <= 1; j++) earthDrawVine(last.x + j * 12, last.y + 4, last.x + j * 26, last.y - 70 * k, 6, a, fx.age + j);
+	}
 }
 function drawRootsFX(fx){
-	const aim = kitAim(fx.en);
 	for(let i = 0; i < fx.roots.length; i++){
 		const r = fx.roots[i];
-		ctx.save(); ctx.strokeStyle = r.snap ? '#b8ee55' : '#5a8a30'; ctx.lineWidth = r.snap ? 5 : 3;
-		ctx.beginPath(); ctx.moveTo(r.x - camera.x, r.y - camera.y);
-		ctx.lineTo((r.snap ? aim.x : r.x) - camera.x, (r.snap ? aim.y : r.y - 26) - camera.y); ctx.stroke(); ctx.restore();
+		if(!r.snap){
+			const k = Math.min(1, fx.age / 22);
+			earthDrawVine(r.x, r.y + 4, r.x + Math.sin(i) * 6, r.y - 10 - 18 * k, 3, 0.9, fx.age + i * 5);
+		} else {
+			const a = Math.max(0, 1 - (fx.age - 22) / 40);
+			earthDrawVine(r.x, r.y + 4, fx.snapX != null ? fx.snapX : r.x, fx.snapY != null ? fx.snapY : r.y - 30, 5, a, fx.age + i * 5);
+		}
 	}
 }
 function drawMazeFX(fx){
-	ctx.save(); ctx.strokeStyle = 'rgba(255,240,200,0.7)'; ctx.lineWidth = 3;
+	const a = fx.age < 10 ? fx.age / 10 : (fx.age > fx.max - 20 ? (fx.max - fx.age) / 20 : 1);
 	for(let i = 0; i < fx.webs.length; i++){
 		const w = fx.webs[i];
-		ctx.strokeRect(w.x - w.w / 2 - camera.x, w.y - w.h - camera.y, w.w, w.h);
+		const x0 = w.x - w.w / 2 - camera.x, y0 = w.y - w.h - camera.y;
+		ctx.save(); ctx.globalAlpha = a * 0.85; ctx.strokeStyle = 'rgba(250,244,228,0.85)'; ctx.lineWidth = 1.2;
 		ctx.beginPath();
-		ctx.moveTo(w.x - w.w / 2 - camera.x, w.y - w.h - camera.y);
-		ctx.lineTo(w.x + w.w / 2 - camera.x, w.y - camera.y);
+		ctx.moveTo(x0, y0); ctx.lineTo(x0 + w.w, y0 + w.h); ctx.moveTo(x0 + w.w, y0); ctx.lineTo(x0, y0 + w.h);
+		ctx.moveTo(x0 + w.w / 2, y0); ctx.lineTo(x0 + w.w / 2, y0 + w.h);
 		ctx.stroke();
+		ctx.restore();
+		earthDrawWeb(w.x, w.y - w.h / 2, Math.min(w.w, w.h) * 0.5, i * 0.4, a * 0.9, 1);
 	}
-	ctx.restore();
 }
 function drawRelayFX(fx){
-	ctx.save();
-	ctx.strokeStyle = 'rgba(230,160,255,0.55)'; ctx.lineWidth = 3;
-	ctx.beginPath();
-	if(fx.en) ctx.moveTo(fx.en.x + fx.en.w / 2 - camera.x, fx.en.y + fx.en.h * 0.28 - camera.y);
-	else ctx.moveTo(fx.nodes[0].x - camera.x, fx.nodes[0].y - camera.y);
-	for(let i = 0; i < fx.nodes.length; i++) ctx.lineTo(fx.nodes[i].x - camera.x, fx.nodes[i].y - camera.y);
-	ctx.stroke();
-	ctx.fillStyle = '#f0c0ff';
+	const src = fx.en ? { x: fx.en.x + fx.en.w / 2, y: fx.en.y + fx.en.h * 0.28 } : fx.nodes[0];
+	let prev = src;
 	for(let i = 0; i < fx.nodes.length; i++){
-		ctx.shadowColor = '#e080ff'; ctx.shadowBlur = 12;
-		ctx.beginPath(); ctx.arc(fx.nodes[i].x - camera.x, fx.nodes[i].y - camera.y, 11, 0, Math.PI * 2); ctx.fill();
+		const N = fx.nodes[i];
+		EFX.beam(prev.x, prev.y, N.x, N.y, i < (fx.orb ? fx.orb.i : 0) ? 3 : 1.5, 'crystal', { alpha: i < (fx.orb ? fx.orb.i : 0) ? 0.9 : 0.35 });
+		prev = N;
 	}
-	if(fx.orb){
-		const g = ctx.createRadialGradient(fx.orb.x - camera.x, fx.orb.y - camera.y, 2, fx.orb.x - camera.x, fx.orb.y - camera.y, 22);
-		g.addColorStop(0, '#fff'); g.addColorStop(1, 'rgba(180,60,255,0)');
-		ctx.fillStyle = g; ctx.beginPath(); ctx.arc(fx.orb.x - camera.x, fx.orb.y - camera.y, 22, 0, Math.PI * 2); ctx.fill();
+	for(let i = 0; i < fx.nodes.length; i++){
+		const N = fx.nodes[i], sx = N.x - camera.x, sy = N.y - camera.y + Math.sin(fx.age * 0.1 + i) * 3;
+		ctx.save(); ctx.globalCompositeOperation = 'lighter'; EFX.glowS(sx, sy, 22, '#9a5cff', 0.5); ctx.restore();
+		ctx.save(); ctx.translate(sx, sy); ctx.rotate(fx.age * 0.04 + i);
+		const g = ctx.createLinearGradient(-8, -12, 8, 12); g.addColorStop(0, '#ffffff'); g.addColorStop(0.5, '#e6b8ff'); g.addColorStop(1, '#9a5cff');
+		ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(0, -13); ctx.lineTo(8, 0); ctx.lineTo(0, 13); ctx.lineTo(-8, 0); ctx.closePath(); ctx.fill();
+		ctx.restore();
 	}
-	ctx.restore();
+	if(fx.orb){ EFX.bolt(fx.orb, fx.orb.x, fx.orb.y, 11, 'crystal', { ang: fx.age * 0.3 }); fx.orb.age = fx.age; }
 }
 function drawPrisonFX(fx){
-	ctx.save(); ctx.shadowColor = '#d080ff'; ctx.shadowBlur = 10;
+	EFX.warnCircle(fx.cx, fx.cy, 48, Math.min(1, fx.age / 38), 'crystal', { alpha: fx.closed ? Math.max(0, 1 - (fx.age - 38) / 20) : 1 });
 	for(let i = 0; i < fx.gems.length; i++){
 		const g = fx.gems[i];
-		const gx = fx.cx + Math.cos(g.ang + fx.age * 0.08) * g.r;
-		ctx.fillStyle = '#e8b0ff';
-		ctx.beginPath(); ctx.arc(gx - camera.x, fx.cy - camera.y, 14, 0, Math.PI * 2); ctx.fill();
+		const an = g.ang + fx.age * 0.08, gx = fx.cx + Math.cos(an) * g.r, gy = fx.cy + Math.sin(an) * g.r * 0.35;
+		g.age = fx.age; g.x = gx; g.y = gy;
+		EFX.bolt(g, gx, gy, 12, 'crystal', { ang: -Math.PI / 2, trailLen: 6, moteEvery: 5 });
 	}
-	ctx.restore();
 }
 function drawSinkFX(fx){
-	ctx.save();
-	const g = ctx.createRadialGradient(fx.cx - camera.x, fx.cy - camera.y, 6, fx.cx - camera.x, fx.cy - camera.y, fx.r);
-	g.addColorStop(0, 'rgba(20,12,6,0.65)'); g.addColorStop(0.6, 'rgba(90,60,30,0.35)'); g.addColorStop(1, 'rgba(90,70,40,0)');
-	ctx.fillStyle = g; ctx.beginPath(); ctx.arc(fx.cx - camera.x, fx.cy - camera.y, fx.r, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+	// a swirling sinkhole: dark core, turning rings, debris sucked in
+	const sx = fx.cx - camera.x, sy = fx.cy - camera.y + 4, a = fx.age < 10 ? fx.age / 10 : (fx.age > fx.max - 15 ? (fx.max - fx.age) / 15 : 1);
+	ctx.save(); ctx.globalAlpha = a;
+	const g = ctx.createRadialGradient(sx, sy, 4, sx, sy, fx.r);
+	g.addColorStop(0, 'rgba(10,6,2,0.95)'); g.addColorStop(0.5, 'rgba(70,46,22,0.6)'); g.addColorStop(1, 'rgba(110,80,46,0)');
+	ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(sx, sy, fx.r, fx.r * 0.28, 0, 0, Math.PI * 2); ctx.fill();
+	ctx.strokeStyle = 'rgba(200,160,100,0.5)'; ctx.lineWidth = 2;
+	for(let k = 0; k < 3; k++){ const rr = fx.r * (0.3 + k * 0.22), st = fx.age * 0.08 * (k + 1); ctx.beginPath(); ctx.ellipse(sx, sy, rr, rr * 0.28, 0, st, st + 2.4); ctx.stroke(); }
+	ctx.restore();
+	if(fx.age % 3 === 0){
+		const side = Math.random() < 0.5 ? -1 : 1, d = fx.r * (0.7 + Math.random() * 0.3);
+		EFX.add({ k: 'gather', x: fx.cx + side * d, y: fx.cy - 2, sx: fx.cx + side * d, sy: fx.cy - 2, tx: fx.cx, ty: fx.cy + 2, size: 2, c: '#e8d0a0', c2: '#8a6236', max: 26 });
+	}
 }
 
 function drawEarthEnemyFX(en){
-	if(!en || en.dead || !en.earthKit) return;
+	if(!en || en.dead || !en.earthKit || !window.EFX) return;
 	const kit = en.earthKit;
 	if(kit.kind === 'ceilingDrop'){
-		ctx.save(); ctx.globalAlpha = 0.45; ctx.fillStyle = '#111';
-		ctx.beginPath(); ctx.ellipse(kit.dropX - camera.x, kitFloor(kit.dropX, en.y) - camera.y, 32, 11, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+		const fl = kitFloor(kit.dropX, en.y);
+		EFX.warnCircle(kit.dropX, fl, 40, kit.phase === 'drop' ? 1 : Math.min(1, (kit.hang || 0) / 14), 'silk', { flat: 0.3 });
+		ctx.save(); ctx.strokeStyle = 'rgba(250,244,228,0.75)'; ctx.lineWidth = 1.2;
+		ctx.beginPath(); ctx.moveTo(en.x + en.w / 2 - camera.x, en.y - camera.y); ctx.lineTo(en.x + en.w / 2 - camera.x, en.y - 400 - camera.y); ctx.stroke(); ctx.restore();
 	}
 	if(kit.kind === 'webSwing'){
-		ctx.save(); ctx.strokeStyle = 'rgba(255,240,200,0.85)'; ctx.lineWidth = 2;
+		ctx.save(); ctx.strokeStyle = 'rgba(250,244,228,0.85)'; ctx.lineWidth = 1.5;
 		ctx.beginPath(); ctx.moveTo(kit.ox - camera.x, kit.oy - camera.y);
 		ctx.lineTo(en.x + en.w / 2 - camera.x, en.y - camera.y); ctx.stroke(); ctx.restore();
+		earthDrawWeb(kit.ox, kit.oy, 10, 0, 0.8, 1);
 	}
-	if(kit.kind === 'crystalRelay' && kit.nodes){
-		ctx.fillStyle = '#f0c0ff';
-		for(let i = 0; i < kit.nodes.length; i++){
-			ctx.beginPath(); ctx.arc(kit.nodes[i].x - camera.x, kit.nodes[i].y - camera.y, 8, 0, Math.PI * 2); ctx.fill();
-		}
+	if(kit.kind === 'thornWheel'){
+		// a spinning ring of thorns around the curled crawler
+		const cx = en.x + en.w / 2, cy = en.y + en.h / 2, R = Math.max(en.w, en.h) * 0.75;
+		ctx.save(); ctx.translate(cx - camera.x, cy - camera.y); ctx.rotate(kit.t * 0.5 * kit.dir);
+		ctx.strokeStyle = '#3f8a22'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.stroke();
+		ctx.fillStyle = '#d8ff9a';
+		for(let i = 0; i < 10; i++){ const a = i / 10 * Math.PI * 2; ctx.save(); ctx.rotate(a); ctx.beginPath(); ctx.moveTo(R - 3, -4); ctx.lineTo(R + 9, 0); ctx.lineTo(R - 3, 4); ctx.fill(); ctx.restore(); }
+		ctx.restore();
+		if(kit.t % 2 === 0) EFX.emit('nature', cx, en.y + en.h, 1, { speed: 1.5 });
 	}
+	if(kit.kind === 'mudslide' && kit.t % 2 === 0) EFX.smoke(en.x + en.w / 2, en.y + en.h - 6, 1, { size: 10, c: '#5a4024', a: 0.5 });
 }
 
 function registerEarthDungeonCasts(map){

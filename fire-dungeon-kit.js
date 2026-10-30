@@ -52,6 +52,7 @@ function fireKitSpawn(en, x, y, vx, vy, opts){
 	const p = spawnEnemyProj(x, y, vx, vy, opts);
 	if(p){
 		p._fireStyle = opts._fireStyle || 'orb';
+		p._efxEl = (p._fireStyle === 'glob' || p._fireStyle === 'drop' || p._fireStyle === 'erupt') ? 'magma' : 'fire';
 		if(fireKitFriendly(en)){
 			if(typeof markNecroFriendlyProj === 'function') markNecroFriendlyProj(p, en);
 			else p.necroFriendly = true;
@@ -71,7 +72,7 @@ function fireKitHit(en, x, y, r, dmg, effects){
 				t.hp -= dmg;
 				t.flash = 8;
 				dmgNumbers.push({ x: t.x + t.w / 2, y: t.y - 10, text: Math.round(dmg) + '', age: 0, color: '#ff8844' });
-				spawnImpact(x, y, '#ff6622');
+				if(window.EFX) EFX.hit(t.x + t.w / 2, t.y + t.h / 2, 'fire', dmg); else spawnImpact(x, y, '#ff6622');
 				return true;
 			}
 		}
@@ -79,22 +80,24 @@ function fireKitHit(en, x, y, r, dmg, effects){
 	}
 	if(player.iFrames > 0) return false;
 	if(circRect(x, y, r, player.x, player.y, player.w, player.h)){
+		if(window.EFX && EFX.armed(en, x, y, r)) return false;      // fair arming (enemy-fx.js)
 		damagePlayer(dmg, effects || ['burn']);
-		spawnImpact(x, y, '#ff6622');
+		if(window.EFX) EFX.hit(player.x + player.w / 2, player.y + player.h / 2, 'fire', dmg); else spawnImpact(x, y, '#ff6622');
 		return true;
 	}
 	return false;
 }
 function fireKitFloorY(x, fromY){
 	const start = (fromY != null) ? fromY : 0;
+	// the nearest surface below: solid tiles or a sandbox platform, whichever is higher
+	let best = (typeof WORLD_H === 'number') ? WORLD_H - 8 : 2400;
 	if(typeof TILE === 'number' && typeof MAP_ROWS === 'number' && typeof isSolid === 'function'){
 		const col = Math.floor(x / TILE);
 		const sr = Math.max(0, Math.floor(start / TILE));
 		for(let r = sr; r < MAP_ROWS; r++){
-			if(isSolid(col, r)) return r * TILE;
+			if(isSolid(col, r)){ best = Math.min(best, r * TILE); break; }
 		}
 	}
-	let best = (typeof WORLD_H === 'number') ? WORLD_H - 8 : 2400;
 	if(typeof sandboxPlatforms !== 'undefined'){
 		for(let i = 0; i < sandboxPlatforms.length; i++){
 			const plat = sandboxPlatforms[i];
@@ -116,6 +119,14 @@ function fireKitBlocked(x, y){
 	return false;
 }
 function fireKitSpark(x, y, n, color){
+	if(window.EFX){
+		const c = color || { r: 255, g: 120, b: 40 };
+		const k = Math.min(n || 8, 18);
+		if(c.r + c.g + c.b < 260){ EFX.smoke(x, y, Math.max(1, k / 4 | 0), { size: 10, c: '#2a1a12', a: 0.55 }); EFX.emit('fire', x, y, k / 3 | 0, { speed: 1.5 }); return; }
+		EFX.emit('fire', x, y, Math.ceil(k * 0.6), { speed: 1.6 });
+		EFX.sparks('fire', x, y, Math.ceil(k * 0.4), { speed: 4.5, up: 1 });
+		return;
+	}
 	if(typeof particles === 'undefined') return;
 	const c = color || { r: 255, g: 120, b: 40 };
 	const count = Math.min(n || 8, 18);
@@ -129,6 +140,16 @@ function fireKitSpark(x, y, n, color){
 			life: 14 + Math.random() * 16, maxLife: 30,
 			r: 1.6 + Math.random() * 2.4, color: c
 		});
+	}
+}
+function fireKitGeyser(en, x, floor, h, max){
+	fireKitPushFX({ kind: 'geyser', en, x, floor, h: h || 90, age: 0, max: max || 30 });
+	if(window.EFX){
+		EFX.flash(x, floor - 10, 40, 'magma', 10);
+		EFX.groundWave(x, floor, 60, 'magma', 20);
+		EFX.debris('magma', x, floor - 6, 6, { speed: 7, floor: floor, spread: 1.3 });
+		EFX.sparks('magma', x, floor - 10, 8, { ang: -Math.PI / 2, spread: 1.1, speed: 9, g: 0.25 });
+		EFX.decal(x, floor + 1, 34, 'magma', 150);
 	}
 }
 function fireKitPushFX(fx){
@@ -154,6 +175,7 @@ function beginFireKit(en, kind, extra){
 	en._fireKitBusy = extra && extra.busy === false ? false : true;
 	en.attackAnimTimer = Math.max(en.attackAnimTimer || 0, 48);
 	en.facing = fireKitAim(en).x >= en.x + en.w / 2 ? 1 : -1;
+	if(window.EFX) EFX.charge(en.x + en.w / 2, en.y + en.h / 2, (type === 'magmaGolem' || type === 'flameSerpent') ? 'magma' : 'fire', Math.max(40, en.w * 1.3), 8, 18);
 	return en.fireKit;
 }
 
@@ -253,7 +275,7 @@ function castSerpentMagmaFang(en){
 				shape: 'circle', effects: ['burn'], trail: 'flame', gravity: 0.07, maxAge: 150,
 				_fireStyle: 'glob'
 			});
-			spawnTelegraph(spots[i].x - 22, spots[i].y - 22, 44, 44, 28, 'rgba(255,90,0,0.28)', 'circle', '');
+			efxTelegraph(spots[i].x - 22, spots[i].y - 22, 44, 44, 28, 'rgba(255,90,0,0.28)', 'circle', '');
 		}, i * 90);
 	}
 	beginFireKit(en, 'magmaFang', { busy: false });
@@ -280,7 +302,7 @@ function castEmberFireSigil(en){
 	}
 	beginFireKit(en, 'fireSigil', { busy: true, pts, linked: false, warped: false });
 	for(let i = 0; i < pts.length; i++){
-		spawnTelegraph(pts[i].x - 18, pts[i].y - 18, 36, 36, 70, 'rgba(255,120,20,0.3)', 'circle', '◆');
+		efxTelegraph(pts[i].x - 18, pts[i].y - 18, 36, 36, 70, 'rgba(255,120,20,0.3)', 'circle', '◆');
 	}
 }
 function castEmberReboundFlame(en){
@@ -350,15 +372,12 @@ function fireBuildCracks(sx, sy, tx, ty){
 function castGolemMagmaCore(en){
 	beginFireKit(en, 'magmaCore', { busy: true, phase: 'open', dropT: 0 });
 	en._fireCoreOpen = true;
-	spawnTelegraph(en.x - 10, en.y + 8, en.w + 20, en.h - 10, 50, 'rgba(255,80,0,0.28)', 'rect', 'CORE');
 }
 function castGolemVolcanicFists(en){
 	const aim = fireKitAim(en);
 	const a = { x: aim.x, y: fireKitFloorY(aim.x, aim.y) };
 	const b = { x: aim.x + (aim.vx >= 0 ? 130 : -130), y: fireKitFloorY(aim.x + 130, aim.y) };
 	beginFireKit(en, 'volcanicFists', { busy: true, a, b, phase: 'tell' });
-	spawnTelegraph(a.x - 70, a.y - 160, 140, 170, 55, 'rgba(255,70,0,0.26)', 'rect', '');
-	spawnTelegraph(b.x - 70, b.y - 160, 140, 170, 55, 'rgba(255,70,0,0.26)', 'rect', '');
 }
 function castGolemMoltenCollapse(en){
 	beginFireKit(en, 'moltenCollapse', { busy: true, phase: 'crack', pieces: [] });
@@ -385,12 +404,15 @@ function castSpriteCometDive(en){
 }
 function castSpriteEmberMines(en){
 	const aim = fireKitAim(en);
+	// five mines are tossed in an arc and settle in a field around the player
+	const ox = en.x + en.w / 2, oy = en.y + en.h / 2;
 	for(let i = 0; i < 5; i++){
+		const tx = aim.x + (i - 2) * 70 + (Math.random() - 0.5) * 20;
+		const floor = fireKitFloorY(tx, aim.y - 40) - 16;
+		const T = 34 + i * 4, vx = (tx - ox) / T, vy = (floor - oy) / T - 0.5 * 0.32 * T;
 		fireKitPushFX({
-			kind: 'mine', en, age: 0, armed: 70, dead: false,
-			x: en.x + en.w / 2 + (i - 2) * 46,
-			y: en.y + (i % 2 ? -30 : 10),
-			vx: 0, vy: 0, r: atkS(14), chasing: false
+			kind: 'mine', en, age: 0, armed: T + 40, dead: false,
+			x: ox, y: oy, vx, vy, floor, flying: true, r: atkS(14), chasing: false
 		});
 	}
 	beginFireKit(en, 'emberMines', { busy: false });
@@ -406,7 +428,7 @@ function castSpriteFlickerSwarm(en){
 			y: en.y + (Math.random() - 0.5) * 100,
 			vx: (Math.random() - 0.5) * 3.4,
 			vy: (Math.random() - 0.5) * 2.6,
-			life: 150
+			life: 110 + i * 12
 		});
 	}
 	beginFireKit(en, 'flickerSwarm', { busy: true, copies, flashT: 0 });
@@ -454,6 +476,7 @@ function tickImpKit(en, kit){
 				const o = kit.orbs[i];
 				const dx = lock.x - o.x, dy = lock.y - o.y;
 				const d = Math.hypot(dx, dy) || 1;
+				if(window.EFX) EFX.flash(o.x, o.y, 22, 'fire', 7);
 				fireKitSpawn(en, o.x, o.y, dx / d * 7.2, dy / d * 7.2, {
 					color: '#ff4400', color2: '#ffcc55', power: 16, width: 32, height: 32,
 					shape: 'circle', effects: ['burn'], trail: 'flame', maxAge: 90, _fireStyle: 'orb'
@@ -476,9 +499,10 @@ function tickImpKit(en, kit){
 					vx: kit.dashVx * 0.92, vy: kit.dashVy * 0.55, facing: en.facing
 				});
 				const behind = aim.x >= en.x + en.w / 2 ? -1 : 1;
-				const up = Math.random() < 0.55;
-				en.x = aim.x + behind * 70 - en.w / 2;
-				en.y = up ? aim.y - 110 : aim.y - 20;
+				en.x = aim.x + behind * 90 - en.w / 2;
+				en.y = aim.y - 150;
+				kit.target = { x: aim.x, y: fireKitFloorY(aim.x, aim.y) - 4 };
+				if(window.EFX) EFX.smoke(en.x + en.w / 2, en.y + en.h / 2, 3, { size: 12, c: '#2a1a12', a: 0.6 });
 				if(typeof unstuckFromTiles === 'function') unstuckFromTiles(en);
 				if(en.typeDef && en.typeDef.flies) en.baseY = en.y - (en.flyOffset || 0);
 				fireKitSpark(en.x + en.w / 2, en.y + en.h / 2, 14, { r: 80, g: 40, b: 20 });
@@ -487,10 +511,21 @@ function tickImpKit(en, kit){
 			kit.phase = 'dive';
 			en._fireHidden = false;
 		} else if(kit.phase === 'dive'){
-			en.y += 9;
+			// swoop onto the spot the player stood on when the imp vanished
+			const tg = kit.target || { x: aim.x, y: aim.y };
+			const dx = tg.x - (en.x + en.w / 2), dy = tg.y - (en.y + en.h);
+			const d = Math.hypot(dx, dy) || 1, sp = Math.min(d, 13);
+			en.x += dx / d * sp; en.y += dy / d * sp;
 			if(en.typeDef && en.typeDef.flies) en.baseY = en.y - (en.flyOffset || 0);
-			fireKitHit(en, en.x + en.w / 2, en.y + en.h, 26, fireKitDmg(20), ['burn']);
-			if(kit.t >= 42) fireKitEnd(en);
+			if(window.EFX && kit.t % 2 === 0) EFX.emit('fire', en.x + en.w / 2, en.y + en.h / 2, 2, { speed: 1 });
+			if(!kit.slammed) fireKitHit(en, en.x + en.w / 2, en.y + en.h * 0.6, 30, fireKitDmg(20), ['burn']);
+			if(!kit.slammed && d < 14){
+				kit.slammed = true;
+				if(window.EFX){ EFX.burst(tg.x, tg.y, 'fire', 1.3, { shake: 4 }); EFX.groundWave(tg.x, tg.y + 4, 70, 'fire'); EFX.decal(tg.x, tg.y + 5, 30, 'fire', 140); }
+				fireKitHit(en, tg.x, tg.y - 14, 40, fireKitDmg(16), ['burn']);
+				kit.endAt = kit.t + 10;
+			}
+			if(kit.t >= 70 || (kit.endAt && kit.t >= kit.endAt)) fireKitEnd(en);
 		}
 	} else if(kit.kind === 'wildfireTrail'){
 		const dest = kit.pts[kit.pi];
@@ -500,10 +535,12 @@ function tickImpKit(en, kit){
 		en.x += dx / d * 6.2;
 		en.y += dy / d * 6.2;
 		if(en.typeDef && en.typeDef.flies) en.baseY = en.y - (en.flyOffset || 0);
-		if(kit.t - kit.lastDrop >= 5){
+		// one burning patch per ~patch width travelled (every 5 frames they overlapped 2:1 and doubled the drawing)
+		if(kit.t - kit.lastDrop >= 9){
 			kit.lastDrop = kit.t;
 			const fx = en.x + en.w / 2, fy = fireKitFloorY(en.x + en.w / 2, en.y + en.h);
 			fireKitPushFX({ kind: 'trail', en, x: fx, y: fy - 6, w: atkS(56), h: atkS(16), age: 0, max: 160, hitCd: 0 });
+			if(window.EFX) EFX.decal(fx, fy + 1, atkS(32), 'fire', 170, { glow: 0.35 });
 			fireKitSpark(fx, fy - 8, 3);
 		}
 		if(d < 16) kit.pi++;
@@ -543,14 +580,14 @@ function tickSerpentKit(en, kit){
 			kit.pi++;
 			if(kit.pi >= kit.path.length){
 				const ex = kit.path[kit.path.length - 1].x;
-				spawnTelegraph(ex - 16, kit.floor - 150, 32, 160, 22, 'rgba(255,80,0,0.35)', 'rect', '');
+				efxTelegraph(ex - 16, kit.floor - 150, 32, 160, 22, 'rgba(255,80,0,0.35)', 'rect', '', 'magma');
 				setTimeout(function(){
 					if(en.dead) return;
 					en._fireHidden = false; en._fireNoHit = false;
 					en.x = ex - en.w / 2;
 					en.y = kit.floor - en.h;
-					fireKitHit(en, ex, kit.floor - 80, 22, fireKitDmg(26), ['burn']);
-					fireKitSpark(ex, kit.floor - 20, 16);
+					if(!fireKitHit(en, ex, kit.floor - 24, 26, fireKitDmg(26), ['burn'])) fireKitHit(en, ex, kit.floor - 84, 26, fireKitDmg(26), ['burn']);
+					fireKitGeyser(en, ex, kit.floor, 150, 34);
 					if(typeof shakeScreen === 'function') shakeScreen(6, 10);
 					fireKitEnd(en);
 				}, 180);
@@ -571,7 +608,7 @@ function tickSerpentKit(en, kit){
 			const dist = Math.hypot(pcx - kit.cx, pcy - kit.cy);
 			if(Math.abs(dist - kit.r) < atkS(22)) fireKitHit(en, pcx, pcy, 18, fireKitDmg(14), ['burn']);
 		} else if(kit.t === 78){
-			spawnTelegraph(kit.cx - 28, kit.cy - 28, 56, 56, 16, 'rgba(255,40,0,0.4)', 'circle', '');
+			efxTelegraph(kit.cx - 28, kit.cy - 28, 56, 56, 16, 'rgba(255,40,0,0.4)', 'circle', '');
 		} else if(kit.t >= 92 && kit.t < 104){
 			fireKitHit(en, kit.cx, kit.cy, 34, fireKitDmg(28), ['burn']);
 			en.x = kit.cx - en.w / 2; en.y = kit.cy - en.h / 2;
@@ -590,7 +627,7 @@ function tickSerpentKit(en, kit){
 			kit.lastX = aim.x;
 			kit.pops++;
 			kit.nextPop = kit.t + 52;
-			spawnTelegraph(px - 22, kit.floor - 70, 44, 74, 24, 'rgba(255,90,0,0.3)', 'rect', '');
+			efxTelegraph(px - 22, kit.floor - 70, 44, 74, 24, 'rgba(255,90,0,0.3)', 'rect', '');
 			setTimeout(function(){
 				if(en.dead) return;
 				fireKitHit(en, px, kit.floor - 36, 28, fireKitDmg(16), ['burn']);
@@ -598,7 +635,7 @@ function tickSerpentKit(en, kit){
 					color: '#cc3300', color2: '#ff8800', power: 14, width: 28, height: 48,
 					shape: 'spike', effects: ['burn'], trail: 'flame', maxAge: 36, gravity: -0.05, _fireStyle: 'erupt'
 				});
-				fireKitSpark(px, kit.floor, 10);
+				fireKitGeyser(en, px, kit.floor, 80, 26);
 			}, 260);
 		}
 		if(kit.pops >= kit.maxPops && kit.t > kit.nextPop + 8){
@@ -607,6 +644,7 @@ function tickSerpentKit(en, kit){
 			en.x = pred - en.w / 2;
 			en.y = kit.floor - en.h;
 			fireKitHit(en, pred, kit.floor - 40, 36, fireKitDmg(24), ['burn']);
+			fireKitGeyser(en, pred, kit.floor, 120, 30);
 			if(typeof shakeScreen === 'function') shakeScreen(7, 12);
 			fireKitEnd(en);
 		}
@@ -660,7 +698,12 @@ function tickMageKit(en, kit){
 					shape: 'circle', effects: ['burn'], trail: 'flame', maxAge: 80, _fireStyle: 'orb'
 				});
 			}
-			fireKitSpark(kit.x, kit.y, 18);
+			if(window.EFX){
+				EFX.burst(kit.x, kit.y - 20, 'fire', 2.2, { shake: 0 });
+				EFX.groundWave(kit.x, kit.y + 2, 110, 'fire', 24);
+				EFX.decal(kit.x, kit.y + 3, 48, 'fire', 180);
+				fireKitPushFX({ kind: 'geyser', en, x: kit.x, floor: kit.y + 4, h: 110, age: 0, max: 26 });
+			} else fireKitSpark(kit.x, kit.y, 18);
 			if(typeof shakeScreen === 'function') shakeScreen(5, 8);
 		} else if(kit.t > kit.follow + 24) fireKitEnd(en);
 	}
@@ -682,6 +725,7 @@ function tickGolemKit(en, kit){
 					if(pt){
 						fireKitHit(en, pt.x, pt.y - 28, 24, fireKitDmg(18), ['burn']);
 						if(kit.t % 6 === 0){
+							if(window.EFX){ EFX.debris('magma', pt.x, pt.y - 4, 2, { speed: 6, floor: pt.y }); EFX.decal(pt.x, pt.y + 1, 26, 'magma', 120); }
 							fireKitSpawn(en, pt.x, pt.y - 4, 0, -5.8, {
 								color: '#cc4400', color2: '#ff8800', power: 16, width: 26, height: 46,
 								shape: 'spike', effects: ['burn'], trail: 'flame', maxAge: 32, _fireStyle: 'erupt'
@@ -702,6 +746,7 @@ function tickGolemKit(en, kit){
 		}
 		if(kit.t === 100){
 			en._fireCoreOpen = false;
+			if(window.EFX){ EFX.burst(en.x + en.w / 2, en.y + en.h * 0.4, 'magma', 2.2, { shake: 0 }); EFX.ring(en.x + en.w / 2, en.y + en.h * 0.4, 20, 180, 'magma', 24, { width: 6 }); }
 			for(let i = 0; i < 14; i++){
 				const a = Math.PI * 2 / 14 * i;
 				fireKitSpawn(en, en.x + en.w / 2, en.y + en.h * 0.4, Math.cos(a) * 5.2, Math.sin(a) * 5.2, {
@@ -718,7 +763,12 @@ function tickGolemKit(en, kit){
 			[kit.a, kit.b].forEach(function(p){
 				fireKitHit(en, p.x, p.y - 40, 62, fireKitDmg(26), ['burn']);
 				fireKitPushFX({ kind: 'crater', en, x: p.x, y: p.y, r: atkS(70), age: 0, max: 90, wave: false });
-				fireKitSpark(p.x, p.y, 14);
+				if(window.EFX){
+					EFX.burst(p.x, p.y - 20, 'magma', 2, { floor: p.y });
+					EFX.groundWave(p.x, p.y, 150, 'magma', 26);
+					EFX.debris('earth', p.x, p.y - 8, 10, { speed: 9, floor: p.y, spread: 2 });
+					EFX.smoke(p.x, p.y - 10, 4, { size: 16, c: '#3a2a20', a: 0.5, spread: 3 });
+				}
 			});
 			if(typeof shakeScreen === 'function') shakeScreen(10, 16);
 		}
@@ -729,7 +779,8 @@ function tickGolemKit(en, kit){
 					color: '#cc5500', color2: '#ff9900', power: 18, width: 16, height: 16,
 					shape: 'ring', maxAge: 28, aoe: true, aoeRadius: 120, aoeMax: 28
 				});
-				if(ring) ring._fireStyle = 'ring';
+				if(ring){ ring._fireStyle = 'ring'; ring._efxEl = 'magma'; }
+				if(window.EFX){ EFX.ring(p.x, p.y - 8, 20, atkS(120), 'magma', 28, { flat: 0.35, width: 8 }); EFX.sparks('magma', p.x, p.y - 6, 10, { ang: -Math.PI / 2, spread: 2.6, speed: 7 }); }
 			});
 		}
 		if(kit.t > 100) fireKitEnd(en);
@@ -744,10 +795,11 @@ function tickGolemKit(en, kit){
 					x: en.x + Math.random() * en.w,
 					y: en.y + Math.random() * en.h * 0.6,
 					w: 34 + Math.random() * 18, h: 26 + Math.random() * 16,
-					vx: (Math.random() - 0.5) * 3, vy: 1 + Math.random() * 2,
+					vx: (fireKitAim(en).x - (en.x + en.w / 2)) / 55 * (0.55 + Math.random() * 0.8) + (Math.random() - 0.5) * 2, vy: -5 - Math.random() * 3.5,
 					age: 0, max: 110, grounded: false
 				}));
 			}
+			if(window.EFX){ EFX.burst(en.x + en.w / 2, en.y + en.h / 2, 'magma', 1.6); EFX.smoke(en.x + en.w / 2, en.y + en.h / 2, 5, { size: 16, c: '#2a1a12', a: 0.55, spread: 3 }); }
 			if(typeof shakeScreen === 'function') shakeScreen(8, 14);
 		}
 		if(kit.phase === 'fall' && kit.t === 150){
@@ -796,7 +848,7 @@ function tickSpriteKit(en, kit){
 				kit.ang = ang;
 				kit.spd = 16;
 				const len = 520;
-				spawnTelegraph(
+				efxTelegraph(
 					en.x + en.w / 2 + Math.cos(ang) * len * 0.5 - 40,
 					en.y + en.h / 2 + Math.sin(ang) * len * 0.5 - 16,
 					80, 32, 20, 'rgba(255,180,40,0.28)', 'rect', ''
@@ -823,7 +875,15 @@ function tickSpriteKit(en, kit){
 			c.life--;
 			c.x += c.vx; c.y += c.vy;
 			if(c.x < 40 || c.x > (typeof WORLD_W === 'number' ? WORLD_W - 40 : 4000)) c.vx *= -1;
-			if(c.life <= 0) kit.copies.splice(i, 1);
+			if(c.life <= 0){
+				const dx = aim.x - c.x, dy = aim.y - c.y, d = Math.hypot(dx, dy) || 1;
+				fireKitSpawn(en, c.x, c.y, dx / d * 7, dy / d * 7, {
+					color: '#ff7a1a', color2: '#ffe08a', power: 9, width: 20, height: 20,
+					shape: 'circle', effects: ['burn'], trail: 'flame', maxAge: 80, _fireStyle: 'ember'
+				});
+				if(window.EFX) EFX.flash(c.x, c.y, 20, 'fire', 6);
+				kit.copies.splice(i, 1);
+			}
 			else if(typeof projectiles !== 'undefined'){
 				for(let pi = 0; pi < projectiles.length; pi++){
 					const p = projectiles[pi];
@@ -852,24 +912,29 @@ function updateFireDungeonWorld(){
 			if(fx.hitCd > 0) fx.hitCd--;
 			if(!fx.hitCd && fireKitHit(fx.en, fx.x, fx.y, 22, fireKitDmg(8), ['burn'])) fx.hitCd = 22;
 			if(fx.age >= fx.max) fireWorldFX.splice(i, 1);
-		} else if(fx.kind === 'crater'){
+		} else if(fx.kind === 'crater' || fx.kind === 'geyser'){
 			if(fx.age >= fx.max) fireWorldFX.splice(i, 1);
 		} else if(fx.kind === 'chunk'){
 			if(!fx.grounded){
 				fx.vy += 0.32; fx.x += fx.vx; fx.y += fx.vy;
 				const fl = fireKitFloorY(fx.x, fx.y);
-				if(fx.y + fx.h / 2 >= fl){ fx.y = fl - fx.h / 2; fx.vy = 0; fx.grounded = true; }
+				if(fx.y + fx.h / 2 >= fl){ fx.y = fl - fx.h / 2; fx.vy = 0; fx.grounded = true; if(window.EFX){ EFX.debris('magma', fx.x, fl - 4, 4, { speed: 4, floor: fl }); EFX.groundWave(fx.x, fl, 50, 'magma', 16); EFX.decal(fx.x, fl + 1, 30, 'magma', 120); } }
 			}
 			if(fx.age % 8 === 0) fireKitHit(fx.en, fx.x, fx.y, Math.max(fx.w, fx.h) * 0.45, fireKitDmg(10), ['burn']);
 			if(fx.age >= fx.max) fireWorldFX.splice(i, 1);
 		} else if(fx.kind === 'blinkPop'){
-			if(fx.age === 18) fireKitHit(fx.en, fx.x, fx.y, fx.r, fx.dmg, ['burn']);
+			if(fx.age === 18){ fireKitHit(fx.en, fx.x, fx.y, fx.r, fx.dmg, ['burn']); if(window.EFX) EFX.burst(fx.x, fx.y, 'fire', fx.r / 26); }
 			if(fx.age >= fx.max) fireWorldFX.splice(i, 1);
 		} else if(fx.kind === 'mine'){
 			if(fx.en && fx.en.dead){ fireWorldFX.splice(i, 1); continue; }
+			if(fx.flying){
+				fx.vy += 0.32; fx.x += fx.vx; fx.y += fx.vy;
+				if(fx.y >= fx.floor){ fx.y = fx.floor; fx.flying = false; fx.vx = 0; fx.vy = 0; if(window.EFX){ EFX.emit('fire', fx.x, fx.y + 8, 4, { speed: 1.2 }); EFX.decal(fx.x, fx.y + 16, 18, 'fire', 200, { glow: 0.3 }); } }
+				continue;
+			}
 			const aim = fireKitAim(fx.en);
 			const dist = Math.hypot(aim.x - fx.x, aim.y - fx.y);
-			if(fx.age > fx.armed && dist < 70) fx.chasing = true;
+			if(fx.age > fx.armed && dist < 150 && !fx.chasing){ fx.chasing = true; if(window.EFX) EFX.flash(fx.x, fx.y, 26, 'fire', 8); }
 			if(fx.chasing){
 				const d = dist || 1;
 				fx.vx += (aim.x - fx.x) / d * 0.45;
@@ -879,10 +944,10 @@ function updateFireDungeonWorld(){
 				fx.x += fx.vx; fx.y += fx.vy;
 				if(dist < 22 || fx.age > 260){
 					fireKitHit(fx.en, fx.x, fx.y, 32, fireKitDmg(14), ['burn']);
-					fireKitSpark(fx.x, fx.y, 12);
+					if(window.EFX) EFX.burst(fx.x, fx.y, 'fire', 1.4); else fireKitSpark(fx.x, fx.y, 12);
 					fireWorldFX.splice(i, 1);
 				}
-			} else if(fx.age > 300) fireWorldFX.splice(i, 1);
+			} else if(fx.age > 420){ if(window.EFX) EFX.burst(fx.x, fx.y, 'fire', 0.7); fireKitHit(fx.en, fx.x, fx.y, 24, fireKitDmg(8), ['burn']); fireWorldFX.splice(i, 1); }
 		}
 	}
 }
@@ -931,7 +996,7 @@ function fireKitTryBounce(p){
 	return true;
 }
 
-/* ---------- drawing ---------- */
+/* ---------- drawing (EFX) ---------- */
 function fireKitHex(c, a){
 	if(typeof c === 'string' && c[0] === '#'){
 		const n = parseInt(c.slice(1), 16);
@@ -940,86 +1005,140 @@ function fireKitHex(c, a){
 	}
 	return c;
 }
+// screen-space orb kept for callers outside this file
 function drawFireKitOrb(x, y, r, c1, c2, pulse){
-	const g = ctx.createRadialGradient(x - r * 0.25, y - r * 0.3, r * 0.1, x, y, r);
-	g.addColorStop(0, 'rgba(255,255,230,0.95)');
-	g.addColorStop(0.28, fireKitHex(c2, 0.95));
-	g.addColorStop(0.7, fireKitHex(c1, 0.9));
-	g.addColorStop(1, 'rgba(80,10,0,0)');
-	ctx.fillStyle = g;
-	ctx.beginPath(); ctx.arc(x, y, r * (0.92 + (pulse || 0) * 0.08), 0, Math.PI * 2); ctx.fill();
-	ctx.strokeStyle = 'rgba(255,220,120,0.45)';
-	ctx.lineWidth = 2;
-	ctx.beginPath(); ctx.arc(x, y, r * 0.72, -0.6, 1.1); ctx.stroke();
+	if(window.EFX){ EFX.bolt(null, x + camera.x, y + camera.y, r * 0.75, 'fire', { trail: false, motes: false }); return; }
+	const g = ctx.createRadialGradient(x, y, r * 0.1, x, y, r);
+	g.addColorStop(0, 'rgba(255,255,230,0.95)'); g.addColorStop(0.3, fireKitHex(c2, 0.95)); g.addColorStop(1, 'rgba(80,10,0,0)');
+	ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+}
+// a geyser of magma standing on the floor at (x, floor), h tall, a = 0..1 strength
+function fireDrawGeyser(x, floor, h, a, w){
+	if(!window.EFX || a <= 0.02) return;
+	const P = EFX.pal('magma'), sx = x - camera.x, sy = floor - camera.y;
+	w = w || 26;
+	ctx.save(); ctx.globalCompositeOperation = 'lighter';
+	EFX.glowS(sx, sy, w * 2.4, P.outer, 0.6 * a);
+	for(let i = 0; i < 7; i++){
+		const k = i / 6, wob = Math.sin(EFX.frame * 0.5 + i * 1.3) * w * 0.18;
+		EFX.glowS(sx + wob, sy - h * k, w * (1.25 - k * 0.55), k < 0.5 ? P.mid : P.outer, (0.85 - k * 0.4) * a);
+	}
+	EFX.glowS(sx, sy - h * 0.35, w * 0.7, P.core, 0.9 * a, true);
+	ctx.restore();
 }
 function drawFireKitProj(p){
-	const px = p.x - camera.x, py = p.y - camera.y;
-	const r = Math.max(p.width, p.height) * 0.55;
-	const pulse = 0.5 + Math.sin((p.age || 0) * 0.35) * 0.5;
-	drawFireKitOrb(px, py, r, p.color, p.color2, pulse);
-	if(p._firePinball){
-		ctx.save();
-		ctx.globalAlpha = 0.35;
-		ctx.strokeStyle = '#ffee88';
-		ctx.lineWidth = 3;
-		ctx.beginPath(); ctx.arc(px, py, r + 6 + pulse * 3, 0, Math.PI * 2); ctx.stroke();
-		ctx.restore();
+	if(!window.EFX){ drawFireKitOrb(p.x - camera.x, p.y - camera.y, Math.max(p.width, p.height) * 0.55, p.color, p.color2, 0.5); return; }
+	const st = p._fireStyle, r = Math.max(p.width, p.height) * 0.42;
+	if(st === 'erupt'){
+		const floor = p._floorY || (p._floorY = fireKitFloorY(p.x, p.y - 10));
+		const u = (p.age || 0) / (p.maxAge || 36);
+		fireDrawGeyser(p.x, floor, Math.max(20, floor - p.y + p.height * 0.6), Math.sin(Math.min(1, u * 1.4) * Math.PI) * 0.95 + 0.05, p.width * 0.75);
+		return;
 	}
+	if(st === 'glob' || st === 'drop'){
+		EFX.bolt(p, p.x, p.y, r * 0.85, 'magma', { trailLen: 7 });
+		return;
+	}
+	if(st === 'pinball'){
+		EFX.bolt(p, p.x, p.y, r * 0.8, 'fire', { trailLen: 12 });
+		// spinning ring of flame tongues
+		const P = EFX.pal('fire'), t = p.age || 0, rr = r * 1.35;
+		ctx.save(); ctx.globalCompositeOperation = 'lighter';
+		for(let i = 0; i < 6; i++){
+			const a = t * 0.22 + i * Math.PI / 3;
+			EFX.glow(p.x + Math.cos(a) * rr, p.y + Math.sin(a) * rr, r * 0.55, i % 2 ? P.mid : P.outer, 0.8);
+		}
+		ctx.restore();
+		return;
+	}
+	if(st === 'rebound'){
+		EFX.bolt(p, p.x, p.y, r * 0.75, 'fire', { trailLen: 11 });
+		ctx.save(); ctx.globalCompositeOperation = 'lighter';
+		EFX.glow(p.x, p.y, r * 2.2, '#ffe28a', 0.25 + 0.15 * Math.sin((p.age || 0) * 0.4));
+		ctx.restore();
+		return;
+	}
+	EFX.bolt(p, p.x, p.y, r * (st === 'ember' ? 0.7 : 0.8), 'fire');
+}
+
+function drawFireSigilRune(x, y, r, t, a){
+	const P = EFX.pal('fire'), sx = x - camera.x, sy = y - camera.y;
+	ctx.save();
+	ctx.globalCompositeOperation = 'lighter';
+	EFX.glowS(sx, sy, r * 2.2, P.outer, 0.5 * a);
+	ctx.translate(sx, sy); ctx.rotate(t * 0.04);
+	ctx.strokeStyle = EFX.rgba(P.mid, 0.9 * a); ctx.lineWidth = 2.2;
+	ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.stroke();
+	ctx.strokeStyle = EFX.rgba(P.core, 0.8 * a); ctx.lineWidth = 1.4;
+	ctx.beginPath();
+	for(let i = 0; i < 3; i++){ const an = -Math.PI / 2 + i * Math.PI * 2 / 3; const px = Math.cos(an) * r * 0.78, py = Math.sin(an) * r * 0.78; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
+	ctx.closePath(); ctx.stroke();
+	ctx.rotate(-t * 0.09);
+	ctx.setLineDash([4, 5]); ctx.beginPath(); ctx.arc(0, 0, r * 1.3, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+	EFX.glowS(0, 0, r * 0.55, P.core, 0.9 * a, true);
+	ctx.restore();
 }
 
 function drawFireDungeonWorld(){
-	if(!fireWorldFX.length && typeof enemies === 'undefined') return;
+	if(!window.EFX) return;
+	EFX.bind();
 	for(let i = 0; i < fireWorldFX.length; i++){
 		const fx = fireWorldFX[i];
-		const x = fx.x - camera.x, y = fx.y - camera.y;
+		const u = fx.max ? fx.age / fx.max : 0;
 		if(fx.kind === 'silhouette'){
-			ctx.save();
-			ctx.globalAlpha = 0.35 * (1 - fx.age / fx.max);
-			ctx.fillStyle = '#4a2210';
-			ctx.fillRect(x, y, fx.w, fx.h);
-			ctx.fillStyle = 'rgba(255,80,0,0.25)';
-			ctx.fillRect(x + 2, y + 2, fx.w - 4, fx.h - 4);
+			// a smouldering after-image of the imp that drifts and burns away
+			const a = 1 - u;
+			ctx.save(); ctx.globalCompositeOperation = 'lighter';
+			const cx0 = fx.x + fx.w / 2, cy0 = fx.y + fx.h / 2;
+			EFX.glow(cx0, cy0, fx.w * 1.3, '#ff4a0a', 0.45 * a);
+			for(let k = 0; k < 4; k++) EFX.glow(cx0 + Math.sin(k * 2.1 + fx.age * 0.2) * fx.w * 0.3, cy0 - fx.h * 0.4 + k * fx.h * 0.25, fx.w * 0.45, '#ffa526', 0.5 * a);
 			ctx.restore();
 		} else if(fx.kind === 'trail'){
-			const a = 1 - fx.age / fx.max;
-			ctx.save();
-			const g = ctx.createLinearGradient(x, y - 10, x, y + 10);
-			g.addColorStop(0, 'rgba(255,180,40,' + (0.15 * a) + ')');
-			g.addColorStop(0.5, 'rgba(255,70,0,' + (0.7 * a) + ')');
-			g.addColorStop(1, 'rgba(80,10,0,' + (0.1 * a) + ')');
-			ctx.fillStyle = g;
-			ctx.beginPath(); ctx.ellipse(x, y, fx.w * 0.55, 9, 0, 0, Math.PI * 2); ctx.fill();
-			ctx.restore();
+			// burning ground left by Wildfire Trail
+			const a = u < 0.08 ? u / 0.08 : (u > 0.7 ? (1 - u) / 0.3 : 1);
+			EFX.flameStrip(fx.x - fx.w * 0.5, fx.x + fx.w * 0.5, fx.y + 6, 'fire', a, { height: 22 + 6 * Math.sin(fx.x), step: 15, emit: (fx.age & 7) === 0 });
+		} else if(fx.kind === 'geyser'){
+			fireDrawGeyser(fx.x, fx.floor, fx.h * Math.min(1, u * 4), Math.sin(Math.min(1, u * 1.2) * Math.PI * 0.5 + (u > 0.5 ? (u - 0.5) * Math.PI : 0)) * (1 - u * 0.6), 30);
 		} else if(fx.kind === 'crater'){
-			const a = 1 - fx.age / fx.max;
+			// molten crater from a Volcanic Fist
+			const a = 1 - u, sx = fx.x - camera.x, sy = fx.y - camera.y;
 			ctx.save();
-			ctx.globalAlpha = 0.55 * a;
-			ctx.fillStyle = '#3a1208';
-			ctx.beginPath(); ctx.ellipse(x, y, fx.r, fx.r * 0.38, 0, 0, Math.PI * 2); ctx.fill();
-			ctx.fillStyle = 'rgba(255,90,0,0.45)';
-			ctx.beginPath(); ctx.ellipse(x, y, fx.r * 0.55, fx.r * 0.2, 0, 0, Math.PI * 2); ctx.fill();
+			ctx.globalAlpha = 0.75 * a; ctx.fillStyle = '#2a0c04';
+			ctx.beginPath(); ctx.ellipse(sx, sy, fx.r, fx.r * 0.26, 0, 0, Math.PI * 2); ctx.fill();
+			ctx.globalCompositeOperation = 'lighter';
+			ctx.globalAlpha = 1;
+			EFX.glowS(sx, sy - 2, fx.r * 0.75, '#ff6a12', 0.65 * a);
+			for(let k = 0; k < 5; k++){ const ox = (k - 2) * fx.r * 0.3; EFX.glowS(sx + ox, sy - 4 - Math.abs(Math.sin(fx.age * 0.15 + k)) * 10 * a, fx.r * 0.18, '#ffd060', 0.6 * a, true); }
 			ctx.restore();
 		} else if(fx.kind === 'chunk'){
-			ctx.save();
-			ctx.translate(x, y);
-			ctx.rotate(fx.age * 0.03);
-			ctx.fillStyle = '#6a2a10';
-			ctx.fillRect(-fx.w / 2, -fx.h / 2, fx.w, fx.h);
-			ctx.fillStyle = '#ff6611';
-			ctx.globalAlpha = 0.7;
-			ctx.fillRect(-fx.w / 4, -fx.h / 4, fx.w / 2, fx.h / 2);
+			// cooling magma boulder from Molten Collapse
+			const sx = fx.x - camera.x, sy = fx.y - camera.y, s = Math.max(fx.w, fx.h) * 0.62;
+			ctx.save(); ctx.translate(sx, sy); ctx.rotate(fx.grounded ? 0.3 : fx.age * 0.06);
+			ctx.drawImage(EFX.rockSprite('magma', (i * 3) & 7), -s, -s, s * 2, s * 2);
+			ctx.globalCompositeOperation = 'lighter';
+			EFX.glowS(0, 0, s * 0.9, '#ff5a00', 0.55 * (1 - u * 0.7) * (0.75 + 0.25 * Math.sin(fx.age * 0.2)));
 			ctx.restore();
 		} else if(fx.kind === 'blinkPop'){
-			const u = fx.age / fx.max;
-			ctx.save();
-			ctx.globalAlpha = u < 0.7 ? 0.25 + u * 0.4 : 1 - u;
-			ctx.strokeStyle = '#ffcc66';
-			ctx.lineWidth = 3;
-			ctx.beginPath(); ctx.arc(x, y, fx.r * (0.4 + u * 0.8), 0, Math.PI * 2); ctx.stroke();
-			ctx.restore();
+			// ember burst left behind by a blink — swells, then detonates at age 18
+			const sx = fx.x - camera.x, sy = fx.y - camera.y;
+			if(fx.age < 18){
+				const k = fx.age / 18;
+				EFX.warnCircle(fx.x, fx.y, fx.r, k, 'fire');
+				ctx.save(); ctx.globalCompositeOperation = 'lighter';
+				EFX.glowS(sx, sy, fx.r * (0.3 + k * 0.5), '#ffd060', 0.4 + k * 0.5, true);
+				ctx.restore();
+			}
 		} else if(fx.kind === 'mine'){
-			const armed = fx.age > fx.armed;
-			drawFireKitOrb(x, y, fx.r * (armed ? 1.1 : 0.9), '#ff4400', armed ? '#ffe080' : '#ffaa44', Math.sin(fx.age * 0.2));
+			const armed = fx.age > fx.armed, sx = fx.x - camera.x, sy = fx.y - camera.y;
+			const beat = armed ? (0.6 + 0.4 * Math.sin(fx.age * (fx.chasing ? 0.9 : 0.35))) : fx.age / fx.armed;
+			ctx.save(); ctx.globalCompositeOperation = 'lighter';
+			EFX.glowS(sx, sy, fx.r * 3, '#ff4a0a', 0.35 + 0.35 * beat);
+			EFX.glowS(sx, sy, fx.r * 1.2, '#ffa526', 0.9, true);
+			EFX.glowS(sx, sy, fx.r * 0.6, '#fff4c8', beat, true);
+			ctx.strokeStyle = 'rgba(255,220,140,' + (armed ? 0.7 : 0.35) + ')'; ctx.lineWidth = 1.5;
+			ctx.beginPath(); ctx.arc(sx, sy, fx.r * 1.6, fx.age * 0.1, fx.age * 0.1 + Math.PI * 2 * Math.min(1, fx.age / fx.armed)); ctx.stroke();
+			ctx.restore();
+			if(fx.chasing) EFX.track(fx, 6), EFX.trail(fx._efxH, fx.r * 0.7, 'fire', { ribbon: false });
 		}
 	}
 	if(typeof enemies !== 'undefined'){
@@ -1031,133 +1150,134 @@ function drawFireDungeonWorld(){
 }
 
 function drawFireDungeonEnemyFX(en){
-	if(!en || en.dead || !en.fireKit) return;
-	const kit = en.fireKit;
+	if(!en || en.dead || !en.fireKit || !window.EFX) return;
+	const kit = en.fireKit, P = EFX.pal('fire');
+	const ecx = en.x + en.w / 2, ecy = en.y + en.h / 2;
 	if(kit.kind === 'emberOrbit' && kit.orbs){
 		for(let i = 0; i < kit.orbs.length; i++){
-			drawFireKitOrb(kit.orbs[i].x - camera.x, kit.orbs[i].y - camera.y, 13, '#ff3300', '#ffcc55', Math.sin(kit.t * 0.2 + i));
+			const o = kit.orbs[i];
+			o.age = kit.t + i * 5; o.vx = o.x - (o._px == null ? o.x : o._px); o.vy = o.y - (o._py == null ? o.y : o._py); o._px = o.x; o._py = o.y;
+			EFX.bolt(o, o.x, o.y, 9 + Math.min(1, kit.t / 30) * 3, 'fire', { trailLen: 7, moteEvery: 4 });
+			if(kit.lock && kit.t < kit.launchAt) EFX.warnLine(o.x, o.y, kit.lock.x, kit.lock.y, 10, (kit.t - 70) / (kit.launchAt - 70), 'fire', { alpha: 0.6 });
 		}
 	}
-	if(kit.kind === 'burrowingFang' && kit.glow){
-		ctx.save();
-		ctx.lineWidth = 6;
-		ctx.strokeStyle = 'rgba(255,90,0,0.55)';
-		ctx.lineCap = 'round';
-		ctx.beginPath();
-		for(let i = 0; i < kit.glow.length; i++){
-			const g = kit.glow[i];
-			const px = g.x - camera.x, py = g.y - camera.y;
-			if(i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-		}
-		ctx.stroke();
-		ctx.lineWidth = 2;
-		ctx.strokeStyle = 'rgba(255,220,80,0.8)';
-		ctx.stroke();
-		ctx.restore();
+	if(kit.kind === 'cinderFakeout' && kit.phase === 'vanish' && kit.target){
+		EFX.warnCircle(kit.target.x, kit.target.y, 34, (kit.t - 16) / 12, 'fire');
+	}
+	if(kit.kind === 'wildfireTrail' && kit.t % 2 === 0){
+		EFX.mote('fire', ecx + (Math.random() - 0.5) * en.w, ecy + en.h * 0.3, 0, 0, 1.2);
+	}
+	if(kit.kind === 'burrowingFang' && kit.glow && kit.glow.length > 1){
+		EFX.crack(kit.glow, 'magma', { width: 4, heat: 0.8 });
+		const h = kit.glow[kit.glow.length - 1];
+		if(kit.t % 3 === 0){ EFX.debris('earth', h.x, h.y - 2, 1, { speed: 3, floor: h.y, scale: 0.6 }); EFX.mote('magma', h.x, h.y - 4, 0, -1); }
+		ctx.save(); ctx.globalCompositeOperation = 'lighter'; EFX.glow(h.x, h.y, 26, P.outer, 0.5); ctx.restore();
 	}
 	if(kit.kind === 'burningCoil'){
-		ctx.save();
-		const cx = kit.cx - camera.x, cy = kit.cy - camera.y;
-		ctx.strokeStyle = kit.ignited ? 'rgba(255,70,0,0.85)' : 'rgba(255,140,40,0.55)';
-		ctx.lineWidth = kit.ignited ? 14 : 9;
-		ctx.beginPath(); ctx.arc(cx, cy, kit.r, 0, Math.PI * 2); ctx.stroke();
-		if(kit.ignited){
-			ctx.strokeStyle = 'rgba(255,230,120,0.7)';
-			ctx.lineWidth = 4;
-			ctx.beginPath(); ctx.arc(cx, cy, kit.r - 5, 0, Math.PI * 2); ctx.stroke();
+		// a ring of fire tongues; before ignition a dashed warning
+		const prog = Math.min(1, kit.t / 36);
+		if(!kit.ignited) EFX.warnCircle(kit.cx, kit.cy, kit.r, prog, 'fire', { alpha: 0.9 });
+		else {
+			const n = 22, sc = 1 + 0.06 * Math.sin(kit.t * 0.4);
+			ctx.save(); ctx.globalCompositeOperation = 'lighter';
+			for(let i = 0; i < n; i++){
+				const a = i / n * Math.PI * 2 + kit.t * 0.05, x = kit.cx + Math.cos(a) * kit.r * sc, y = kit.cy + Math.sin(a) * kit.r * sc;
+				const fl = 0.7 + 0.3 * Math.sin(kit.t * 0.6 + i * 1.7);
+				EFX.glow(x, y, 20 * fl, P.outer, 0.6);
+				EFX.glow(x, y - 6 * fl, 11 * fl, P.mid, 0.85, true);
+			}
+			EFX.glow(kit.cx, kit.cy, kit.r * 1.1, P.outer, 0.12);
+			ctx.restore();
+			if(kit.t % 3 === 0){ const a = Math.random() * Math.PI * 2; EFX.mote('fire', kit.cx + Math.cos(a) * kit.r, kit.cy + Math.sin(a) * kit.r, 0, -1, 1.2); }
+			if(kit.t >= 78 && kit.t < 92) EFX.warnCircle(kit.cx, kit.cy, 44, (kit.t - 78) / 14, 'fire');
 		}
+	}
+	if(kit.kind === 'eruptionChase'){
+		// the serpent is a glowing bulge travelling under the floor
+		const x = ecx, y = kit.floor;
+		ctx.save(); ctx.globalCompositeOperation = 'lighter';
+		EFX.glow(x, y - 4, 34, P.outer, 0.5); EFX.glow(x, y - 2, 14, P.mid, 0.8, true);
 		ctx.restore();
+		if(kit.t % 2 === 0) EFX.debris('earth', x + (Math.random() - 0.5) * 20, y - 2, 1, { speed: 2.5, floor: y, scale: 0.5 });
+		if(kit.t % 5 === 0) EFX.smoke(x, y - 4, 1, { size: 8, c: '#3a2a20', a: 0.35 });
 	}
 	if(kit.kind === 'fireSigil' && kit.pts){
-		ctx.save();
-		for(let i = 0; i < kit.pts.length; i++){
-			const p = kit.pts[i];
-			drawFireKitOrb(p.x - camera.x, p.y - camera.y, 16, '#ff5511', '#ffe080', Math.sin(kit.t * 0.15 + i));
-		}
+		const a = Math.min(1, kit.t / 20);
+		for(let i = 0; i < kit.pts.length; i++) drawFireSigilRune(kit.pts[i].x, kit.pts[i].y, 18, kit.t + i * 20, a);
 		if(kit.linked){
-			ctx.strokeStyle = 'rgba(255,90,20,0.7)';
-			ctx.lineWidth = 4;
-			ctx.beginPath();
-			ctx.moveTo(kit.pts[0].x - camera.x, kit.pts[0].y - camera.y);
-			ctx.lineTo(kit.pts[1].x - camera.x, kit.pts[1].y - camera.y);
-			ctx.lineTo(kit.pts[2].x - camera.x, kit.pts[2].y - camera.y);
-			ctx.closePath(); ctx.stroke();
-			ctx.fillStyle = 'rgba(255,50,0,' + (0.12 + Math.sin(kit.t * 0.2) * 0.05) + ')';
-			ctx.fill();
+			const pts = kit.pts, t = kit.t;
+			ctx.save();
+			ctx.beginPath(); ctx.moveTo(pts[0].x - camera.x, pts[0].y - camera.y); ctx.lineTo(pts[1].x - camera.x, pts[1].y - camera.y); ctx.lineTo(pts[2].x - camera.x, pts[2].y - camera.y); ctx.closePath();
+			ctx.fillStyle = 'rgba(255,70,10,' + (0.13 + Math.sin(t * 0.25) * 0.05) + ')'; ctx.fill();
+			ctx.restore();
+			for(let i = 0; i < 3; i++){ const A = pts[i], B = pts[(i + 1) % 3]; EFX.beam(A.x, A.y, B.x, B.y, 5, 'fire', { alpha: 0.9 }); }
+			if(t % 2 === 0){ const k1 = Math.random(), k2 = Math.random() * (1 - k1); const x = pts[0].x + (pts[1].x - pts[0].x) * k1 + (pts[2].x - pts[0].x) * k2, y = pts[0].y + (pts[1].y - pts[0].y) * k1 + (pts[2].y - pts[0].y) * k2; EFX.mote('fire', x, y, 0, -1, 1.3); }
+		} else if(kit.t > 40){
+			for(let i = 0; i < 3; i++){ const A = kit.pts[i], B = kit.pts[(i + 1) % 3]; EFX.warnLine(A.x, A.y, B.x, B.y, 6, (kit.t - 40) / 44, 'fire', { alpha: 0.6 }); }
 		}
-		ctx.restore();
 	}
 	if(kit.kind === 'combustionMark' && !kit.boom){
-		const pulse = 18 + Math.sin(kit.t * 0.25) * 4;
-		ctx.save();
-		ctx.strokeStyle = 'rgba(255,80,0,0.75)';
-		ctx.lineWidth = 3;
-		ctx.beginPath(); ctx.arc(kit.x - camera.x, kit.y - camera.y, pulse, 0, Math.PI * 2); ctx.stroke();
-		ctx.fillStyle = 'rgba(255,40,0,0.2)';
-		ctx.beginPath(); ctx.arc(kit.x - camera.x, kit.y - camera.y, pulse * 0.55, 0, Math.PI * 2); ctx.fill();
+		EFX.warnCircle(kit.x, kit.y, 54, kit.t / kit.follow, 'fire', { flat: 0.35 });
+		ctx.save(); ctx.globalCompositeOperation = 'lighter';
+		EFX.glow(kit.x, kit.y - 2, 30 + 20 * (kit.t / kit.follow), P.outer, 0.35 + 0.4 * (kit.t / kit.follow));
 		ctx.restore();
+		if(kit.t % 4 === 0) EFX.mote('fire', kit.x + (Math.random() - 0.5) * 70, kit.y - 2, 0, -1);
+		// a thread of heat from the mage's hand to the mark
+		EFX.beam(ecx, en.y + en.h * 0.3, kit.x, kit.y - 4, 2, 'fire', { alpha: 0.35 });
 	}
 	if(kit.kind === 'faultline' && kit.cracks){
-		ctx.save();
-		ctx.lineCap = 'round';
-		const vis = kit.grow || 1;
-		for(let c = 0; c < kit.cracks.length; c++){
-			const line = kit.cracks[c];
-			const n = Math.max(2, Math.floor(line.length * vis));
-			ctx.strokeStyle = kit.phase === 'erupt' ? 'rgba(255,70,0,0.9)' : 'rgba(80,20,8,0.85)';
-			ctx.lineWidth = kit.phase === 'erupt' ? 7 : 4;
-			ctx.beginPath();
-			for(let i = 0; i < n; i++){
-				const p = line[i];
-				if(i === 0) ctx.moveTo(p.x - camera.x, p.y - camera.y);
-				else ctx.lineTo(p.x - camera.x, p.y - camera.y);
-			}
-			ctx.stroke();
-		}
-		ctx.restore();
+		const vis = kit.grow || 1, erupt = kit.phase === 'erupt';
+		const heat = erupt ? 1 : (kit.phase === 'pause' ? 0.45 + 0.35 * Math.sin(kit.t * 0.6) : 0.25);
+		for(let c = 0; c < kit.cracks.length; c++) EFX.crack(kit.cracks[c], 'magma', { progress: vis, heat, width: c ? 3 : 5 });
 	}
-	if(kit.kind === 'volcanicFists' && kit.t < 52){
-		[kit.a, kit.b].forEach(function(p){
-			const u = kit.t / 52;
-			ctx.save();
-			ctx.strokeStyle = 'rgba(255,90,0,' + (0.35 + u * 0.45) + ')';
-			ctx.lineWidth = 3;
-			ctx.beginPath(); ctx.ellipse(p.x - camera.x, p.y - camera.y, 68 * (0.7 + u * 0.3), 26, 0, 0, Math.PI * 2); ctx.stroke();
-			ctx.restore();
+	if(kit.kind === 'volcanicFists'){
+		[kit.a, kit.b].forEach(function(p, j){
+			if(kit.t < 52){
+				const u = kit.t / 52;
+				EFX.warnCircle(p.x, p.y, 70, u, 'magma', { flat: 0.3 });
+				// a magma fist plunges from above, slowing as it lines up
+				const fy = p.y - 40 - (1 - u * u) * 360, s = 30 + u * 6;
+				ctx.save(); ctx.translate(p.x - camera.x, fy - camera.y);
+				ctx.globalAlpha = Math.min(1, u * 3);
+				ctx.drawImage(EFX.rockSprite('magma', 3 + j), -s, -s, s * 2, s * 2);
+				ctx.globalCompositeOperation = 'lighter'; EFX.glowS(0, s * 0.4, s, '#ff5a00', 0.6 * u);
+				ctx.restore();
+			}
 		});
 	}
 	if(kit.kind === 'magmaCore' && en._fireCoreOpen){
-		const cx = en.x + en.w / 2 - camera.x, cy = en.y + en.h * 0.42 - camera.y;
-		drawFireKitOrb(cx, cy, 18 + Math.sin(kit.t * 0.2) * 3, '#ff2200', '#ffe080', 1);
+		const cx = ecx, cy = en.y + en.h * 0.42, k = Math.min(1, kit.t / 100);
+		ctx.save(); ctx.globalCompositeOperation = 'lighter';
+		EFX.glow(cx, cy, 30 + 30 * k, '#ff4a0a', 0.5 + 0.3 * k);
+		EFX.glow(cx, cy, 14 + Math.sin(kit.t * 0.4) * 3, '#fff0a0', 0.95, true);
+		ctx.restore();
+		if(kit.t % 3 === 0) EFX.charge(cx, cy, 'magma', 70, 1, 16);
+		if(kit.t > 80) EFX.warnCircle(cx, cy, 120, (kit.t - 80) / 20, 'magma', { alpha: 0.7 });
+	}
+	if(kit.kind === 'moltenCollapse' && kit.phase === 'crack'){
+		const k = kit.t / 36;
+		ctx.save(); ctx.globalCompositeOperation = 'lighter';
+		for(let i = 0; i < 4; i++) EFX.glow(en.x + en.w * (0.2 + i * 0.2), en.y + en.h * (0.3 + (i % 2) * 0.3), 10 + 10 * k, '#ff6a12', 0.4 + 0.5 * k);
+		ctx.restore();
+		if(kit.t % 3 === 0) EFX.sparks('magma', ecx, ecy, 1, { speed: 4 });
 	}
 	if(kit.kind === 'flickerSwarm' && kit.copies){
 		for(let i = 0; i < kit.copies.length; i++){
 			const c = kit.copies[i];
-			ctx.save();
-			ctx.globalAlpha = 0.55;
-			drawFireKitOrb(c.x - camera.x, c.y - camera.y, 11, '#ff6600', '#ffcc66', 0.4);
+			ctx.save(); ctx.globalAlpha = 0.6 + 0.2 * Math.sin(kit.t * 0.5 + i);
+			EFX.bolt(c, c.x, c.y, 9, 'fire', { trailLen: 6, moteEvery: 5 });
 			ctx.restore();
 		}
-		if(kit.flashT % 40 < 5){
-			const cx = en.x + en.w / 2 - camera.x, cy = en.y + en.h / 2 - camera.y;
-			ctx.save();
-			ctx.globalAlpha = 0.85;
-			ctx.strokeStyle = '#fff6c8';
-			ctx.lineWidth = 3;
-			ctx.beginPath(); ctx.arc(cx, cy, 22, 0, Math.PI * 2); ctx.stroke();
-			ctx.restore();
-		}
+		if(kit.flashT % 40 < 5){ ctx.save(); ctx.globalCompositeOperation = 'lighter'; EFX.glow(ecx, ecy, 30, '#fff4c8', 0.7); ctx.restore(); }
 	}
-	if(kit.kind === 'cometDive' && kit.phase === 'hang'){
-		ctx.save();
-		ctx.strokeStyle = 'rgba(255,200,80,0.45)';
-		ctx.lineWidth = 3;
-		ctx.setLineDash([10, 8]);
-		ctx.beginPath();
-		ctx.moveTo(en.x + en.w / 2 - camera.x, en.y + en.h / 2 - camera.y);
-		ctx.lineTo(en.x + en.w / 2 + Math.cos(kit.ang) * 480 - camera.x, en.y + en.h / 2 + Math.sin(kit.ang) * 480 - camera.y);
-		ctx.stroke();
-		ctx.restore();
+	if(kit.kind === 'cometDive'){
+		if(kit.phase === 'hang'){
+			EFX.warnLine(ecx, ecy, ecx + Math.cos(kit.ang) * 480, ecy + Math.sin(kit.ang) * 480, 34, (kit.t - 18) / 14, 'fire');
+			EFX.charge(ecx, ecy, 'fire', 40, 1, 12);
+		} else if(kit.phase === 'dive'){
+			kit.x = ecx; kit.y = ecy; EFX.track(kit, 10);
+			EFX.trail(kit._efxH, 14, 'fire');
+		}
 	}
 }
 

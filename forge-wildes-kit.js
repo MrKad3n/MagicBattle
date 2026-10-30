@@ -20,6 +20,7 @@ function kitFloor(x, y){ return (typeof fireKitFloorY === 'function') ? fireKitF
 function kitBlocked(x, y){ return (typeof fireKitBlocked === 'function') ? fireKitBlocked(x, y) : false; }
 function kitShake(a, t){ if(typeof shakeScreen === 'function') shakeScreen(a, t); }
 function kitSpark(x, y, n, color){
+	if(window.EFX){ EFX.sparkRGB(x, y, n, color, 'metal'); return; }
 	if(typeof particles === 'undefined') return;
 	const c = color || { r: 255, g: 170, b: 60 };
 	for(let i = 0; i < Math.min(n || 12, 22); i++){
@@ -33,6 +34,7 @@ function forgeSpawn(en, x, y, vx, vy, opts){
 	const p = spawnEnemyProj(x, y, vx, vy, opts);
 	if(p){
 		p._forgeStyle = opts._forgeStyle || 'spark';
+		p._efxEl = p._forgeStyle === 'thorn' ? 'nature' : (p._forgeStyle === 'slag' ? 'magma' : 'metal');
 		if(kitFriendly(en)){
 			if(typeof markNecroFriendlyProj === 'function') markNecroFriendlyProj(p, en);
 			else p.necroFriendly = true;
@@ -40,6 +42,7 @@ function forgeSpawn(en, x, y, vx, vy, opts){
 	}
 	return p;
 }
+function forgeKitEl(en){ const t = en && (en.necroType || en.type); return t === 'thornWolf' ? 'nature' : (t === 'slagBrute' ? 'magma' : 'metal'); }
 function forgeHit(en, x, y, r, dmg, effects){
 	r = atkS(r);
 	if(kitFriendly(en)){
@@ -58,7 +61,9 @@ function forgeHit(en, x, y, r, dmg, effects){
 	}
 	if(player.iFrames > 0) return false;
 	if(circRect(x, y, r, player.x, player.y, player.w, player.h)){
+		if(window.EFX && EFX.armed(en, x, y, r)) return false;      // fair arming (enemy-fx.js)
 		damagePlayer(dmg, effects || []);
+		if(window.EFX) EFX.hit(player.x + player.w / 2, player.y + player.h / 2, forgeKitEl(en), dmg * 0.5);
 		return true;
 	}
 	return false;
@@ -79,6 +84,7 @@ function beginForgeKit(en, kind, extra){
 	en._forgeKitBusy = extra && extra.busy === false ? false : true;
 	en.attackAnimTimer = Math.max(en.attackAnimTimer || 0, 36);
 	en.facing = kitAim(en).x >= en.x + en.w / 2 ? 1 : -1;
+	if(window.EFX) EFX.charge(en.x + en.w / 2, en.y + en.h / 2, forgeKitEl(en), Math.max(40, en.w * 1.3), 8, 16);
 	return en.forgeKit;
 }
 function forgeFX(fx){ forgeWorldFX.push(fx); return fx; }
@@ -106,7 +112,7 @@ function castSentinelAssemblyStrike(en){
 		bits.push({ x: en.x + en.w / 2, y: en.y + 10, tx: aim.x + (i - 2) * 36, ty: aim.y - 8 + i * 10 });
 	}
 	forgeFX({ kind: 'assembly', en, bits, age: 0, max: 55, punched: false, hx: aim.x, hy: aim.y });
-	spawnTelegraph(aim.x - 56, aim.y - 40, 112, 80, 22, 'rgba(255,170,60,0.4)', 'rect', '');
+	efxTelegraph(aim.x - 56, aim.y - 40, 112, 80, 22, 'rgba(255,170,60,0.4)', 'rect', '');
 	beginForgeKit(en, 'assemblyStrike', { busy: false });
 	setTimeout(function(){ if(en.forgeKit && en.forgeKit.kind === 'assemblyStrike') forgeEnd(en); }, 240);
 }
@@ -114,11 +120,10 @@ function castSentinelAssemblyStrike(en){
 /* ---------- FORGE DRONE ---------- */
 function castDroneWeldingBeam(en){
 	const aim = kitLead(en, 8);
-	const x = aim.x + (Math.random() < 0.5 ? -64 : 64);
-	forgeFX({ kind: 'barrier', en, x, y: kitFloor(x, aim.y), h: 16, maxH: atkS(96), age: 0, max: 220 });
-	kitSpark(x, kitFloor(x, aim.y), 10, { r: 255, g: 160, b: 50 });
-	beginForgeKit(en, 'weldingBeam', { busy: false });
-	setTimeout(function(){ if(en.forgeKit && en.forgeKit.kind === 'weldingBeam') forgeEnd(en); }, 200);
+	const dir = aim.x >= en.x + en.w / 2 ? 1 : -1;
+	// the beam's foot sweeps along the floor from in front of the drone, through the player, a little past
+	const x0 = aim.x - dir * 140, x1 = aim.x + dir * 70;
+	beginForgeKit(en, 'weldingBeam', { busy: true, x0, x1, fy: kitFloor(aim.x, aim.y), hitCd: 0 });
 }
 function castDroneSparkMine(en){
 	const aim = kitLead(en, 6);
@@ -143,7 +148,7 @@ function castBruteSlagHammer(en){
 	const aim = kitLead(en, 8);
 	const x = aim.x, y = kitFloor(aim.x, aim.y);
 	forgeFX({ kind: 'hammer', en, x, y, age: 0, max: 50, slammed: false });
-	spawnTelegraph(x - 64, y - 24, 128, 28, 18, 'rgba(255,80,20,0.45)', 'rect', '');
+	efxTelegraph(x - 64, y - 24, 128, 28, 18, 'rgba(255,80,20,0.45)', 'rect', '');
 	beginForgeKit(en, 'slagHammer', { busy: false });
 	setTimeout(function(){ if(en.forgeKit && en.forgeKit.kind === 'slagHammer') forgeEnd(en); }, 220);
 }
@@ -170,19 +175,19 @@ function castBruteFoundryCollapse(en){
 
 /* ---------- THORN WOLF ---------- */
 function castWolfHuntingCircle(en){
-	const aim = kitLead(en, 10);
-	forgeFX({ kind: 'wolfdash', en, x: aim.x, y: aim.y, age: 0, max: 36, fireAt: 24, r: 42, dmg: 34, launch: true });
-	beginForgeKit(en, 'huntingCircle', { busy: true, dang: Math.random() * Math.PI * 2 });
+	const aim = kitAim(en);
+	beginForgeKit(en, 'huntingCircle', { busy: true, dang: Math.atan2((en.y + en.h / 2) - aim.y, (en.x + en.w / 2) - aim.x), y0: en.y });
 }
 function castWolfThornPounce(en){
 	const aim = kitLead(en, 8);
 	const dir = aim.x >= en.x + en.w / 2 ? 1 : -1;
-	forgeFX({ kind: 'wolfdash', en, x: aim.x, y: aim.y, age: 0, max: 24, fireAt: 12, r: 36, dmg: 28, launch: false, thorns: true, dir });
-	beginForgeKit(en, 'thornPounce', { busy: true, dir });
-	spawnTelegraph(en.x + (dir > 0 ? en.w : -150), en.y - 6, 150, en.h + 16, 14, 'rgba(140,200,60,0.4)', 'rect', '');
+	beginForgeKit(en, 'thornPounce', { busy: true, dir, x0: en.x, y0: en.y, tx: aim.x - en.w / 2, landed: false });
 }
 function castWolfPackEcho(en){
-	beginForgeKit(en, 'packEcho', { busy: true, echoes: [{ t: 6 }, { t: 12 }], dashed: false });
+	const aim = kitAim(en);
+	const dir = aim.x >= en.x + en.w / 2 ? 1 : -1;
+	const dist = Math.min(320, Math.abs(aim.x - (en.x + en.w / 2)) + 70);
+	beginForgeKit(en, 'packEcho', { busy: true, dir, x0: en.x, dist, echoes: [{ d: 0, delay: 0, hit: false }, { d: 0, delay: 7, hit: false }], dashed: false, hit: false });
 }
 function castWolfPredatoryFeint(en){
 	const aim = kitAim(en);
@@ -195,7 +200,7 @@ function updateForgeKitEnemy(en){
 	if(!kit){ en._forgeKitBusy = false; return false; }
 	kit.t++;
 	const type = kit.type || en.necroType || en.type;
-	if(type === 'ironSentinel') tickSentinel(en, kit);
+	if(type === 'ironSentinel') tickIronSentinel(en, kit);
 	else if(type === 'forgeDrone') tickDrone(en, kit);
 	else if(type === 'slagBrute') tickBrute(en, kit);
 	else if(type === 'thornWolf') tickWolf(en, kit);
@@ -203,22 +208,31 @@ function updateForgeKitEnemy(en){
 	return !!en._forgeKitBusy;
 }
 
-function tickSentinel(en, kit){
+function tickIronSentinel(en, kit){
 	const aim = kitAim(en);
 	if(kit.kind === 'shieldMarch'){
-		en.x += kit.dir * 2.55;
+		en.x += kit.dir * (kit.t < 12 ? 1 : 4.2);
+		if(window.EFX && kit.t % 3 === 0) EFX.smoke(en.x + en.w / 2 - kit.dir * en.w * 0.3, en.y + en.h - 4, 1, { size: 8, c: '#4a4440', a: 0.4 });
 		const sx = en.x + (kit.dir > 0 ? en.w : -22);
 		if(!kitFriendly(en) && rectRect({ x: sx, y: en.y, w: 26, h: en.h }, player)){
 			if(!kit.bashed && kit.t > 18){
 				kit.bashed = true;
 				forgeHit(en, player.x + player.w / 2, player.y + player.h / 2, 36, kitDmg(34), ['stun', 'horizontalLaunch']);
 				player.x += kit.dir * 28;
+				if(window.EFX){ EFX.burst(player.x + player.w / 2, player.y + player.h / 2, 'metal', 1.6); EFX.sparks('metal', en.x + (kit.dir > 0 ? en.w : 0), en.y + en.h / 2, 10, { ang: kit.dir > 0 ? 0 : Math.PI, spread: 1.4, speed: 8 }); }
 				kitShake(6, 10);
 			}
 		}
 		if(kit.t > 56){ en._ironFrontGuard = false; forgeEnd(en); }
 	} else if(kit.kind === 'counterSpark'){
-		if(kit.t > 50){ en._ironCounter = false; forgeEnd(en); }
+		if(kit.t > 50){
+			// nobody struck it: the stored charge vents anyway, smaller
+			if(en._ironCounter){
+				forgeHit(en, en.x + en.w / 2, en.y + en.h / 2, 60, kitDmg(18), ['stun']);
+				if(window.EFX){ EFX.burst(en.x + en.w / 2, en.y + en.h / 2, 'lightning', 1.3); EFX.ring(en.x + en.w / 2, en.y + en.h / 2, 10, 80, 'lightning', 14, { width: 4 }); }
+			}
+			en._ironCounter = false; forgeEnd(en);
+		}
 	} else if(kit.kind === 'magneticPull'){
 		if(!kitFriendly(en)){
 			const dx = (en.x + en.w / 2) - (player.x + player.w / 2);
@@ -231,9 +245,33 @@ function tickSentinel(en, kit){
 
 function tickDrone(en, kit){
 	const aim = kitLead(en, 8);
-	if(kit.kind === 'overheat'){
+	if(kit.kind === 'weldingBeam'){
+		const u = Math.max(0, Math.min(1, (kit.t - 14) / 40));
+		kit.bx = kit.x0 + (kit.x1 - kit.x0) * u;
+		kit.by = kitFloor(kit.bx, kit.fy - 40);
+		if(kit.hitCd > 0) kit.hitCd--;
+		if(kit.t > 14 && kit.t < 56){
+			const ox = en.x + en.w / 2, oy = en.y + en.h * 0.6;
+			// the beam hurts along its length near the foot, and at the foot itself
+			if(kit.hitCd <= 0 && (forgeHit(en, kit.bx, kit.by - 18, 22, kitDmg(16), ['burn']) || (segHitsPlayer(ox, oy, kit.bx, kit.by) && forgeHit(en, player.x + player.w / 2, player.y + player.h / 2, 30, kitDmg(10), ['burn'])))) kit.hitCd = 18;
+			if(window.EFX){ if(kit.t % 2 === 0) EFX.sparks('metal', kit.bx, kit.by - 4, 3, { ang: -Math.PI / 2, spread: 2.2, speed: 6 }); if(kit.t % 4 === 0) EFX.decal(kit.bx, kit.by + 1, 14, 'metal', 140, { color: '#2a2018', glow: 0.8 }); }
+		}
+		if(kit.t === 56){
+			forgeFX({ kind: 'barrier', en, x: kit.bx, y: kit.by, h: 16, maxH: atkS(96), age: 0, max: 220 });
+			if(window.EFX){ EFX.burst(kit.bx, kit.by - 20, 'metal', 1.4); }
+		}
+		if(kit.t > 62) forgeEnd(en);
+	} else if(kit.kind === 'overheat'){
 		kit.heat = Math.min(1, kit.t / 44);
 		if(en.dead){ en._droneOverheat = false; forgeEnd(en); return; }
+		// the glowing drone homes in on the player before it vents
+		if(kit.t < 40){
+			const ax = aim.x - (en.x + en.w / 2), ay = (aim.y - 30) - (en.y + en.h / 2), ad = Math.hypot(ax, ay) || 1;
+			const sp = Math.min(ad, 3 + kit.t * 0.12);
+			en.x += ax / ad * sp; en.y += ay / ad * sp;
+			if(en.typeDef && en.typeDef.flies) en.baseY = en.y - (en.flyOffset || 0);
+		}
+		if(window.EFX && kit.t % 2 === 0) EFX.sparks('metal', en.x + en.w / 2, en.y + en.h / 2, 1 + (kit.heat * 3 | 0), { speed: 3 + kit.heat * 4 });
 		if(kit.t === 46){
 			forgeHit(en, en.x + en.w / 2, en.y + en.h / 2, 92, kitDmg(42), ['burn', 'stun']);
 			const ring = forgeSpawn(en, en.x + en.w / 2, en.y + en.h / 2, 0, 0, {
@@ -242,6 +280,7 @@ function tickDrone(en, kit){
 			});
 			if(ring) ring._forgeStyle = 'spark';
 			kitShake(8, 14);
+			if(window.EFX){ EFX.burst(en.x + en.w / 2, en.y + en.h / 2, 'metal', 2.4); EFX.smoke(en.x + en.w / 2, en.y + en.h / 2, 5, { size: 16, c: '#2a2420', a: 0.55, spread: 3 }); }
 			en._droneOverheat = false;
 		}
 		if(kit.t > 56) forgeEnd(en);
@@ -251,6 +290,7 @@ function tickDrone(en, kit){
 		en.y += Math.sin(kit.ang) * 12.2;
 		if(en.typeDef && en.typeDef.flies) en.baseY = en.y - (en.flyOffset || 0);
 		if(kit.hitCd <= 0 && forgeHit(en, en.x + en.w / 2, en.y + en.h / 2, 32, kitDmg(26), ['burn'])) kit.hitCd = 8;
+		if(window.EFX) EFX.sparks('metal', en.x + en.w / 2, en.y + en.h / 2, 2, { ang: kit.ang + Math.PI, spread: 0.7, speed: 5 });
 		if(!kit.bounced && (kitBlocked(en.x + en.w / 2 + Math.cos(kit.ang) * 16, en.y + en.h / 2) || kit.t > 18)){
 			kit.bounced = true;
 			kit.ang = Math.atan2(aim.y - (en.y + en.h / 2), aim.x - (en.x + en.w / 2));
@@ -276,54 +316,91 @@ function tickBrute(en, kit){
 	} else if(kit.t > 10) forgeEnd(en);
 }
 
+function wolfSlash(en, dir, big){
+	if(!window.EFX) return;
+	const cx = en.x + en.w / 2 + dir * en.w * 0.4, cy = en.y + en.h * 0.45;
+	EFX.slash(cx, cy, dir > 0 ? 0 : Math.PI, big ? 44 : 34, 2.4, 'nature', { dir: dir > 0 ? 1 : -1, width: big ? 16 : 12, life: 12 });
+}
 function tickWolf(en, kit){
-	const aim = kitLead(en, 6);
+	const aim = kitAim(en);
+	const ecx = () => en.x + en.w / 2;
 	if(kit.kind === 'huntingCircle'){
-		kit.dang += 0.2;
-		const r = 78;
-		en.x = aim.x + Math.cos(kit.dang) * r - en.w / 2;
-		en.y = aim.y + Math.sin(kit.dang) * 16 - en.h / 2;
-		if(kit.t % 4 === 0) forgeFX({ kind: 'thorntrail', x: en.x + en.w / 2, y: en.y + en.h, age: 0, max: 40, en });
-		if(kit.t === 24){
-			const dx = aim.x - (en.x + en.w / 2), dy = aim.y - (en.y + en.h / 2), d = Math.hypot(dx, dy) || 1;
-			en.x += dx / d * 110;
+		// circle the prey at a distance, leaving thorns, then lunge straight through it
+		if(kit.t < 36){
+			kit.dang += 0.11;
+			const tx = aim.x + Math.cos(kit.dang) * 170 - en.w / 2;
+			en.x += (tx - en.x) * 0.16;
+			if(kit.t % 4 === 0) forgeFX({ kind: 'thorntrail', x: ecx(), y: en.y + en.h - 4, age: 0, max: 90, en });
+			en.facing = aim.x >= ecx() ? 1 : -1;
 		}
-		if(kit.t > 38) forgeEnd(en);
+		if(kit.t === 30) kit.lock = { x: aim.x, dir: aim.x >= ecx() ? 1 : -1 };
+		if(kit.t >= 38 && kit.lock){
+			en.x += kit.lock.dir * 15;
+			en.facing = kit.lock.dir;
+			if(!kit.hit && forgeHit(en, ecx() + kit.lock.dir * en.w * 0.3, en.y + en.h / 2, 30, kitDmg(30), ['horizontalLaunch'])){ kit.hit = true; wolfSlash(en, kit.lock.dir, true); }
+			if(window.EFX && kit.t % 2 === 0) EFX.emit('nature', ecx(), en.y + en.h * 0.6, 2, { speed: 1 });
+			if((kit.lock.dir > 0 ? ecx() > kit.lock.x + 90 : ecx() < kit.lock.x - 90) || kit.t > 60 || kitBlocked(ecx() + kit.lock.dir * (en.w * 0.6 + 6), en.y + en.h / 2)) forgeEnd(en);
+		}
+		if(kit.t > 64) forgeEnd(en);
 	} else if(kit.kind === 'thornPounce'){
-		if(kit.t === 12){
-			en.x += kit.dir * 120;
+		// crouch, then a leaping pounce that lands in a burst of thorns
+		if(kit.t > 10 && kit.t <= 28){
+			const u = (kit.t - 10) / 18;
+			en.x = kit.x0 + (kit.tx - kit.x0) * u;
+			en.y = kit.y0 - Math.sin(u * Math.PI) * 80;
+			if(!kit.hit && forgeHit(en, ecx(), en.y + en.h / 2, 28, kitDmg(28), [])){ kit.hit = true; wolfSlash(en, kit.dir, false); }
 		}
-		if(kit.t > 24) forgeEnd(en);
+		if(kit.t === 28 && !kit.landed){
+			kit.landed = true; en.y = kit.y0;
+			const lx = ecx(), ly = en.y + en.h;
+			if(!kit.hit) forgeHit(en, lx, ly - 18, 40, kitDmg(22), []);
+			for(let k = 0; k < 7; k++){
+				const a = -Math.PI / 2 + (k - 3) * 0.32;
+				forgeSpawn(en, lx, ly - 10, Math.cos(a) * 7.4, Math.sin(a) * 6.2, {
+					color: '#6a8a3a', color2: '#e8ff88', power: 18, width: 30, height: 18,
+					shape: 'spike', maxAge: 55, gravity: 0.2, _forgeStyle: 'thorn'
+				});
+			}
+			if(window.EFX){ EFX.burst(lx, ly - 12, 'nature', 1.4); EFX.groundWave(lx, ly, 90, 'nature'); EFX.debris('earth', lx, ly - 4, 5, { speed: 5, floor: ly }); }
+			kitShake(5, 8);
+		}
+		if(kit.t > 36) forgeEnd(en);
 	} else if(kit.kind === 'packEcho'){
-		if(kit.t === 10 && !kit.dashed){
-			kit.dashed = true;
-			const dir = aim.x >= en.x + en.w / 2 ? 1 : -1;
-			kit.dashDir = dir;
-			kit.fromX = en.x; kit.fromY = en.y;
-			en.x += dir * 120;
-			forgeHit(en, en.x + en.w / 2, en.y + en.h / 2, 34, kitDmg(32), []);
-		}
-		if(kit.dashed){
-			for(let i = 0; i < kit.echoes.length; i++){
-				if(kit.t === 10 + kit.echoes[i].t){
-					forgeHit(en, (kit.fromX || en.x) + kit.dashDir * 120 + en.w / 2, en.y + en.h / 2, 28, kitDmg(18), []);
-				}
+		// two spectral pack-mates dash the lane first, then the wolf follows
+		const dir = kit.dir;
+		for(let i = 0; i < kit.echoes.length; i++){
+			const E = kit.echoes[i];
+			if(kit.t > 8 + E.delay && E.d < kit.dist){
+				E.d = Math.min(kit.dist, E.d + 17);
+				const ex = kit.x0 + en.w / 2 + dir * E.d;
+				if(!E.hit && forgeHit(en, ex, en.y + en.h / 2, 26, kitDmg(16), [])) E.hit = true;
+				if(window.EFX && kit.t % 2 === 0) EFX.emit('nature', ex, en.y + en.h * 0.6, 1, { speed: 1 });
 			}
 		}
-		if(kit.t > 30) forgeEnd(en);
+		if(kit.t > 22){
+			const target = kit.x0 + dir * kit.dist;
+			if((dir > 0 ? en.x < target : en.x > target) && !kitBlocked(ecx() + dir * (en.w * 0.6 + 6), en.y + en.h / 2)){
+				en.x += dir * 16;
+				if(!kit.hit && forgeHit(en, ecx() + dir * en.w * 0.3, en.y + en.h / 2, 30, kitDmg(30), [])){ kit.hit = true; wolfSlash(en, dir, true); }
+			}
+		}
+		if(kit.t > 48) forgeEnd(en);
 	} else if(kit.kind === 'predatoryFeint'){
 		if(kit.phase === 'fake'){
-			en.x += kit.dir * 8.4;
+			en.x += kit.dir * 6.5;
 			if(kit.t === 8){ kit.phase = 'slide'; kit.dir *= -1; }
 		} else if(kit.phase === 'slide'){
-			en.x += kit.dir * 10.2;
-			if(kit.t === 16){
-				kit.phase = 'real';
-				en.x += kit.dir * 70;
-				forgeHit(en, en.x + en.w / 2, en.y + en.h / 2, 38, kitDmg(36), ['horizontalLaunch']);
+			en.x += kit.dir * 5;
+			if(kit.t === 16){ kit.phase = 'real'; kit.dir *= -1; kit.lockX = aim.x; if(window.EFX) EFX.alertFX(ecx(), en.y - 14, 'nature', 16); }
+		} else {
+			// the real lunge — fast and long
+			if(kit.t > 20){
+				en.x += kit.dir * 17;
+				if(!kit.hit && forgeHit(en, ecx() + kit.dir * en.w * 0.3, en.y + en.h / 2, 32, kitDmg(36), ['horizontalLaunch'])){ kit.hit = true; wolfSlash(en, kit.dir, true); }
+				if((kit.dir > 0 ? ecx() > kit.lockX + 80 : ecx() < kit.lockX - 80) || kitBlocked(ecx() + kit.dir * (en.w * 0.6 + 6), en.y + en.h / 2)) forgeEnd(en);
 			}
 		}
-		if(kit.t > 26) forgeEnd(en);
+		if(kit.t > 44) forgeEnd(en);
 	}
 }
 
@@ -337,15 +414,16 @@ function updateForgeKitWorld(){
 				player.x += player.x + player.w / 2 < fx.x ? -3.2 : 3.2;
 			}
 		} else if(fx.kind === 'mine'){
-			const near = Math.hypot(player.x + player.w / 2 - fx.x, player.y + player.h - fx.y) < 58;
-			if(near) fx.hot = true;
+			const near = Math.hypot(player.x + player.w / 2 - fx.x, player.y + player.h - fx.y) < 70;
+			if(near && !fx.hot){ fx.hot = true; if(window.EFX) EFX.flash(fx.x, fx.y, 22, 'lightning', 8); }
+			if(!fx.hot && fx.age === 40) fx.hot = true;
 			if(fx.hot){
 				for(let j = 0; j < forgeWorldFX.length; j++){
 					const o = forgeWorldFX[j];
 					if(o.kind !== 'mine' || o === fx) continue;
 					if(Math.hypot(o.x - fx.x, o.y - fx.y) < 110){
 						o.hot = true;
-						if(segHitsPlayer(fx.x, fx.y, o.x, o.y)) forgeHit(fx.en, player.x + player.w / 2, player.y + player.h / 2, 20, kitDmg(20), []);
+						if(fx.age % 10 === 0 && segHitsPlayer(fx.x, fx.y - 6, o.x, o.y - 6)) forgeHit(fx.en, player.x + player.w / 2, player.y + player.h / 2, 20, kitDmg(20), []);
 					}
 				}
 			}
@@ -353,6 +431,7 @@ function updateForgeKitWorld(){
 			fx.slammed = true;
 			forgeHit(fx.en, fx.x, fx.y - 24, 64, kitDmg(40), ['burn', 'horizontalLaunch']);
 			forgeFX({ kind: 'crater', en: fx.en, x: fx.x, y: fx.y, r: atkS(62), age: 0, max: 180 });
+			if(window.EFX){ EFX.burst(fx.x, fx.y - 20, 'magma', 2.2); EFX.groundWave(fx.x, fx.y, 150, 'magma', 26); EFX.debris('magma', fx.x, fx.y - 6, 10, { speed: 8, floor: fx.y, spread: 2 }); EFX.smoke(fx.x, fx.y - 8, 4, { size: 16, c: '#2a1a12', a: 0.55, spread: 3 }); }
 			kitShake(8, 14);
 		} else if(fx.kind === 'crater'){
 			if(circRect(fx.x, fx.y, fx.r * 0.6, player.x, player.y, player.w, player.h)){
@@ -361,6 +440,7 @@ function updateForgeKitWorld(){
 			}
 		} else if(fx.kind === 'chunk' && !fx.erupted && fx.age === 36){
 			fx.erupted = true;
+			if(window.EFX){ EFX.burst(fx.x, fx.y - 10, 'magma', 1.2); EFX.debris('magma', fx.x, fx.y - 4, 4, { speed: 6, floor: fx.y }); }
 			forgeSpawn(fx.en, fx.x, fx.y, 0, -10.2, {
 				color: '#ee5520', color2: '#ffe080', power: 32, width: 44, height: 58,
 				shape: 'meteor', maxAge: 55, trail: 'flame', effects: ['burn'], _forgeStyle: 'slag'
@@ -369,11 +449,27 @@ function updateForgeKitWorld(){
 			if(fx.age % 5 === 0 && fx.age < 24 && fx.en){
 				forgeFX({ kind: 'slagblock', x: fx.en.x + Math.random() * fx.en.w, y: kitFloor(fx.en.x, fx.en.y) - 4, w: atkS(36), h: atkS(24), age: 0, max: 220 });
 			}
+			if(fx.age < 26 && fx.en && !fx.en.dead){
+				// lumber forward, shedding molten blocks
+				const want = fx.tx != null ? fx.tx : (fx.tx = kitAim(fx.en).x);
+				const dx = want - (fx.en.x + fx.en.w / 2);
+				if(Math.abs(dx) > 30) fx.en.x += Math.sign(dx) * Math.min(Math.abs(dx), 9);
+			}
 			if(fx.age === 26 && !fx.slammed && fx.en){
 				fx.slammed = true;
-				fx.en.x += fx.dir * 90;
-				forgeHit(fx.en, fx.en.x + fx.en.w / 2, fx.en.y + fx.en.h / 2, 60, kitDmg(40), ['burn', 'horizontalLaunch']);
+				const cx = fx.en.x + fx.en.w / 2, fy = kitFloor(cx, fx.en.y + fx.en.h - 20);
+				forgeHit(fx.en, cx, fx.en.y + fx.en.h / 2, 70, kitDmg(40), ['burn', 'horizontalLaunch']);
+				fx.wave = { x: cx, y: fy, r: 20, hit: false };
+				if(window.EFX){ EFX.burst(cx, fy - 20, 'magma', 2.4); EFX.groundWave(cx, fy, 220, 'magma', 30); EFX.debris('magma', cx, fy - 6, 12, { speed: 9, floor: fy, spread: 2.2 }); }
 				kitShake(9, 14);
+			}
+			if(fx.wave){
+				const W = fx.wave;
+				W.r += 9;
+				if(!W.hit && W.r < 260 && player.y + player.h > W.y - 26){
+					const px = player.x + player.w / 2;
+					if(Math.abs(Math.abs(px - W.x) - W.r) < 22) W.hit = forgeHit(fx.en, px, W.y - 14, 18, kitDmg(22), ['burn']);
+				}
 			}
 		} else if(fx.kind === 'slagblock'){
 			if(Math.abs(player.x + player.w / 2 - fx.x) < fx.w * 0.55 && player.y + player.h > fx.y - fx.h){
@@ -388,6 +484,7 @@ function updateForgeKitWorld(){
 				fx.punched = true;
 				if(fx.en && !fx.en.dead) fx.en.x = fx.hx - fx.en.w / 2;
 				forgeHit(fx.en, fx.hx, fx.hy, 62, kitDmg(40), ['horizontalLaunch']);
+				if(window.EFX){ EFX.burst(fx.hx, fx.hy, 'metal', 2); EFX.sparks('metal', fx.hx, fx.hy, 12, { speed: 9 }); }
 				kitShake(7, 12);
 			}
 		} else if(fx.kind === 'magnetburst' && !fx.fired && fx.age === 20){
@@ -401,6 +498,7 @@ function updateForgeKitWorld(){
 					shape: 'spike', maxAge: 70, trail: 'spark', _forgeStyle: 'steel'
 				});
 			}
+			if(window.EFX){ EFX.burst(ox, oy, 'lightning', 1.6); EFX.ring(ox, oy, 20, 140, 'lightning', 18, { width: 4 }); }
 			kitShake(6, 10);
 		} else if(fx.kind === 'wolfdash' && fx.age === fx.fireAt){
 			const aim = kitLead(fx.en, 4);
@@ -424,11 +522,13 @@ function updateForgeKitWorld(){
 }
 
 function segHitsPlayer(x1, y1, x2, y2){
-	const px = player.x + player.w / 2, py = player.y + player.h / 2;
-	const dx = x2 - x1, dy = y2 - y1, d2 = dx * dx + dy * dy || 1;
-	let t = ((px - x1) * dx + (py - y1) * dy) / d2;
-	t = Math.max(0, Math.min(1, t));
-	return Math.hypot(px - (x1 + dx * t), py - (y1 + dy * t)) < 18;
+	// sample the segment against the player's box (with a little padding)
+	const pad = 8;
+	for(let k = 0; k <= 8; k++){
+		const t = k / 8, x = x1 + (x2 - x1) * t, y = y1 + (y2 - y1) * t;
+		if(x > player.x - pad && x < player.x + player.w + pad && y > player.y - pad && y < player.y + player.h + pad) return true;
+	}
+	return false;
 }
 
 function forgeKitSteerPlayerProj(p){
@@ -457,7 +557,7 @@ function forgeKitOnEnemyHit(en, p){
 	if(en._ironCounter){
 		en._ironCounter = false;
 		forgeHit(en, en.x + en.w / 2, en.y + en.h / 2, 72, kitDmg(30), ['stun']);
-		kitSpark(en.x + en.w / 2, en.y + en.h / 2, 18, { r: 255, g: 200, b: 80 });
+		if(window.EFX){ EFX.burst(en.x + en.w / 2, en.y + en.h / 2, 'lightning', 2); EFX.ring(en.x + en.w / 2, en.y + en.h / 2, 10, 100, 'lightning', 16, { width: 5 }); for(let k = 0; k < 5; k++){ const a = k / 5 * Math.PI * 2; EFX.add({ k: 'spark', x: en.x + en.w / 2, y: en.y + en.h / 2, vx: Math.cos(a) * 9, vy: Math.sin(a) * 9, drag: 0.9, size: 2, len: 3, c: '#ffffff', c2: '#c8ecff', max: 14 }); } }
 		kitShake(5, 8);
 	}
 	if(en._furnaceOpen){
@@ -489,101 +589,136 @@ function forgeKitSpriteRow(en){
 	return null;
 }
 
+/* ---------- drawing (EFX) ---------- */
 function drawForgeKitProj(p){
-	const px = p.x - camera.x, py = p.y - camera.y;
-	const r = Math.max(p.width, p.height) * 0.68;
-	const pulse = 0.5 + Math.sin((p.age || 0) * 0.32) * 0.5;
-	const style = p._forgeStyle || 'spark';
-	ctx.save();
-	ctx.translate(px, py);
-	ctx.shadowColor = style === 'thorn' ? '#b8ee55' : (style === 'steel' ? '#d0e4ff' : '#ff8844');
-	ctx.shadowBlur = 16 + pulse * 8;
+	if(!window.EFX) return;
+	const style = p._forgeStyle || 'spark', r = Math.max(p.width, p.height) * 0.42;
 	if(style === 'steel'){
-		ctx.rotate(Math.atan2(p.vy || 0, p.vx || 1));
-		const g = ctx.createLinearGradient(-r, -r, r, r);
-		g.addColorStop(0, '#ffffff');
-		g.addColorStop(0.4, '#e8eef8');
-		g.addColorStop(1, '#6a7484');
-		ctx.fillStyle = g;
-		ctx.beginPath();
-		ctx.moveTo(r * 1.15, 0); ctx.lineTo(-r * 0.5, -r * 0.62); ctx.lineTo(-r * 0.15, 0); ctx.lineTo(-r * 0.5, r * 0.62);
-		ctx.closePath(); ctx.fill();
-		ctx.strokeStyle = 'rgba(255,200,80,0.7)'; ctx.lineWidth = 2; ctx.stroke();
+		// a spinning steel shard with a hot edge
+		const ang = Math.atan2(p.vy || 0, p.vx || 1), sx = p.x - camera.x, sy = p.y - camera.y;
+		const h = EFX.track(p, 7); EFX.trail(h, r * 0.4, 'metal', { alpha: 0.35 });
+		ctx.save(); ctx.translate(sx, sy); ctx.rotate(ang);
+		const g = ctx.createLinearGradient(-r, -r, r, r); g.addColorStop(0, '#ffffff'); g.addColorStop(0.45, '#c8d0dc'); g.addColorStop(1, '#5a6472');
+		ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(r * 1.2, 0); ctx.lineTo(-r * 0.5, -r * 0.55); ctx.lineTo(-r * 0.2, 0); ctx.lineTo(-r * 0.5, r * 0.55); ctx.closePath(); ctx.fill();
+		ctx.strokeStyle = 'rgba(255,190,80,0.85)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(r * 1.2, 0); ctx.lineTo(-r * 0.5, -r * 0.55); ctx.stroke();
+		ctx.globalCompositeOperation = 'lighter'; EFX.glowS(r * 0.9, 0, r * 0.6, '#ffd468', 0.7, true);
+		ctx.restore();
 	} else if(style === 'slag'){
-		const g = ctx.createRadialGradient(-r * 0.2, -r * 0.3, r * 0.08, 0, 0, r);
-		g.addColorStop(0, '#fff6c0');
-		g.addColorStop(0.3, '#ff7722');
-		g.addColorStop(1, '#6a1400');
-		ctx.fillStyle = g;
-		ctx.beginPath(); ctx.ellipse(0, 0, r * 0.9, r * (1.15 + pulse * 0.12), 0, 0, Math.PI * 2); ctx.fill();
+		EFX.bolt(p, p.x, p.y, r * 0.85, 'magma', { trailLen: 8 });
 	} else if(style === 'thorn'){
-		ctx.rotate(Math.atan2(p.vy || 0, p.vx || 1));
-		ctx.fillStyle = '#88cc44';
-		ctx.beginPath(); ctx.moveTo(r * 1.1, 0); ctx.lineTo(-r * 0.7, -r * 0.45); ctx.lineTo(-r * 0.2, 0); ctx.lineTo(-r * 0.7, r * 0.45); ctx.closePath(); ctx.fill();
-		ctx.strokeStyle = '#f0ff88'; ctx.lineWidth = 2; ctx.stroke();
+		EFX.bolt(p, p.x, p.y, r * 0.75, 'nature', { trailLen: 5, trailAlpha: 0.3 });
 	} else {
-		const g = ctx.createRadialGradient(-r * 0.2, -r * 0.25, r * 0.08, 0, 0, r);
-		g.addColorStop(0, 'rgba(255,255,230,0.98)');
-		g.addColorStop(0.35, '#ffe08a');
-		g.addColorStop(0.75, '#ff6622');
-		g.addColorStop(1, 'rgba(40,10,0,0)');
-		ctx.fillStyle = g;
-		ctx.beginPath(); ctx.arc(0, 0, r * (0.95 + pulse * 0.1), 0, Math.PI * 2); ctx.fill();
+		EFX.bolt(p, p.x, p.y, r * 0.8, 'metal');
 	}
+}
+
+function forgeDrawPillar(x, y, h, w, a, hot){
+	// a riveted steel barrier, glowing where it was welded
+	const sx = x - camera.x, sy = y - camera.y;
+	ctx.save(); ctx.globalAlpha = a;
+	const g = ctx.createLinearGradient(sx - w / 2, 0, sx + w / 2, 0);
+	g.addColorStop(0, '#3a404a'); g.addColorStop(0.35, '#c8d0dc'); g.addColorStop(0.55, '#eef2f8'); g.addColorStop(1, '#4a525e');
+	ctx.fillStyle = g; ctx.fillRect(sx - w / 2, sy - h, w, h);
+	ctx.fillStyle = '#2a2e36';
+	for(let yy = sy - h + 8; yy < sy - 4; yy += 16){ ctx.beginPath(); ctx.arc(sx - w * 0.3, yy, 1.8, 0, Math.PI * 2); ctx.arc(sx + w * 0.3, yy, 1.8, 0, Math.PI * 2); ctx.fill(); }
+	ctx.globalCompositeOperation = 'lighter';
+	EFX.glowS(sx, sy - 4, w * 1.2, '#ff7a20', 0.5 * hot);
+	ctx.fillStyle = 'rgba(255,200,90,' + (0.7 * hot) + ')'; ctx.fillRect(sx - w / 2, sy - 6, w, 4);
 	ctx.restore();
 }
 
 function drawForgeKitWorld(){
+	if(!window.EFX) return;
+	EFX.bind();
 	for(let i = 0; i < forgeWorldFX.length; i++){
 		const fx = forgeWorldFX[i];
+		const u = fx.max ? fx.age / fx.max : 0, fade = u > 0.85 ? (1 - u) / 0.15 : 1;
 		const x = fx.x - camera.x, y = fx.y - camera.y;
 		if(fx.kind === 'barrier'){
-			ctx.save(); ctx.shadowColor = '#ffaa44'; ctx.shadowBlur = 8;
-			const g = ctx.createLinearGradient(x - 12, y - fx.h, x + 12, y);
-			g.addColorStop(0, '#f4f7fc'); g.addColorStop(1, '#5a6270');
-			ctx.fillStyle = g; ctx.fillRect(x - 12, y - fx.h, 24, fx.h); ctx.restore();
+			forgeDrawPillar(fx.x, fx.y + 2, fx.h, 24, fade, Math.max(0, 1 - fx.age / 90));
 		} else if(fx.kind === 'mine'){
-			ctx.save(); ctx.shadowColor = fx.hot ? '#ffe060' : '#aa7722'; ctx.shadowBlur = 10;
-			ctx.fillStyle = fx.hot ? '#ffe060' : '#8a6622';
-			ctx.beginPath(); ctx.arc(x, y, 12, 0, Math.PI * 2); ctx.fill();
+			// a magnetic spark mine; hot mines arc lightning to their neighbours
+			const pulse = 0.5 + 0.5 * Math.sin(fx.age * (fx.hot ? 0.6 : 0.15));
+			ctx.save();
+			ctx.fillStyle = '#3a3a40'; ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2); ctx.fill();
+			ctx.strokeStyle = '#8a8a96'; ctx.lineWidth = 2; ctx.stroke();
+			ctx.globalCompositeOperation = 'lighter';
+			EFX.glowS(x, y, fx.hot ? 26 : 12, fx.hot ? '#5a8cff' : '#ffd468', 0.4 + 0.4 * pulse);
+			EFX.glowS(x, y, 5, '#ffffff', 0.5 + 0.5 * pulse, true);
+			ctx.restore();
 			if(fx.hot){
-				ctx.strokeStyle = 'rgba(255,230,80,0.8)'; ctx.lineWidth = 2;
-				ctx.beginPath(); ctx.arc(x, y, 18 + Math.sin(fx.age * 0.45) * 3, 0, Math.PI * 2); ctx.stroke();
 				for(let j = 0; j < forgeWorldFX.length; j++){
 					const o = forgeWorldFX[j];
-					if(o.kind !== 'mine' || o === fx || !o.hot) continue;
-					if(Math.hypot(o.x - fx.x, o.y - fx.y) < 110){
-						ctx.strokeStyle = 'rgba(255,220,70,0.75)'; ctx.lineWidth = 3;
-						ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(o.x - camera.x, o.y - camera.y); ctx.stroke();
-					}
+					if(o.kind !== 'mine' || o === fx || !o.hot || j < i) continue;
+					if(Math.hypot(o.x - fx.x, o.y - fx.y) < 110) EFX.lightning(fx.x, fx.y - 6, o.x, o.y - 6, 'lightning', { width: 2, jag: 16, seed: (fx.age / 3 | 0) + i * 7, branches: false, alpha: fade });
 				}
 			}
-			ctx.restore();
 		} else if(fx.kind === 'crater'){
-			ctx.save(); ctx.globalAlpha = 0.65;
-			const g = ctx.createRadialGradient(x, y, 4, x, y, fx.r);
-			g.addColorStop(0, '#ff7722'); g.addColorStop(1, 'rgba(80,10,0,0)');
-			ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x, y, fx.r, 20, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+			const a = (1 - u) * fade;
+			ctx.save(); ctx.globalAlpha = 0.8 * a; ctx.fillStyle = '#2a0c04';
+			ctx.beginPath(); ctx.ellipse(x, y + 2, fx.r, fx.r * 0.24, 0, 0, Math.PI * 2); ctx.fill();
+			ctx.restore();
+			EFX.flameStrip(fx.x - fx.r * 0.8, fx.x + fx.r * 0.8, fx.y + 2, 'magma', 0.8 * a, { height: 16, step: 14, emit: fx.age % 3 === 0 });
 		} else if(fx.kind === 'chunk'){
-			ctx.save(); ctx.shadowColor = '#ff6622'; ctx.shadowBlur = 8;
-			ctx.fillStyle = '#ee6622';
-			ctx.beginPath(); ctx.moveTo(x, y - 16); ctx.lineTo(x + 14, y); ctx.lineTo(x, y + 8); ctx.lineTo(x - 14, y); ctx.closePath(); ctx.fill(); ctx.restore();
+			if(!fx.erupted){
+				// glowing slag lumps that bulge before they burst
+				const k = fx.age / 36;
+				EFX.warnCircle(fx.x, fx.y + 4, 24, k, 'magma', { flat: 0.35 });
+				ctx.save(); ctx.translate(x, y - 6); ctx.scale(1 + k * 0.3, 1 + k * 0.3);
+				ctx.drawImage(EFX.rockSprite('magma', i & 7), -14, -14, 28, 28);
+				ctx.globalCompositeOperation = 'lighter'; EFX.glowS(0, 0, 18, '#ff6a12', 0.3 + 0.5 * k);
+				ctx.restore();
+			}
 		} else if(fx.kind === 'slagblock'){
-			ctx.fillStyle = '#4a2210'; ctx.fillRect(x - fx.w / 2, y - fx.h, fx.w, fx.h);
-			ctx.strokeStyle = '#ee6622'; ctx.strokeRect(x - fx.w / 2, y - fx.h, fx.w, fx.h);
+			const sx = x, sy = y + 2, w = fx.w, h = fx.h, a = fade;
+			ctx.save(); ctx.globalAlpha = a;
+			const g = ctx.createLinearGradient(0, sy - h, 0, sy);
+			g.addColorStop(0, '#5a2a14'); g.addColorStop(1, '#1a0a04');
+			ctx.fillStyle = g; ctx.fillRect(sx - w / 2, sy - h, w, h);
+			ctx.globalCompositeOperation = 'lighter';
+			ctx.strokeStyle = 'rgba(255,120,30,' + (0.8 * Math.max(0.2, 1 - u * 1.5)) + ')'; ctx.lineWidth = 2;
+			ctx.beginPath(); ctx.moveTo(sx - w * 0.4, sy - h * 0.2); ctx.lineTo(sx, sy - h * 0.7); ctx.lineTo(sx + w * 0.3, sy - h * 0.3); ctx.stroke();
+			ctx.restore();
 		} else if(fx.kind === 'thorntrail'){
-			ctx.strokeStyle = 'rgba(170,230,70,0.75)'; ctx.lineWidth = 3;
-			ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI * 2); ctx.stroke();
-		} else if(fx.kind === 'assembly' && fx.bits){
-			ctx.save(); ctx.shadowColor = '#ffaa44'; ctx.shadowBlur = 8;
-			ctx.fillStyle = '#c8d0dc';
-			for(let b = 0; b < fx.bits.length; b++){
-				ctx.fillRect(fx.bits[b].x - 7 - camera.x, fx.bits[b].y - 7 - camera.y, 14, 14);
+			const a = 1 - u;
+			ctx.save(); ctx.globalAlpha = a; ctx.fillStyle = '#4f8a26'; ctx.strokeStyle = '#d8ff9a'; ctx.lineWidth = 1;
+			for(let k = 0; k < 3; k++){
+				const an = k * 2.1 + fx.x * 0.1;
+				ctx.beginPath(); ctx.moveTo(x + Math.cos(an) * 7, y + Math.sin(an) * 7); ctx.lineTo(x + Math.cos(an + 2.6) * 3, y + Math.sin(an + 2.6) * 3); ctx.lineTo(x + Math.cos(an - 2.6) * 3, y + Math.sin(an - 2.6) * 3); ctx.closePath(); ctx.fill(); ctx.stroke();
 			}
 			ctx.restore();
+		} else if(fx.kind === 'assembly' && fx.bits){
+			if(!fx.punched) EFX.warnCircle(fx.hx, fx.hy, 56, fx.age / 20, 'metal');
+			for(let b = 0; b < fx.bits.length; b++){
+				const B = fx.bits[b], bx = B.x - camera.x, by = B.y - camera.y;
+				ctx.save(); ctx.translate(bx, by); ctx.rotate(fx.age * 0.3 + b);
+				const g = ctx.createLinearGradient(-8, -8, 8, 8); g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#5a6472');
+				ctx.fillStyle = g; ctx.fillRect(-7, -7, 14, 14);
+				ctx.strokeStyle = 'rgba(255,190,80,0.8)'; ctx.lineWidth = 1.2; ctx.strokeRect(-7, -7, 14, 14);
+				ctx.restore();
+				if(!fx.punched && fx.age % 2 === 0) EFX.sparks('metal', B.x, B.y, 1, { speed: 3 });
+			}
 		} else if(fx.kind === 'hammer' && !fx.slammed){
-			ctx.save(); ctx.globalAlpha = 0.45; ctx.strokeStyle = '#ff6622'; ctx.lineWidth = 4;
-			ctx.beginPath(); ctx.ellipse(x, y, 54, 16, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+			// a giant slag hammer falls from above onto the marked spot
+			const k = fx.age / 16;
+			EFX.warnCircle(fx.x, fx.y, 64, k, 'magma', { flat: 0.3 });
+			const hy = fx.y - 30 - (1 - k * k) * 320;
+			ctx.save(); ctx.translate(x, hy - camera.y);
+			ctx.fillStyle = '#3a2a22'; ctx.fillRect(-4, -90, 8, 70);
+			const g = ctx.createLinearGradient(-30, 0, 30, 0); g.addColorStop(0, '#2a1a12'); g.addColorStop(0.5, '#6a3a24'); g.addColorStop(1, '#2a1a12');
+			ctx.fillStyle = g; ctx.fillRect(-30, -24, 60, 30);
+			ctx.globalCompositeOperation = 'lighter'; EFX.glowS(0, 6, 30, '#ff6a12', 0.6 * k);
+			ctx.fillStyle = 'rgba(255,140,40,0.8)'; ctx.fillRect(-30, 2, 60, 4);
+			ctx.restore();
+		} else if(fx.kind === 'collapse' && fx.wave){
+			const W = fx.wave;
+			if(W.r < 260){
+				const a = 1 - W.r / 260;
+				EFX.flameStrip(W.x - W.r - 16, W.x - W.r + 16, W.y, 'magma', a, { height: 30, step: 10, emit: false });
+				EFX.flameStrip(W.x + W.r - 16, W.x + W.r + 16, W.y, 'magma', a, { height: 30, step: 10, emit: false });
+			}
+		} else if(fx.kind === 'magnetburst' && !fx.fired && fx.en){
+			EFX.charge(fx.en.x + fx.en.w / 2, fx.en.y + fx.en.h * 0.4, 'lightning', 70, 2, 14);
 		}
 	}
 	if(typeof enemies !== 'undefined') for(let i = 0; i < enemies.length; i++) drawForgeEnemyFX(enemies[i]);
@@ -591,37 +726,68 @@ function drawForgeKitWorld(){
 }
 
 function drawForgeEnemyFX(en){
-	if(!en || en.dead || !en.forgeKit) return;
-	const kit = en.forgeKit;
+	if(!en || en.dead || !en.forgeKit || !window.EFX) return;
+	const kit = en.forgeKit, ecx = en.x + en.w / 2, ecy = en.y + en.h / 2;
 	if(kit.kind === 'shieldMarch'){
-		const sx = en.x + (kit.dir > 0 ? en.w : -20) - camera.x;
-		ctx.save(); ctx.shadowColor = '#dde4f0'; ctx.shadowBlur = 10;
-		ctx.fillStyle = '#d8dee8'; ctx.fillRect(sx, en.y - camera.y, 20, en.h); ctx.restore();
+		// a tower shield held out front
+		const W = 18, sx = en.x + (kit.dir > 0 ? en.w - 2 : -W + 2) - camera.x, sy = en.y - 4 - camera.y, H = en.h + 6;
+		ctx.save();
+		const g = ctx.createLinearGradient(sx, 0, sx + W, 0); g.addColorStop(0, '#5a6472'); g.addColorStop(0.5, '#e8eef6'); g.addColorStop(1, '#5a6472');
+		ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(sx, sy + 4); ctx.lineTo(sx + W, sy); ctx.lineTo(sx + W, sy + H - 6); ctx.lineTo(sx + W / 2, sy + H); ctx.lineTo(sx, sy + H - 6); ctx.closePath(); ctx.fill();
+		ctx.strokeStyle = '#ffd468'; ctx.lineWidth = 1.5; ctx.stroke();
+		ctx.restore();
 	}
-	if(kit.kind === 'counterSpark'){
-		ctx.save(); ctx.strokeStyle = 'rgba(255,210,70,0.9)'; ctx.lineWidth = 4;
-		ctx.shadowColor = '#ffcc44'; ctx.shadowBlur = 12;
-		ctx.strokeRect(en.x - 6 - camera.x, en.y - 6 - camera.y, en.w + 12, en.h + 12); ctx.restore();
+	if(kit.kind === 'counterSpark' && en._ironCounter){
+		// crackling static stored in the armour
+		if(kit.t % 3 === 0){ const a = Math.random() * Math.PI * 2; EFX.lightning(ecx, ecy, ecx + Math.cos(a) * en.w * 0.8, ecy + Math.sin(a) * en.h * 0.6, 'lightning', { width: 1.5, branches: false, seed: kit.t }); }
+		ctx.save(); ctx.globalCompositeOperation = 'lighter'; EFX.glow(ecx, ecy, en.w, '#5a8cff', 0.25 + 0.15 * Math.sin(kit.t * 0.5)); ctx.restore();
 	}
 	if(kit.kind === 'magneticPull'){
-		ctx.save(); ctx.strokeStyle = 'rgba(130,190,255,0.7)'; ctx.lineWidth = 3;
-		ctx.beginPath(); ctx.arc(en.x + en.w / 2 - camera.x, en.y + en.h / 2 - camera.y, 60 + Math.sin(kit.t * 0.25) * 12, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+		// field lines bending toward the sentinel
+		ctx.save(); ctx.strokeStyle = 'rgba(140,190,255,0.5)'; ctx.lineWidth = 1.5;
+		for(let k = 0; k < 3; k++){ const rr = 50 + ((kit.t * 4 + k * 40) % 120); ctx.globalAlpha = 1 - rr / 170; ctx.beginPath(); ctx.ellipse(ecx - camera.x, ecy - camera.y, rr, rr * 0.6, 0, 0, Math.PI * 2); ctx.stroke(); }
+		ctx.restore();
+	}
+	if(kit.kind === 'weldingBeam' && kit.bx != null){
+		const ox = ecx, oy = en.y + en.h * 0.6;
+		if(kit.t <= 14){ EFX.warnLine(kit.x0, kit.fy - 8, kit.x1, kit.fy - 8, 20, kit.t / 14, 'metal'); EFX.charge(ox, oy, 'metal', 24, 1, 8); }
+		else if(kit.t < 56){ EFX.beam(ox, oy, kit.bx, kit.by - 2, 4, 'metal', { speed: 10 }); ctx.save(); ctx.globalCompositeOperation = 'lighter'; EFX.glow(kit.bx, kit.by - 4, 26, '#ffffff', 0.7, true); ctx.restore(); }
 	}
 	if(kit.kind === 'overheat'){
-		ctx.save(); ctx.globalAlpha = 0.3 + kit.heat * 0.55;
-		ctx.fillStyle = '#ff3300';
-		ctx.beginPath(); ctx.arc(en.x + en.w / 2 - camera.x, en.y + en.h / 2 - camera.y, 22 + kit.heat * 34, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+		const k = kit.heat;
+		ctx.save(); ctx.globalCompositeOperation = 'lighter';
+		EFX.glow(ecx, ecy, 20 + k * 40, '#ff4a0a', 0.3 + k * 0.5);
+		EFX.glow(ecx, ecy, 10 + k * 10, '#fff4c8', 0.4 + k * 0.6 * (0.5 + 0.5 * Math.sin(kit.t * (0.3 + k))), true);
+		ctx.restore();
+		if(kit.t > 30) EFX.warnCircle(ecx, ecy, atkS(92), (kit.t - 30) / 16, 'fire');
 	}
 	if(kit.kind === 'furnaceHeart'){
-		ctx.save(); ctx.shadowColor = '#ff8800'; ctx.shadowBlur = 16;
-		ctx.fillStyle = 'rgba(255,150,40,0.85)';
-		ctx.beginPath(); ctx.arc(en.x + en.w / 2 - camera.x, en.y + en.h * 0.45 - camera.y, 14 + kit.grow * 14, 0, Math.PI * 2); ctx.fill(); ctx.restore();
-	}
-	if(kit.kind === 'packEcho' && kit.dashed){
-		ctx.save(); ctx.globalAlpha = 0.4; ctx.fillStyle = '#9acc44';
-		ctx.fillRect((kit.fromX || en.x) - camera.x, en.y - camera.y, en.w, en.h);
-		ctx.fillRect((kit.fromX || en.x) + (kit.dashDir || 1) * 50 - camera.x, en.y - camera.y, en.w, en.h);
+		const k = kit.grow, cy = en.y + en.h * 0.45;
+		ctx.save(); ctx.globalCompositeOperation = 'lighter';
+		EFX.glow(ecx, cy, 26 + k * 30, '#ff7a12', 0.5 + 0.3 * k);
+		EFX.glow(ecx, cy, 10 + k * 8, '#fff0a0', 0.9, true);
 		ctx.restore();
+		if(kit.t % 3 === 0) EFX.charge(ecx, cy, 'magma', 120, 1, 20);
+	}
+	if(kit.kind === 'foundryCollapse' && kit.t < 26){
+		if(kit.t % 3 === 0) EFX.debris('magma', ecx, en.y + en.h * 0.3, 1, { speed: 3 });
+	}
+	if(kit.kind === 'huntingCircle' && kit.lock && kit.t < 38){
+		EFX.warnLine(ecx, ecy, kit.lock.x + kit.lock.dir * 90, ecy, 26, (kit.t - 30) / 8, 'nature');
+	}
+	if(kit.kind === 'thornPounce' && kit.t <= 10){
+		EFX.warnCircle(kit.tx + en.w / 2, kit.y0 + en.h, 40, kit.t / 10, 'nature', { flat: 0.3 });
+	}
+	if(kit.kind === 'packEcho'){
+		for(let i = 0; i < kit.echoes.length; i++){
+			const E = kit.echoes[i];
+			if(E.d <= 0 || E.d >= kit.dist) continue;
+			EFX.ghost(kit.x0 + en.w / 2 + kit.dir * E.d, ecy, en.w, en.h, 'nature', 0.75, kit.t + i * 9);
+		}
+		if(kit.t < 10) EFX.warnLine(ecx, ecy, ecx + kit.dir * kit.dist, ecy, 24, kit.t / 10, 'nature');
+	}
+	if(kit.kind === 'predatoryFeint' && kit.phase === 'real' && kit.t <= 20){
+		EFX.warnLine(ecx, ecy, kit.lockX + kit.dir * 80, ecy, 26, (kit.t - 16) / 4, 'nature');
 	}
 }
 

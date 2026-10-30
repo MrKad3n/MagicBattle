@@ -385,12 +385,12 @@ body.ai-chat-open #hud{pointer-events:none;opacity:0.45}
 <script src="mirror-war-spell.js?v=1"></script>
 <script src="scrolls.js?v=4"></script>
 <script src="spell-cost.js?v=14"></script>
-<script src="magic-engine.js?v=76"></script>
-<script src="magic-techniques.js?v=46"></script>
+<script src="magic-engine.js?v=77"></script>
+<script src="magic-techniques.js?v=47"></script>
 <script src="magic-vows.js?v=1"></script>
 <script src="magic-domain.js?v=5"></script>
 <script src="magic-domain-look.js?v=2"></script>
-<script src="magic-domain-art.js?v=4"></script>
+<script src="magic-domain-art.js?v=5"></script>
 <script src="rune-mages.js?v=13"></script>
 <script src="grand-arcanist-discovered.js?v=1"></script>
 <script src="grand-arcanist.js?v=2"></script>
@@ -2663,16 +2663,20 @@ const RAID_CONFIG = {
 	groundY: 2300, // Void pit — falling here kills the player
 	ceilY: 80,
 	playerStart: { x: 1800, y: 1442 }, // Feet on bottom center platform (RAID_BOTTOM_Y - player height)
-	// 5 floating platforms, 3 layers — no ground
+	// The Arbiter's Court: a tribunal hung over the void on chains. Every layer is 260px apart so a plain jump
+	// (~364px apex) reaches it; art and chains are drawn by void-arbiter-kit.js (drawArena).
 	platforms: [
-		// Bottom layer (y:1500) — 1 large center platform
-		{ x:1200, y:1500, w:1600, h:30, layer:'bottom' },
-		// Middle layer (y:1100) — 2 platforms left/right
-		{ x:500, y:1100, w:500, h:25, layer:'middle' },
-		{ x:3000, y:1100, w:500, h:25, layer:'middle' },
-		// Top layer (y:700) — 2 platforms inner
-		{ x:1100, y:700, w:500, h:20, layer:'top' },
-		{ x:2400, y:700, w:500, h:20, layer:'top' },
+		// The Judgement Dais — the wide floor everyone starts on
+		{ x:1150, y:1500, w:1700, h:40, layer:'bottom', court:'dais' },
+		// Witness Stands — flank the dais, one jump up
+		{ x:640, y:1240, w:460, h:30, layer:'middle', court:'stand' },
+		{ x:2900, y:1240, w:460, h:30, layer:'middle', court:'stand' },
+		// The Galleries — one jump up from the stands, overlooking the dais
+		{ x:1180, y:980, w:380, h:26, layer:'top', court:'gallery' },
+		{ x:2440, y:980, w:380, h:26, layer:'top', court:'gallery' },
+		// Outer shards — broken masonry past the stands, a refuge when the void encroaches
+		{ x:260, y:1420, w:230, h:26, layer:'middle', court:'shard' },
+		{ x:3510, y:1420, w:230, h:26, layer:'middle', court:'shard' },
 	],
 	boss: {
 		name: 'The Void Arbiter',
@@ -2686,8 +2690,8 @@ const RAID_CONFIG = {
 
 // Raid platform layer Y values for attack targeting
 const RAID_BOTTOM_Y = 1500;
-const RAID_MIDDLE_Y = 1100;
-const RAID_TOP_Y = 700;
+const RAID_MIDDLE_Y = 1240;
+const RAID_TOP_Y = 980;
 const RAID_PLATFORM_YS = [RAID_BOTTOM_Y, RAID_MIDDLE_Y, RAID_TOP_Y];
 function getRaidRandomPlatY(){ return RAID_PLATFORM_YS[Math.floor(Math.random() * RAID_PLATFORM_YS.length)]; }
 
@@ -4464,6 +4468,7 @@ function coopAimBegin(en){
 	player.x = t.x; player.y = t.y; player.vx = t.ally.vx || 0; player.vy = t.ally.vy || 0; player.onGround = !!t.ally.onGround; player.facing = t.ally.facing || 1;
 	player.iFrames = 0; player.dots = [];
 	_coopAimAlly = t.id; _coopAimEn = en;
+	window.__coopAimSnap = snap;      // the host's real self while `player` stands in for an ally (raid kits read it)
 	return snap;
 }
 function coopAimEnd(snap){
@@ -4471,6 +4476,7 @@ function coopAimEnd(snap){
 	for(const k of COOP_AIM_FIELDS) player[k] = snap[k];
 	player.dots = snap._dots;
 	_coopAimAlly = null; _coopAimEn = null;
+	window.__coopAimSnap = null;
 }
 function coopForwardHit(id, amount, effects){
 	if(!(amount > 0) || typeof CoopSync === 'undefined') return;
@@ -4638,6 +4644,36 @@ if(IS_SURVIVAL && window.SurvivalArena){
 	dungeon.platforms = [{ roomId: 0, x: _b.left, y: _b.floor, w: _b.right - _b.left, h: 400, arenaSection: 'core', central: true }]
 		.concat(SurvivalArena.LEDGES.map(l => ({ roomId: 0, x: l.x, y: l.y, w: l.w, h: 22, oneway: true })));
 }
+/* Sandbox / Mage Arena: the Spawn Menu's bosses need the same one-big-boss-room the Survival arena gives them (their kits read dungeon.rooms and platforms). Built on first use. */
+window.sandboxBossRoom = function(){
+	if(!IS_SANDBOX || (dungeon.rooms && dungeon.rooms.length)) return;
+	const gy = SANDBOX_CONFIG.groundY, ww = SANDBOX_CONFIG.worldW, top = Math.max(0, gy - 1500);
+	dungeon.rooms = [{ id: 0, kind: 'boss', x: 0, y: top, w: ww, h: gy + 60 - top, authoredArena: false }];
+	dungeon.platforms = [{ roomId: 0, x: 0, y: gy, w: ww, h: 400, arenaSection: 'core', central: true }]
+		.concat((SANDBOX_CONFIG.platforms || []).map(p => ({ roomId: 0, x: p.x, y: p.y, w: p.w, h: p.h || 22, oneway: true })));
+};
+/* Spawn Menu: start the fight state machines of the bosses that keep one (Seraphel, the Infernal Kitten) so they use their real attacks */
+window.sandboxBossStart = function(en){
+	if(!IS_SANDBOX || !en) return;
+	if(window.sandboxBossRoom) window.sandboxBossRoom();
+	if(en.type === 'seraphel'){
+		const sf = seraphelFight, cx = en.x + en.w / 2;
+		sf.arenaLeft = Math.max(0, cx - 1800); sf.arenaRight = Math.min(SANDBOX_CONFIG.worldW, cx + 1800); sf.arenaY = SANDBOX_CONFIG.groundY;      // the floor he fights above
+		sf.phase = 'cutscene'; sf.timer = 0; sf._ultKillTimer = 0; sf._ultPunishCD = 0; sf.dialogText = ''; sf.dialogAlpha = 0;
+		en.y = sf.arenaY - 420; en.baseY = en.y;
+	} else if(en.type === 'infernalKitten' && kittenBoss){
+		const kb = kittenBoss, kt = ENEMY_TYPES.infernalKitten;
+		kb.arenaRect = KITTEN_ARENA_RECT; kb.arenaCx = en.x + en.w / 2; kb.arenaCy = SANDBOX_CONFIG.groundY - 700;
+		en.isKittenBoss = true; en.stunTimer = 0; en.facing = -1; en.y = kb.arenaCy - en.h / 2; en.baseY = en.y;
+		en.spellCooldowns = kt.spells.map(s => Math.round(s.cooldown * 0.6 * 0.8));
+		kb.entity = en; kb.hp = en.maxHp; kb.maxHp = en.maxHp; kb.phase = 'cutscene'; kb.timer = 0; kb.floatTimer = 0;
+	}
+};
+window.sandboxBossReset = function(){
+	if(!IS_SANDBOX) return;
+	seraphelFight.phase = 'waiting'; seraphelFight.timer = 0; seraphelFight.dialogText = ''; seraphelFight.dialogAlpha = 0;
+	if(kittenBoss){ kittenBoss.entity = null; kittenBoss.phase = 'hidden'; kittenBoss.attackPhase = 1; kittenBoss.currentAttack = null; }
+};
 window.dungeon = dungeon;
 const diffLabel = DIFFICULTY === 'normal' ? 'Medium' : (DIFFICULTY.charAt(0).toUpperCase() + DIFFICULTY.slice(1));
 const diffColors = { easy:'#44dd88', normal:'#66aaff', hard:'#ff5555', nightmare:'#e070ff' };
@@ -5176,6 +5212,14 @@ function updateCamera(){
 		const midY = (player.y + player.h/2 + chronoBoss.y + chronoBoss.h/2) / 2;
 		camera.x = midX - canvas.width/2;
 		camera.y = midY - canvas.height/2;
+	} else if(IS_RAID && raidBoss && (!raidBoss.dead || raidBoss.deathTimer < 150)){
+		// Lean toward the Void Arbiter so he stays in frame, never far enough to lose the player
+		const pcx = player.x + player.w/2, pcy = player.y + player.h/2;
+		const ox = Math.max(-canvas.width * 0.25, Math.min(canvas.width * 0.25, (raidBoss.x + raidBoss.w/2 - pcx) * 0.25));
+		const oy = Math.max(-canvas.height * 0.28, Math.min(canvas.height * 0.28, (raidBoss.y + raidBoss.h/2 - pcy) * 0.4));
+		const tx = pcx + ox - canvas.width/2, ty = pcy + oy - canvas.height/2;
+		if(!camera._raidInit){ camera.x = tx; camera.y = ty; camera._raidInit = true; }
+		else { camera.x += (tx - camera.x) * 0.14; camera.y += (ty - camera.y) * 0.14; }
 	} else if(IS_CITY && typeof EmberfallCity !== 'undefined' && EmberfallCity.cameraY && !captainDuel.active){
 		// EmberFall: the ground sits low on screen so you see the town and sky, with a soft vertical follow
 		camera.x = player.x - canvas.width/2;
@@ -5314,7 +5358,7 @@ addEventListener('keydown', e => {
 				let _ar=null;
 				if(kittenBoss&&kittenBoss.phase==='active') _ar=KITTEN_ARENA_RECT;
 				else if(bossState.phase==='active'&&BOSS_ROOM_RECT) _ar=BOSS_ROOM_RECT;
-				else if(seraphelFight.phase==='active') _ar=IS_SURVIVAL?KITTEN_ARENA_RECT:{x:seraphelFight.arenaLeft,y:seraphelFight.arenaY,w:seraphelFight.arenaRight-seraphelFight.arenaLeft,h:1800};
+				else if(seraphelFight.phase==='active') _ar=(IS_SURVIVAL||IS_SANDBOX)?KITTEN_ARENA_RECT:{x:seraphelFight.arenaLeft,y:seraphelFight.arenaY,w:seraphelFight.arenaRight-seraphelFight.arenaLeft,h:1800};
 				else if(leviathanState.phase==='active'||leviathanState.phase==='enraged') _ar=LEV_ARENA;
 				else if(deepRootBossState.phase==='active') _ar=DEEP_ROOT_ARENA;
 				else if(volcanoBossState.phase==='active') _ar={x:9000,y:4050,w:2200,h:800};
@@ -5350,7 +5394,7 @@ addEventListener('keydown', e => {
 					let _ar=null;
 					if(kittenBoss&&kittenBoss.phase==='active') _ar=KITTEN_ARENA_RECT;
 					else if(bossState.phase==='active'&&BOSS_ROOM_RECT) _ar=BOSS_ROOM_RECT;
-					else if(seraphelFight.phase==='active') _ar=IS_SURVIVAL?KITTEN_ARENA_RECT:{x:seraphelFight.arenaLeft,y:seraphelFight.arenaY,w:seraphelFight.arenaRight-seraphelFight.arenaLeft,h:1800};
+					else if(seraphelFight.phase==='active') _ar=(IS_SURVIVAL||IS_SANDBOX)?KITTEN_ARENA_RECT:{x:seraphelFight.arenaLeft,y:seraphelFight.arenaY,w:seraphelFight.arenaRight-seraphelFight.arenaLeft,h:1800};
 					else if(leviathanState.phase==='active'||leviathanState.phase==='enraged') _ar=LEV_ARENA;
 					else if(deepRootBossState.phase==='active') _ar=DEEP_ROOT_ARENA;
 					else if(volcanoBossState.phase==='active') _ar={x:9000,y:4050,w:2200,h:800};
@@ -6921,7 +6965,7 @@ const seraphelFight = {
    INFERNAL KITTEN — SECRET FIRE DUNGEON BOSS
    ============================================================= */
 const _fk = (IS_DUNGEON && DUNGEON_TYPE === 'fire' && DUNGEONS.fire && DUNGEONS.fire._kitten) ? DUNGEONS.fire._kitten : null;
-const KITTEN_ARENA_RECT  = _fk ? _fk.arena : (IS_SURVIVAL && window.SurvivalArena) ? { x: SurvivalArena.BOUNDS.left, y: SurvivalArena.BOUNDS.ceil, w: SurvivalArena.BOUNDS.right - SurvivalArena.BOUNDS.left, h: SurvivalArena.BOUNDS.floor + 40 - SurvivalArena.BOUNDS.ceil } : { x:2400, y:0, w:1800, h:1680 };
+const KITTEN_ARENA_RECT  = _fk ? _fk.arena : IS_SANDBOX ? { x: 0, y: Math.max(0, SANDBOX_CONFIG.groundY - 1500), w: SANDBOX_CONFIG.worldW, h: 1560 } : (IS_SURVIVAL && window.SurvivalArena) ? { x: SurvivalArena.BOUNDS.left, y: SurvivalArena.BOUNDS.ceil, w: SurvivalArena.BOUNDS.right - SurvivalArena.BOUNDS.left, h: SurvivalArena.BOUNDS.floor + 40 - SurvivalArena.BOUNDS.ceil } : { x:2400, y:0, w:1800, h:1680 };
 const KITTEN_CORRIDOR     = _fk ? _fk.corridor : { x:80, y:0, w:2400, h:200 };
 const KITTEN_SHAFT        = _fk ? _fk.shaft : { x:80, y:0, w:120, h:1320 };
 // Chain door: a visible gate at the entrance of the kitten shaft (top of start room ceiling)
@@ -6937,7 +6981,7 @@ const KITTEN_CHAIN_DOOR = (IS_DUNGEON && DUNGEON_TYPE === 'fire') ? {
 } : null;
 const KITTEN_LOCK_WALL    = _fk ? _fk.lockWall : { x:2400, y:0, w:40, h:200 };
 const KITTEN_SECRET_CORRIDORS = [KITTEN_SHAFT, KITTEN_CORRIDOR, KITTEN_ARENA_RECT];
-const kittenBoss = ((IS_DUNGEON && DUNGEON_TYPE === 'fire') || IS_SURVIVAL) ? {
+const kittenBoss = ((IS_DUNGEON && DUNGEON_TYPE === 'fire') || IS_SURVIVAL || IS_SANDBOX) ? {
 	phase: 'hidden',   // 'hidden' | 'revealed' | 'cutscene' | 'active' | 'defeated'
 	timer: 0,
 	cutsceneDuration: 210, // 3.5 seconds
@@ -11073,6 +11117,18 @@ function selectSpellSlot(idx){
 	renderHotbar();
 }
 
+function updateHotbarCooldowns(){
+	const bar = document.getElementById('hotbar'); if(!bar) return;
+	for(let i=0;i<10;i++){
+		const el = bar.children[i]; if(!el) continue;
+		let ov = el.querySelector('.hb-cd-overlay');
+		if(spellCooldowns[i] > 0 && spellMaxCooldowns[i] > 0){
+			if(!ov){ if(!el.dataset.cd) continue; ov = document.createElement('div'); ov.className = 'hb-cd-overlay'; el.appendChild(ov); }
+			const h = Math.round((spellCooldowns[i] / spellMaxCooldowns[i]) * 100) + '%';
+			if(ov.style.height !== h) ov.style.height = h;
+		} else if(ov) ov.remove();
+	}
+}
 function renderHotbar(){
 	const bar = document.getElementById('hotbar'); bar.innerHTML = '';
 	for(let i=0;i<10;i++){
@@ -11102,6 +11158,7 @@ function renderHotbar(){
 			else if(typeof PlayerRig !== 'undefined' && _icon) setTimeout(() => PlayerRig.weaponIcon(_ic, _icon), 0);
 		} else if(sp && typeof MagicEngine !== 'undefined' && MagicEngine.isMagicSpell(sp)){
 			const rep = MagicEngine.validate(sp, magicProfileForGame());
+			el.dataset.cd = '1';
 			let cdHtml = '';
 			if(spellCooldowns[i] > 0){
 				const pct = (spellCooldowns[i] / spellMaxCooldowns[i]) * 100;
@@ -11125,6 +11182,7 @@ function renderHotbar(){
 			const onlineBlocked = isOnlineMatch() && spellUsesControl(sp);
 			const usable = !onlineBlocked && (stats.magicControl >= req || (IS_SANDBOX && !ARCANIST_TRIAL));
 			const color = sp.phases[0]?.color || '#888';
+			el.dataset.cd = '1';
 			let cdHtml = '';
 			if(spellCooldowns[i] > 0){
 				const pct = (spellCooldowns[i] / spellMaxCooldowns[i]) * 100;
@@ -13062,10 +13120,12 @@ function showRaidWarning(text, duration){
 	if(!IS_RAID && !IS_CHRONORAID && !IS_ZENITH && !IS_CHALLENGER) return;
 	CoopSync.queueEvent('warn', { text, duration });
 	const el = document.getElementById('dungeonName');
-	const orig = el.innerHTML;
+	// keep the real title: a warning that lands while another is showing must not capture the old warning as "original"
+	if(el._raidTitle == null) el._raidTitle = el.innerHTML;
+	clearTimeout(el._raidWarnT);
 	const col = IS_CHRONORAID ? '#daa520' : IS_ZENITH ? '#aaccff' : IS_CHALLENGER ? '#9ad0ff' : '#ff2244';
 	el.innerHTML = '<span style="color:' + col + ';text-shadow:0 0 10px ' + col + ';">' + text + '</span>';
-	setTimeout(() => { el.innerHTML = orig; }, duration || 1500);
+	el._raidWarnT = setTimeout(() => { el.innerHTML = el._raidTitle; el._raidTitle = null; }, duration || 1500);
 }
 
 // Add raid indicator (telegraph zones)
@@ -13625,7 +13685,7 @@ function getAllTargets(){
 	if(_targetsCache && _targetsTick === _simTick) return _targetsCache;
 	_targetsTick = _simTick;
 	let list;
-	if(IS_SANDBOX) list = (window.RuneMages && RuneMages.list.length) ? dummies.concat(RuneMages.targets()) : dummies;
+	if(IS_SANDBOX){ list = (window.RuneMages && RuneMages.list.length) ? dummies.concat(RuneMages.targets()) : dummies; if(enemies.length) list = list.concat(enemies.filter(e => !e.dead)); }      // + anything spawned from the Spawn Menu
 	else if(IS_RAID && raidBoss && !raidBoss.dead) list = [raidBoss];
 	else if(IS_CHRONORAID && chronoBoss && !chronoBoss.dead) list = [chronoBoss, ...enemies.filter(e => !e.dead)];
 	else if(IS_ZENITH && zenithBoss && !zenithBoss.dead) list = [zenithBoss];
@@ -15243,44 +15303,26 @@ if((IS_SANDBOX || (IS_COLOSSEUM && !PVP_MATCH)) && window.RuneMages && MAGIC_WOR
 		go.style.cssText = css + 'top:52px;right:14px;padding:8px 14px;color:#f3e8ff;background:linear-gradient(#4a2d72,#2b1846);border:1px solid #b48cff;text-decoration:none;box-shadow:0 2px 10px #0008;';
 		stop(go);
 		document.body.appendChild(go);
+		/* the Spawn Menu: every enemy, mini-boss and boss, with Alpha / Elder / Tyrant versions and Nightmare mutations (spawn-menu.js) */
+		window.addEventListener('load', () => {
+			if(!window.SpawnMenu) return;
+			SpawnMenu.init({
+				types: () => ENEMY_TYPES, enemies: () => enemies, player: () => player,
+				make: (type, x, y, face, o) => { const en = makeWorldEnemy({ type, x, y, face, flyH: (o && o.flyH) || 130 }); if(en) en._worldFoe = false; return en; },
+				groundY: SANDBOX_CONFIG.groundY, centerX: SANDBOX_CONFIG.arenaCenter || WORLD_W / 2,
+				say: (x, y, text, color) => dmgNumbers.push({ x, y, text, age: 0, color: color || '#ffffff' }),
+				prefetch: (type) => { try { ENEMY_SPRITE_SHEETS[type]; if(LAZY_SET_SLUG[type]) LAZY_IMG.need(LAZY_SET_SLUG[type]); } catch(e){} },
+				bossRoom: () => window.sandboxBossRoom && window.sandboxBossRoom(),
+				bossStart: (en) => window.sandboxBossStart && window.sandboxBossStart(en),
+				bossReset: () => window.sandboxBossReset && window.sandboxBossReset(),
+				mages: IS_MAGE_ARENA && window.RuneMages ? RuneMages : null,
+				trial: IS_MAGE_ARENA ? { active: ARCANIST_TRIAL, href: ARCANIST_TRIAL ? 'dungeon.html?mode=sandbox&arena=mages' : 'dungeon.html?mode=sandbox&arena=mages&boss=arcanist' } : null,
+				openMages: IS_MAGE_ARENA
+			});
+		});
 		if(!IS_MAGE_ARENA) return;
-		const panel = document.createElement('div');
-		panel.id = 'mageSpawnPanel';
-		panel.style.cssText = css + 'top:90px;left:14px;width:230px;padding:10px;background:#120c1ee6;border:1px solid #6a4a9a;color:#e8dcff;cursor:default;';
-		panel.innerHTML = '<div style="font-size:12px;letter-spacing:1px;color:#b48cff;margin-bottom:6px">SUMMON A RUNE MAGE</div>';
+		/* the rune mage list now lives in the Spawn Menu (Rune mages tab); only the trial's start-up spawn stays here */
 		const K = RuneMages.KINDS;
-		for(const id in K){
-			const k = K[id];
-			const b = document.createElement('button');
-			b.style.cssText = 'display:block;width:100%;margin:5px 0;padding:7px 8px;text-align:left;border-radius:6px;cursor:pointer;background:#1e1530;color:#fff;border:1px solid ' + k.color + ';font:12px Arial,sans-serif;';
-			b.innerHTML = (k.boss ? '<span style="float:right;font-size:10px;color:#ff6b7a;letter-spacing:1px">BOSS</span>' : '') + '<b style="color:' + k.color + '">' + k.name + '</b> <span style="color:#bba">' + k.title + '</span><br><span style="font-size:11px;color:#9a8fb0">' + k.techniques.join(' + ') + '</span>';
-			if(k.boss) b.style.background = 'linear-gradient(90deg,#1b1240,#0e1a33)';
-			b.title = k.blurb + '  (Shift-click to add another instead of replacing)';
-			b.onclick = (e) => {
-				if(!e.shiftKey) RuneMages.clear();
-				const cx = SANDBOX_CONFIG.arenaCenter || WORLD_W / 2;
-				RuneMages.spawn(id, cx + (e.shiftKey ? (Math.random() - 0.5) * 400 : 0), SANDBOX_CONFIG.groundY - 4);
-				dmgNumbers.push({ x: cx, y: SANDBOX_CONFIG.groundY - 120, text: k.name + ' enters the arena', age: 0, color: k.color });
-				b.blur();
-			};
-			stop(b); panel.appendChild(b);
-		}
-		const trial = document.createElement('a');
-		trial.href = ARCANIST_TRIAL ? 'dungeon.html?mode=sandbox&arena=mages' : 'dungeon.html?mode=sandbox&arena=mages&boss=arcanist';
-		trial.textContent = ARCANIST_TRIAL ? 'Leave the trial (infinite energy again)' : '⚜ The Grand Arcanist — Trial (your real energy)';
-		trial.title = 'An endgame boss who uses no techniques. In the trial your energy reserve and regeneration are real, as in a dungeon.';
-		trial.style.cssText = 'display:block;margin:6px 0 4px;padding:7px 8px;border-radius:6px;text-align:center;text-decoration:none;color:#ffe7b0;background:linear-gradient(90deg,#2a2113,#1a1530);border:1px solid #e9c46a;font:bold 12px Arial,sans-serif;';
-		stop(trial); panel.appendChild(trial);
-		const c = document.createElement('button');
-		c.textContent = 'Clear mages';
-		c.style.cssText = 'margin-top:4px;padding:5px 10px;border-radius:6px;background:#2a2238;color:#ccc;border:1px solid #554;cursor:pointer;font:12px Arial,sans-serif;';
-		c.onclick = () => { RuneMages.clear(); c.blur(); };
-		stop(c); panel.appendChild(c);
-		const tip = document.createElement('div');
-		tip.style.cssText = 'font-size:10.5px;color:#8a7fa0;margin-top:6px;line-height:1.35';
-		tip.textContent = 'They cast real rune spells with their own energy — tethers, portals, constructs and a domain. Your Anti-Magic, gravity and portals work on their magic too.';
-		panel.appendChild(tip);
-		document.body.appendChild(panel);
 		if(ARCANIST_TRIAL && K.arcanist) setTimeout(() => {
 			const cx = SANDBOX_CONFIG.arenaCenter || WORLD_W / 2;
 			RuneMages.clear();
@@ -16159,6 +16201,7 @@ function spawnEnemyProj(x,y,vx,vy,opts){
 		homing:!!opts.homing,
 		homingStrength:opts.homingStrength||0.05,
 	};
+	if(window.EFX && EFX.armProjectile) EFX.armProjectile(_ep);      // fair play: a projectile born on top of you cannot hurt for a moment
 	enemyProjectiles.push(_ep);
 	CoopSync.queueProj(_ep);
 	return _ep;
@@ -22346,7 +22389,7 @@ function _updateEnemyProjectiles(){
 		// Hit player
 		if(!p.hasHit){
 			const hr=Math.max(p.width,p.height)*0.6;
-			if(circRect(p.x,p.y,hr,player.x,player.y,player.w,player.h)&&player.iFrames<=0){
+			if(circRect(p.x,p.y,hr,player.x,player.y,player.w,player.h)&&player.iFrames<=0&&!(p._armUntil>_simTick)){
 				// Boss explosion: trigger visual detonation on player hit
 				if(IS_ZENITH&&p.shape==='explosion'&&p._zenithWillIdx!==undefined&&!p._exploded){
 					p._exploded=true;
@@ -23209,6 +23252,7 @@ function spawnShatterShards(cx, cy, color, spellPow, phWidth, phHeight, isBurst,
 }
 
 function spawnImpact(x,y,color){
+	{ const _ep = window.__curEProj; if(_ep && _ep._efxEl && window.EFX && !_ep._efxBurst){ _ep._efxBurst = 1; EFX.burst(x, y, _ep._efxEl, Math.max(0.6, Math.min(1.8, (_ep.width || 16) / 26))); } }
 	if(particles.length>MAX_PARTICLES)return;
 	if(_onlineLite && particles.length>MAX_PARTICLES*0.55)return;
 	if(projectiles.length>50 && particles.length>MAX_PARTICLES*0.45)return;
@@ -25149,6 +25193,7 @@ function notify(msg){
 /* Update raid indicators (telegraph zones) */
 function updateRaidIndicators(){
 	if(!IS_RAID && !IS_CHALLENGER) return;
+	if(IS_RAID && window.VoidArbiter) VoidArbiter.tick();      // Void Arbiter hazards: every client, outside the co-op aim context
 	for(let i = raidIndicators.length - 1; i >= 0; i--){
 		raidIndicators[i].age++;
 		if(raidIndicators[i].age >= raidIndicators[i].maxAge){
@@ -25337,6 +25382,8 @@ function updateRaidBoss(){
 		}
 	}
 	
+	// Phase set pieces make him untouchable until they finish
+	if(raidBoss.va && raidBoss.va.hpLock != null && raidBoss.hp < raidBoss.va.hpLock) raidBoss.hp = raidBoss.va.hpLock;
 	// Death check
 	if(raidBoss.hp <= 0){
 		raidBoss.dead = true;
@@ -25350,568 +25397,8 @@ function updateRaidBoss(){
 		return;
 	}
 	
-	// Phase transitions
-	const hpPct = raidBoss.hp / raidBoss.maxHp;
-	if(hpPct <= 0.65 && raidBoss.phase === 1){
-		raidBoss.phase = 2;
-		raidBoss.phaseTransition = 150;
-		showRaidWarning('⚠️ PHASE 2 — WRATH UNLEASHED', 2000);
-		dmgNumbers.push({x: raidBoss.x + raidBoss.w/2, y: raidBoss.y - 50, text: '🌑 PHASE 2', age: 0, color: '#ff4466'});
-		for(let v = 0; v < 30; v++){
-			particles.push({x: raidBoss.x + Math.random() * raidBoss.w, y: raidBoss.y + Math.random() * raidBoss.h,
-				vx: (Math.random() - 0.5) * 10, vy: (Math.random() - 0.5) * 10 - 4,
-				life: 60 + Math.random() * 30, color: ['#ff2244','#cc1133','#ff6644','#440011'][v % 4]});
-		}
-	}
-	if(hpPct <= 0.30 && raidBoss.phase === 2){
-		raidBoss.phase = 3;
-		raidBoss.phaseTransition = 180;
-		showRaidWarning('💀 FINAL PHASE — JUDGEMENT', 2500);
-		dmgNumbers.push({x: raidBoss.x + raidBoss.w/2, y: raidBoss.y - 50, text: '💀 PHASE 3', age: 0, color: '#ff0033'});
-		for(let v = 0; v < 40; v++){
-			particles.push({x: raidBoss.x + Math.random() * raidBoss.w, y: raidBoss.y + Math.random() * raidBoss.h,
-				vx: (Math.random() - 0.5) * 12, vy: (Math.random() - 0.5) * 12 - 5,
-				life: 80 + Math.random() * 40, color: ['#ff0022','#ff4400','#ffcc00','#880000'][v % 4]});
-		}
-	}
-	
-	// Don't attack during transition
-	if(raidBoss.phaseTransition > 0) return;
-	
-	// One attack at a time — wait for current attack effects to finish, then brief gap
-	if(raidBoss.busyTimer > 0){
-		raidBoss.busyTimer--;
-		if(raidBoss.busyTimer === 0){
-			const hpPct = raidBoss.hp / raidBoss.maxHp;
-			raidBoss.globalCd = hpPct > 0.65 ? 90 : hpPct > 0.3 ? 50 : 20;
-		}
-	} else if(raidBoss.globalCd > 0){
-		raidBoss.globalCd--;
-	} else if(raidBoss.stunTimer <= 0 && !raidBoss.laserActive && !raidBoss._voidDarkness){
-		raidBossAttack();
-	}
-	
-	// Abyssal laser — telegraph line, extend along it, then sweep around boss
-	if(raidBoss.laserActive){
-		raidBoss.laserTimer++;
-		const lx = raidBoss.laserOriginX || (raidBoss.x + raidBoss.w/2);
-		const ly = raidBoss.laserOriginY || (raidBoss.y + raidBoss.h/2);
-		const halfW = 14;
-		if(raidBoss.laserPhase === 'extend'){
-			const growRate = 26;
-			raidBoss.laserBeamLen = Math.min(raidBoss.laserMaxLen || 1600, (raidBoss.laserBeamLen || 0) + growRate);
-			raidBoss.laserAngle = raidBoss.laserTelegraphAngle;
-			if(raidBoss.laserBeamLen >= (raidBoss.laserMaxLen || 1600)){
-				raidBoss.laserPhase = 'sweep';
-				raidBoss.laserSweepTimer = 0;
-			}
-		} else if(raidBoss.laserPhase === 'sweep'){
-			raidBoss.laserSweepTimer++;
-			raidBoss.laserAngle = raidBoss.laserTelegraphAngle + raidBoss.laserSweepTimer * 0.012 * raidBoss.laserSweepDir;
-			raidBoss.laserBeamLen = raidBoss.laserMaxLen || 1600;
-			if(raidBoss.laserSweepTimer > 200){
-				raidBoss.laserActive = false;
-				raidBoss.laserPhase = 'idle';
-				raidBoss.laserBeamLen = 0;
-			}
-		}
-		const beamLen = raidBoss.laserBeamLen || 0;
-		if(beamLen > 4 && player.iFrames <= 0){
-			const steps = Math.max(3, Math.floor(beamLen / 28));
-			for(let s = 0; s <= steps; s++){
-				const t = s / steps;
-				const sx = lx + Math.cos(raidBoss.laserAngle) * beamLen * t;
-				const sy = ly + Math.sin(raidBoss.laserAngle) * beamLen * t;
-				if(sx + halfW > player.x && sx - halfW < player.x + player.w && sy + halfW > player.y && sy - halfW < player.y + player.h){
-					damagePlayer(12, []);
-					break;
-				}
-			}
-		}
-	}
-	
-	// Light orbs (Absolute Void attack)
-	if(raidBoss._voidDarkness && raidBoss._voidDarknessTimer > 0){
-		raidBoss._voidDarknessTimer--;
-		// Damage player if not near light orbs
-		let inLight = false;
-		for(const orb of raidBoss._lightOrbs){
-			orb.age++;
-			const d = dist(player.x + player.w/2, player.y + player.h/2, orb.x, orb.y);
-			if(d < orb.radius) inLight = true;
-		}
-		if(!inLight && raidBoss._voidDarknessTimer % 30 === 0){
-			damagePlayer(8, []);
-			dmgNumbers.push({x: player.x + player.w/2, y: player.y - 20, text: '🌑 Darkness!', age: 0, color: '#440044'});
-		}
-		if(raidBoss._voidDarknessTimer <= 0){
-			raidBoss._voidDarkness = false;
-			raidBoss._lightOrbs = [];
-		}
-	}
-}
-
-/* Raid boss attacks */
-function raidBossAttack(){
-	if(!IS_RAID || !raidBoss || raidBoss.dead) return;
-	
-	let maxIdx = 8; // Phase 1: 8 attacks
-	if(raidBoss.phase >= 2) maxIdx = 14;
-	if(raidBoss.phase >= 3) maxIdx = 17;
-	
-	let idx;
-	do { idx = Math.floor(Math.random() * maxIdx); } while(idx === raidBoss.lastAttack && maxIdx > 1);
-	raidBoss.lastAttack = idx;
-	
-	const attacks = [
-		raidAttackVoidSlam,        // 0 — Ground slam
-		raidAttackAbyssalLaser,    // 1 — Laser beam
-		raidAttackDarkOrbs,        // 2 — Homing orbs
-		raidAttackGravityCrush,    // 3 — Pull + crush
-		raidAttackVoidPillars,     // 4 — Ground pillars
-		raidAttackShadowWave,      // 5 — Wave of projectiles
-		raidAttackVoidDash,        // 6 — Boss dash
-		raidAttackTeleportStrike,  // 7 — Teleport + burst
-		raidAttackDimensionalRift, // 8 — Portals
-		raidAttackMeteorBarrage,   // 9 — Meteors
-		raidAttackVoidCage,        // 10 — Closing cage
-		raidAttackSoulDrain,       // 11 — Healing channel
-		raidAttackShadowBlinkBarrage,// 12 — Rapid teleport
-		raidAttackVoidDash,        // 13 — Dash again
-		raidAttackAbsoluteVoid,    // 14 — Darkness mechanic
-		raidAttackJudgementStrike, // 15 — Targeted slam
-		raidAttackVoidStorm,       // 16 — Everything at once
-	];
-	
-	if(attacks[idx]) attacks[idx]();
-}
-
-/* Raid Attack 0: Void Slam */
-function raidAttackVoidSlam(){
-	armRaidBossBusy(3600);
-	showRaidWarning('⬇️ VOID SLAM — JUMP!', 1200);
-	raidBoss.armRaised = 40;
-	const bx = raidBoss.x + raidBoss.w/2, by = raidBoss.y + raidBoss.h;
-	addRaidIndicator(0, RAID_BOTTOM_Y - 80, WORLD_W, 80, 150, 'rgba(255,30,60,0.45)', 'rect');
-	setTimeout(() => {
-		if(!raidBoss || raidBoss.dead) return;
-		raidBoss.slamTimer = 15;
-		// Shockwave across bottom platform
-		for(let dir = -1; dir <= 1; dir += 2){
-			for(let i = 0; i < 8; i++){
-				setTimeout(() => {
-					if(!raidBoss || raidBoss.dead) return;
-					spawnRaidBossProj(bx + dir * i * 60, RAID_BOTTOM_Y - 30, dir * 6, 0, {
-						color: '#ff2244', color2: '#ff6644', power: 30, width: 65, height: 50,
-						shape: 'nova', effects: ['knockback'], maxAge: 220,
-					});
-				}, i * 50);
-			}
-		}
-		// Spikes on random platform layers
-		const spikeCount = raidBoss.phase >= 2 ? 8 : 5;
-		for(let i = 0; i < spikeCount; i++){
-			const platY = getRaidRandomPlatY();
-			const sx = 200 + Math.random() * (WORLD_W - 400);
-			addRaidIndicator(sx - 40, platY - 160, 80, 160, 120, 'rgba(255,60,30,0.5)', 'rect');
-			setTimeout(() => {
-				if(!raidBoss || raidBoss.dead) return;
-				spawnRaidBossProj(sx, platY - 10, 0, -8, {
-					color: '#cc1133', color2: '#ff4466', power: 40, width: 35, height: 130,
-					shape: 'orb', maxAge: 80,
-				});
-			}, 1400 + i * 120);
-		}
-	}, 1200);
-}
-
-/* Raid Attack 1: Abyssal Laser */
-function raidAttackAbyssalLaser(){
-	armRaidBossBusy(6400);
-	showRaidWarning('🔴 ABYSSAL LASER — DODGE THE BEAM!', 2000);
-	raidBoss.armRaised = 30;
-	const bx = raidBoss.x + raidBoss.w / 2;
-	const by = raidBoss.y + raidBoss.h / 2;
-	const px = player.x + player.w / 2;
-	const py = player.y + player.h / 2;
-	const lockAngle = Math.atan2(py - by, px - bx);
-	const laserLen = 1600;
-	addRaidBeamIndicator(bx, by, lockAngle, laserLen, 110, 'rgba(255,40,80,0.55)');
-	raidBoss.laserTelegraphAngle = lockAngle;
-	raidBoss.laserMaxLen = laserLen;
-	raidBoss.laserSweepDir = px >= bx ? 1 : -1;
-	setTimeout(() => {
-		if(!raidBoss || raidBoss.dead) return;
-		raidBoss.laserActive = true;
-		raidBoss.laserPhase = 'extend';
-		raidBoss.laserTimer = 0;
-		raidBoss.laserBeamLen = 0;
-		raidBoss.laserOriginX = raidBoss.x + raidBoss.w / 2;
-		raidBoss.laserOriginY = raidBoss.y + raidBoss.h / 2;
-		raidBoss.laserAngle = lockAngle;
-	}, 1800);
-}
-
-/* Raid Attack 2: Dark Orbs */
-function raidAttackDarkOrbs(){
-	armRaidBossBusy(2800);
-	showRaidWarning('🔮 DARK ORBS INCOMING', 1000);
-	const cx = raidBoss.x + raidBoss.w/2, cy = raidBoss.y + raidBoss.h/2;
-	const n = raidBoss.phase >= 3 ? 8 : raidBoss.phase >= 2 ? 6 : 4;
-	for(let i = 0; i < n; i++){
-		setTimeout(() => {
-			if(!raidBoss || raidBoss.dead) return;
-			const a = Math.random() * Math.PI * 2;
-			const orb = spawnRaidBossProj(cx + Math.cos(a) * 100, cy + Math.sin(a) * 100, 0, 0, {
-				color: '#220044', color2: '#6633aa', power: 32, width: 36, height: 36,
-				shape: 'orb', effects: ['slow'], maxAge: 540, trail: 'magic',
-			});
-			if(orb){ orb.homing = true; orb.homingSpeed = 0.02; orb.moveSpeed = 2.5; }
-		}, i * 200);
-	}
-}
-
-/* Raid Attack 3: Gravity Crush */
-function raidAttackGravityCrush(){
-	armRaidBossBusy(4800);
-	showRaidWarning('🌀 GRAVITY CRUSH — ESCAPE!', 1500);
-	const cx = raidBoss.x + raidBoss.w/2, cy = raidBoss.y + raidBoss.h/2;
-	addRaidIndicator(cx - 400, cy - 400, 800, 800, 280, 'rgba(100,0,200,0.35)', 'circle');
-	const pullId = setInterval(() => {
-		if(!raidBoss || raidBoss.dead){ clearInterval(pullId); return; }
-		const dx = cx - player.x - player.w/2;
-		const dy = cy - player.y - player.h/2;
-		const d = Math.sqrt(dx * dx + dy * dy) || 1;
-		if(d < 600){
-			player.launchVx = (player.launchVx || 0) + (dx/d) * 1.2;
-			player.vy += (dy/d) * 0.5;
-		}
-	}, 16);
-	setTimeout(() => clearInterval(pullId), 3000);
-	setTimeout(() => {
-		if(!raidBoss || raidBoss.dead) return;
-		for(let i = 0; i < 24; i++){
-			const a = (i/24) * Math.PI * 2;
-			spawnRaidBossProj(cx, cy, Math.cos(a) * 5, Math.sin(a) * 5, {
-				color: '#6600aa', color2: '#aa44ff', power: 26, width: 50, height: 50,
-				shape: 'orb', effects: ['stun'], maxAge: 360,
-			});
-		}
-	}, 3500);
-}
-
-/* Raid Attack 4: Void Pillars */
-function raidAttackVoidPillars(){
-	armRaidBossBusy(2800);
-	showRaidWarning('⚡ VOID PILLARS — WATCH THE PLATFORMS!', 1500);
-	const pillarCount = raidBoss.phase >= 3 ? 12 : raidBoss.phase >= 2 ? 9 : 6;
-	const positions = [];
-	for(let i = 0; i < pillarCount; i++){
-		const px = 150 + ((WORLD_W - 300) / pillarCount) * i + Math.random() * 60;
-		const platY = getRaidRandomPlatY();
-		positions.push({ x: px, y: platY });
-		addRaidIndicator(px - 45, platY - 350, 90, 350, 180, 'rgba(255,40,60,0.45)', 'rect');
-	}
-	setTimeout(() => {
-		if(!raidBoss || raidBoss.dead) return;
-		for(const p of positions){
-			spawnRaidBossProj(p.x, p.y - 10, 0, -12, {
-				color: '#ff1133', color2: '#ff6644', power: 34, width: 42, height: 190,
-				shape: 'orb', maxAge: 120,
-			});
-		}
-	}, 2100);
-}
-
-/* Raid Attack 5: Shadow Wave */
-function raidAttackShadowWave(){
-	armRaidBossBusy(2400);
-	showRaidWarning('🌊 SHADOW WAVE — JUMP!', 1000);
-	const dir = raidBoss.x + raidBoss.w/2 > WORLD_W/2 ? -1 : 1;
-	const sx = dir === 1 ? 100 : WORLD_W - 100;
-	// Wave indicators on each platform layer
-	for(const py of RAID_PLATFORM_YS){
-		addRaidIndicator(0, py - 60, WORLD_W, 60, 140, 'rgba(100,0,50,0.4)', 'rect');
-	}
-	setTimeout(() => {
-		if(!raidBoss || raidBoss.dead) return;
-		const waves = raidBoss.phase >= 2 ? 3 : 2;
-		for(let w = 0; w < waves; w++){
-			setTimeout(() => {
-				if(!raidBoss || raidBoss.dead) return;
-				for(let i = 0; i < 20; i++){
-					const platY = getRaidRandomPlatY();
-					const yOff = -20 - Math.random() * 50;
-					spawnRaidBossProj(sx, platY + yOff, dir * (5 + Math.random() * 3), 0, {
-						color: '#440022', color2: '#882244', power: 18, width: 24, height: 24,
-						shape: 'orb', maxAge: 420,
-					});
-				}
-			}, w * 400);
-		}
-	}, 1100);
-}
-
-/* Raid Attack 6: Void Dash */
-function raidAttackVoidDash(){
-	armRaidBossBusy(1600);
-	showRaidWarning('💨 VOID DASH — DODGE!', 800);
-	const tx = player.x + player.w/2, ty = player.y + player.h/2;
-	addRaidIndicator(tx - 60, ty - 60, 120, 120, 100, 'rgba(255,0,100,0.4)', 'circle');
-	setTimeout(() => {
-		if(!raidBoss || raidBoss.dead) return;
-		const dx = tx - raidBoss.x - raidBoss.w/2;
-		const dy = ty - raidBoss.y - raidBoss.h/2;
-		const d = Math.sqrt(dx * dx + dy * dy) || 1;
-		raidBoss.vx = (dx/d) * 15;
-		raidBoss.vy = (dy/d) * 15;
-		// Spawn trail
-		for(let i = 0; i < 5; i++){
-			setTimeout(() => {
-				if(!raidBoss || raidBoss.dead) return;
-				spawnRaidBossProj(raidBoss.x + raidBoss.w/2, raidBoss.y + raidBoss.h/2, 0, 0, {
-					color: '#220044', color2: '#440066', power: 15, width: 40, height: 40,
-					shape: 'orb', maxAge: 180, linger: true,
-				});
-			}, i * 60);
-		}
-		setTimeout(() => { if(raidBoss){ raidBoss.vx = 0; raidBoss.vy = 0; } }, 300);
-	}, 700);
-}
-
-/* Raid Attack 7: Teleport Strike */
-function raidAttackTeleportStrike(){
-	armRaidBossBusy(1300);
-	showRaidWarning('⚡ TELEPORT STRIKE!', 600);
-	const tx = player.x + player.w/2, ty = player.y;
-	addRaidIndicator(tx - 100, ty - 50, 200, 300, 90, 'rgba(200,0,200,0.4)', 'rect');
-	setTimeout(() => {
-		if(!raidBoss || raidBoss.dead) return;
-		raidBoss.x = tx - raidBoss.w/2;
-		raidBoss.y = ty - raidBoss.h/2;
-		// Burst
-		for(let i = 0; i < 12; i++){
-			const a = (i/12) * Math.PI * 2;
-			spawnRaidBossProj(raidBoss.x + raidBoss.w/2, raidBoss.y + raidBoss.h/2, Math.cos(a) * 6, Math.sin(a) * 6, {
-				color: '#6600aa', color2: '#aa44ff', power: 20, width: 25, height: 25,
-				shape: 'orb', maxAge: 120,
-			});
-		}
-	}, 600);
-}
-
-/* Raid Attack 8: Dimensional Rift */
-function raidAttackDimensionalRift(){
-	armRaidBossBusy(4200);
-	showRaidWarning('🌀 DIMENSIONAL RIFTS!', 1500);
-	const riftCount = raidBoss.phase >= 3 ? 6 : 4;
-	for(let i = 0; i < riftCount; i++){
-		const side = i % 2 === 0 ? 0 : 1;
-		const rx = side === 0 ? 60 : WORLD_W - 60;
-		const ry = RAID_TOP_Y + ((RAID_BOTTOM_Y - RAID_TOP_Y) / riftCount) * i;
-		addRaidIndicator(side === 0 ? 0 : WORLD_W - 100, ry - 40, 100, 80, 180, 'rgba(100,0,200,0.4)', 'rect');
-		setTimeout(() => {
-			if(!raidBoss || raidBoss.dead) return;
-			for(let j = 0; j < 6; j++){
-				setTimeout(() => {
-					if(!raidBoss || raidBoss.dead) return;
-					const dir = side === 0 ? 1 : -1;
-					spawnRaidBossProj(rx, ry + (Math.random() - 0.5) * 40, dir * 7, 0, {
-						color: '#6600cc', color2: '#9944ff', power: 20, width: 22, height: 22,
-						shape: 'missile', maxAge: 200, trail: 'magic',
-					});
-				}, j * 120);
-			}
-		}, 1600 + i * 250);
-	}
-}
-
-/* Raid Attack 9: Meteor Barrage */
-function raidAttackMeteorBarrage(){
-	armRaidBossBusy(3800);
-	showRaidWarning('☄️ METEOR BARRAGE!', 1500);
-	const count = raidBoss.phase >= 3 ? 16 : 10;
-	for(let i = 0; i < count; i++){
-		const mx = 200 + Math.random() * (WORLD_W - 400);
-		addRaidIndicator(mx - 60, RAID_BOTTOM_Y - 30, 120, 30, 140 + i * 10, 'rgba(255,100,0,0.5)', 'rect');
-		setTimeout(() => {
-			if(!raidBoss || raidBoss.dead) return;
-			spawnRaidBossProj(mx + (Math.random() - 0.5) * 50, RAID_CONFIG.ceilY, 0, 8 + Math.random() * 4, {
-				color: '#ff4400', color2: '#ffaa00', power: 34, width: 50, height: 50,
-				shape: 'orb', maxAge: 180, trail: 'flame',
-			});
-		}, 900 + i * 180);
-	}
-}
-
-/* Raid Attack 10: Void Cage */
-function raidAttackVoidCage(){
-	armRaidBossBusy(3200);
-	showRaidWarning('🔒 VOID CAGE — ESCAPE!', 1800);
-	const px = player.x + player.w/2, py = player.y + player.h/2;
-	const r = 400;
-	addRaidIndicator(px - r, py - r, r * 2, r * 2, 210, 'rgba(100,0,50,0.3)', 'circle');
-	setTimeout(() => {
-		if(!raidBoss || raidBoss.dead) return;
-		for(let i = 0; i < 24; i++){
-			const a = (i/24) * Math.PI * 2;
-			const p = spawnRaidBossProj(px + Math.cos(a) * r, py + Math.sin(a) * r, Math.cos(a + Math.PI) * 2, Math.sin(a + Math.PI) * 2, {
-				color: '#220044', color2: '#6633aa', power: 22, width: 28, height: 28,
-				shape: 'orb', effects: ['slow'], maxAge: 480, trail: 'magic', dispellable: true,
-			});
-		}
-	}, 1400);
-}
-
-/* Raid Attack 11: Soul Drain */
-function raidAttackSoulDrain(){
-	armRaidBossBusy(4600);
-	showRaidWarning('💀 SOUL DRAIN — STUN THE BOSS!', 2000);
-	raidBoss.armRaised = 30;
-	let drainActive = true;
-	const drainId = setInterval(() => {
-		if(!raidBoss || raidBoss.dead || !drainActive || raidBoss.stunTimer > 0){
-			clearInterval(drainId);
-			if(raidBoss && raidBoss.stunTimer > 0){
-				dmgNumbers.push({x: raidBoss.x + raidBoss.w/2, y: raidBoss.y - 40, text: '⚡ INTERRUPTED!', age: 0, color: '#ffcc00'});
-			}
-			return;
-		}
-		const healAmt = raidBoss.phase >= 3 ? 120 : 80;
-		raidBoss.hp = Math.min(raidBoss.maxHp, raidBoss.hp + healAmt);
-		dmgNumbers.push({x: raidBoss.x + raidBoss.w/2, y: raidBoss.y - 20, text: '+' + healAmt + ' ❤️', age: 0, color: '#ff4466'});
-		if(dist(player.x + player.w/2, player.y + player.h/2, raidBoss.x + raidBoss.w/2, raidBoss.y + raidBoss.h/2) < 300){
-			damagePlayer(6, []);
-		}
-	}, 500);
-	setTimeout(() => { drainActive = false; clearInterval(drainId); }, 4000);
-}
-
-/* Raid Attack 12: Shadow Blink Barrage */
-function raidAttackShadowBlinkBarrage(){
-	armRaidBossBusy(2600);
-	showRaidWarning('⚡ SHADOW BLINK BARRAGE!', 800);
-	for(let b = 0; b < 3; b++){
-		setTimeout(() => {
-			if(!raidBoss || raidBoss.dead) return;
-			// Teleport to random position near player
-			raidBoss.x = player.x + (Math.random() - 0.5) * 400;
-			raidBoss.y = player.y - 100 - Math.random() * 200;
-			// Clamp to arena
-			raidBoss.x = Math.max(100, Math.min(WORLD_W - raidBoss.w - 100, raidBoss.x));
-			raidBoss.y = Math.max(RAID_CONFIG.ceilY, Math.min(RAID_BOTTOM_Y - raidBoss.h, raidBoss.y));
-			// Fire at player
-			const ang = Math.atan2(player.y + player.h/2 - raidBoss.y - raidBoss.h/2, player.x + player.w/2 - raidBoss.x - raidBoss.w/2);
-			for(let i = -1; i <= 1; i++){
-				spawnRaidBossProj(raidBoss.x + raidBoss.w/2, raidBoss.y + raidBoss.h/2,
-					Math.cos(ang + i * 0.3) * 8, Math.sin(ang + i * 0.3) * 8, {
-					color: '#440044', color2: '#880088', power: 18, width: 20, height: 20,
-					shape: 'orb', maxAge: 150,
-				});
-			}
-		}, b * 600);
-	}
-}
-
-/* Raid Attack 14: Absolute Void (Phase 3) */
-function raidAttackAbsoluteVoid(){
-	armRaidBossBusy(10000);
-	showRaidWarning('🌑 ABSOLUTE VOID — FIND THE LIGHT!', 2500);
-	addRaidIndicator(0, RAID_CONFIG.ceilY, WORLD_W, RAID_BOTTOM_Y - RAID_CONFIG.ceilY, 180, 'rgba(0,0,0,0.3)', 'rect');
-	const lightOrbs = [];
-	for(let i = 0; i < 3; i++){
-		lightOrbs.push({
-			x: 300 + Math.random() * (WORLD_W - 600),
-			y: RAID_TOP_Y + Math.random() * (RAID_BOTTOM_Y - RAID_TOP_Y - 100),
-			radius: 90,
-			age: 0, maxAge: FPS * 9,
-		});
-	}
-	raidBoss._lightOrbs = lightOrbs;
-	raidBoss._voidDarkness = true;
-	raidBoss._voidDarknessTimer = FPS * 9;
-	// Spawn chasing tendrils
-	setTimeout(() => {
-		if(!raidBoss || raidBoss.dead) return;
-		for(let i = 0; i < 6; i++){
-			setTimeout(() => {
-				if(!raidBoss || raidBoss.dead) return;
-				const a = Math.random() * Math.PI * 2;
-				const cx = raidBoss.x + raidBoss.w/2, cy = raidBoss.y + raidBoss.h/2;
-				const orb = spawnRaidBossProj(cx + Math.cos(a) * 200, cy + Math.sin(a) * 200, 0, 0, {
-					color: '#110011', color2: '#330033', power: 30, width: 40, height: 40,
-					shape: 'orb', effects: ['slow'], maxAge: FPS * 7, trail: 'magic',
-				});
-				if(orb){ orb.homing = true; orb.homingSpeed = 0.015; orb.moveSpeed = 2; }
-			}, i * 600);
-		}
-	}, 2000);
-}
-
-/* Raid Attack 15: Judgement Strike (Phase 3) */
-function raidAttackJudgementStrike(){
-	armRaidBossBusy(2600);
-	showRaidWarning('⚖️ JUDGEMENT STRIKE!', 1500);
-	const tx = player.x + player.w/2;
-	addRaidIndicator(tx - 150, RAID_CONFIG.ceilY, 300, RAID_BOTTOM_Y - RAID_CONFIG.ceilY, 180, 'rgba(255,200,0,0.4)', 'rect');
-	setTimeout(() => {
-		if(!raidBoss || raidBoss.dead) return;
-		// Giant pillar slam
-		for(let y = RAID_CONFIG.ceilY; y < RAID_BOTTOM_Y; y += 60){
-			spawnRaidBossProj(tx, y, 0, 0, {
-				color: '#ffcc00', color2: '#ff8800', power: 45, width: 140, height: 60,
-				shape: 'orb', maxAge: 40,
-			});
-		}
-	}, 1600);
-}
-
-/* Raid Attack 16: Void Storm (Phase 3) */
-function raidAttackVoidStorm(){
-	armRaidBossBusy(5500);
-	showRaidWarning('🌪️ VOID STORM — EVERYTHING AT ONCE!', 2000);
-	const cx = raidBoss.x + raidBoss.w / 2, cy = raidBoss.y + raidBoss.h / 2;
-	for(let i = 0; i < 6; i++){
-		setTimeout(() => {
-			if(!raidBoss || raidBoss.dead) return;
-			const a = Math.random() * Math.PI * 2;
-			const orb = spawnRaidBossProj(cx + Math.cos(a) * 100, cy + Math.sin(a) * 100, 0, 0, {
-				color: '#220044', color2: '#6633aa', power: 32, width: 36, height: 36,
-				shape: 'orb', effects: ['slow'], maxAge: 540, trail: 'magic',
-			});
-			if(orb){ orb.homing = true; orb.homingSpeed = 0.02; orb.moveSpeed = 2.5; }
-		}, 500 + i * 200);
-	}
-	setTimeout(() => {
-		if(!raidBoss || raidBoss.dead) return;
-		for(let i = 0; i < 6; i++){
-			const px = 150 + ((WORLD_W - 300) / 6) * i + Math.random() * 60;
-			const platY = getRaidRandomPlatY();
-			addRaidIndicator(px - 45, platY - 350, 90, 350, 120, 'rgba(255,40,60,0.45)', 'rect');
-			setTimeout(() => {
-				if(!raidBoss || raidBoss.dead) return;
-				spawnRaidBossProj(px, platY - 10, 0, -12, {
-					color: '#ff1133', color2: '#ff6644', power: 34, width: 42, height: 190,
-					shape: 'orb', maxAge: 120,
-				});
-			}, 900);
-		}
-	}, 1500);
-	setTimeout(() => {
-		if(!raidBoss || raidBoss.dead) return;
-		const dir = raidBoss.x + raidBoss.w / 2 > WORLD_W / 2 ? -1 : 1;
-		const sx = dir === 1 ? 100 : WORLD_W - 100;
-		for(const py of RAID_PLATFORM_YS){
-			addRaidIndicator(0, py - 60, WORLD_W, 60, 100, 'rgba(100,0,50,0.4)', 'rect');
-		}
-		for(let i = 0; i < 16; i++){
-			const platY = getRaidRandomPlatY();
-			spawnRaidBossProj(sx, platY - 20 - Math.random() * 50, dir * (5 + Math.random() * 3), 0, {
-				color: '#440022', color2: '#882244', power: 18, width: 24, height: 24,
-				shape: 'orb', maxAge: 420,
-			});
-		}
-	}, 3000);
+	// AI, attacks and phase set pieces live in void-arbiter-kit.js
+	if(window.VoidArbiter) VoidArbiter.update(raidBoss);
 }
 
 /* Show victory overlay */
@@ -28169,6 +27656,7 @@ function updateEnemies(){
 	let _aimSnap = null;      // co-op: while this enemy goes after an ally, it sees (and hits) that ally, not you
 	try {
 	for(const en of enemies){
+		window.__eliteEn = (en && en._elite && !en.dead) ? en : null;      // a boss version's attacks scale while it acts (elite-variants.js)
 		if(_aimSnap){ coopAimEnd(_aimSnap); _aimSnap = null; }
 		// the open world: everything holds still while you are indoors (the terrain is switched off) or far away
 		if(en._worldFoe && !en.dead && (_cityInside || Math.abs(en.x - player.x) > 2600)) continue;
@@ -28206,6 +27694,8 @@ function updateEnemies(){
 			continue;
 		}
 		_aimSnap = coopAimBegin(en);
+		if(en._elite && window.EliteVariants) EliteVariants.tick(en);
+		if(en._windup && window.EFX) EFX.windupTick(en);
 
 		if(!en._nmRolled && typeof NightmareSystem !== 'undefined'){
 			en._nmRolled = true;
@@ -28412,6 +27902,10 @@ function updateEnemies(){
 		if(en.typeDef.customUpdate){ en.typeDef.customUpdate(en, player); continue; }
 		if(en._wardenDormant || en.isDormant) continue;
 
+		// the four mini-bosses (Frostbound Knight, Magma Warden, Storm Raptor, Elder Treant) once their fight has started (miniboss-kit.js)
+		if(window.MiniBossKit && MiniBossKit.update(en)){
+			continue;
+		}
 		if(typeof updateFrostboundKnight === 'function' && en.type === 'frostboundKnight' && updateFrostboundKnight(en)){
 			continue;
 		}
@@ -28585,7 +28079,7 @@ function updateEnemies(){
 			// Seraphel: drift toward player Y within cathedral arena bounds
 			if(en.type === 'seraphel'){
 				const targetY = player.y + player.h/2 - en.h/2 - 60;
-				const clampedTarget = en._surv ? Math.max(780, Math.min(targetY, 1500)) : Math.max(100, Math.min(targetY, 550));
+				const clampedTarget = en._surv ? Math.max(780, Math.min(targetY, 1500)) : en._sbSpawn ? Math.max(SANDBOX_CONFIG.groundY - 470, Math.min(targetY, SANDBOX_CONFIG.groundY - 100)) : Math.max(100, Math.min(targetY, 550));
 				en.baseY += (clampedTarget - en.baseY) * 0.02;
 			}
 			if(en._worldFoe && !en._cave && typeof EmberfallWorld !== 'undefined'){
@@ -28676,7 +28170,7 @@ function updateEnemies(){
 					const sp=spells[si];
 					if(playerDist<=enemyAtkRange(sp.range)){
 						const fn=CAST_FNS[sp.castFn];
-						if(fn){ if(en._dmgNerf) _eprojDmgNerf = en._dmgNerf; fn(en); _eprojDmgNerf = 1; }
+						if(fn){ if(en._dmgNerf) _eprojDmgNerf = en._dmgNerf; if(window.EFX && EFX.cast) EFX.cast(en, fn, sp.castFn); else { en._castTick = _simTick; fn(en); } _eprojDmgNerf = 1; }
 						en.attackAnimTimer = ATTACK_ANIM_DURATION;
 						en.spellCooldowns[si]=Math.round(sp.cooldown * cdMult * DIFF_CD_MULT * ((typeof NightmareSystem!=='undefined')?NightmareSystem.cooldownMult(en):1));
 						en.currentSpell=(si+1)%cap;
@@ -28712,17 +28206,17 @@ function updateEnemies(){
 						const si = ready[Math.floor(Math.random() * ready.length)];
 						const sp = spells[si];
 						const fn = CAST_FNS[sp.castFn];
-						if(fn){ if(en._dmgNerf) _eprojDmgNerf = en._dmgNerf; fn(en); _eprojDmgNerf = 1; }
+						if(fn){ if(en._dmgNerf) _eprojDmgNerf = en._dmgNerf; if(window.EFX && EFX.cast) EFX.cast(en, fn, sp.castFn); else { en._castTick = _simTick; fn(en); } _eprojDmgNerf = 1; if(en._elite && window.EliteVariants) EliteVariants.onCast(en, fn); }
 						en.attackAnimTimer = ATTACK_ANIM_DURATION;
-						en.spellCooldowns[si] = Math.round(sp.cooldown * cdMult * DIFF_CD_MULT);
+						en.spellCooldowns[si] = Math.round(sp.cooldown * cdMult * DIFF_CD_MULT * (en._elite ? en._elite.cd : 1));
 					}
-					en._gcd = ready.length > 0 ? _gcdBase : 60;
+					en._gcd = ready.length > 0 ? Math.round(_gcdBase * (en._elite ? en._elite.gcd : 1)) : 60;
 				}
 			}
 
 			// Move toward player — behavior depends on enemy type
 			const aiBehavior = isBoss ? 'boss' : (en.typeDef.aiBehavior || 'balanced');
-			const spd = en.typeDef.moveSpeed * spdMult * DIFF_MOVE_MULT * ((typeof NightmareSystem!=='undefined')?NightmareSystem.moveMult(en):1);
+			const spd = en.typeDef.moveSpeed * spdMult * DIFF_MOVE_MULT * ((typeof NightmareSystem!=='undefined')?NightmareSystem.moveMult(en):1) * (en._elite ? en._elite.move : 1);
 			const dirX = Math.abs(dx) < 18 ? 0 : (dx > 0 ? 1 : -1);
 			const py = player.y + player.h/2;
 			const ey = en.y + en.h/2;
@@ -28869,7 +28363,7 @@ function updateEnemies(){
 
 			// Patrol
 			if(en.state==='patrol'&&en.patrol){
-				en.vx = en.patrolDir * en.typeDef.moveSpeed * 0.5 * spdMult * DIFF_MOVE_MULT * ((typeof NightmareSystem!=='undefined')?NightmareSystem.moveMult(en):1);
+				en.vx = en.patrolDir * en.typeDef.moveSpeed * 0.5 * spdMult * DIFF_MOVE_MULT * ((typeof NightmareSystem!=='undefined')?NightmareSystem.moveMult(en):1) * (en._elite ? en._elite.move : 1);
 				if(en.x <= en.patrol[0]) en.patrolDir = 1;
 				else if(en.x + en.w >= en.patrol[1]) en.patrolDir = -1;
 				en.facing = en.patrolDir;
@@ -30069,9 +29563,11 @@ function update(){
 	}
 
 	/* Cooldowns */
-	let anyCDChanged=false;
-	for(let i=0;i<10;i++){if(spellCooldowns[i]>0){spellCooldowns[i]--;anyCDChanged=true;}}
-	if(anyCDChanged)renderHotbar();
+	let anyCDChanged=false, anyCDEnded=false;
+	for(let i=0;i<10;i++){if(spellCooldowns[i]>0){spellCooldowns[i]--;anyCDChanged=true;if(spellCooldowns[i]===0)anyCDEnded=true;}}
+	// Ticking cooldowns only move the overlay bars. Rebuilding the whole hotbar every frame
+	// (DOM + a full rune-spell validation per slot) was a steady lag source while anything was cooling down.
+	if(anyCDEnded)renderHotbar(); else if(anyCDChanged)updateHotbarCooldowns();
 	/* Ult speed bonus tick-down */
 	if((player._ultSpeedBonus||0)>0){
 		player._ultSpeedBonusTimer=(player._ultSpeedBonusTimer||0)-1;
@@ -30874,6 +30370,7 @@ function update(){
 	if(typeof updateWildesWorld === 'function') updateWildesWorld();
 	if(typeof updateLateWorld === 'function') updateLateWorld();
 	if(typeof updateRosterWorld === 'function') updateRosterWorld();
+	if(window.EFX) EFX.update();
 	_coopBossDmg = IS_COOP;
 	{ const _sen = IS_SURVIVAL ? enemies.find(e => e.type === 'seraphel' && !e.dead) : null; const _s = _sen ? coopAimBegin(_sen) : null; try { updateSeraphelFight(); } finally { if(_s) coopAimEnd(_s); } }
 	_coopBossDmg = false;
@@ -31203,67 +30700,57 @@ function render(){
 		ctx.fillStyle = grad;
 		ctx.fillRect(0, 0, canvas.width, canvas.height);
 		
-		// Void darkness overlay (Absolute Void attack)
-		if(raidBoss && raidBoss._voidDarkness){
-			ctx.fillStyle = 'rgba(0,0,0,0.7)';
-			ctx.fillRect(0, 0, canvas.width, canvas.height);
-			// Light orbs
-			for(const orb of raidBoss._lightOrbs){
-				const ox = orb.x - camera.x, oy = orb.y - camera.y;
-				const pulse = 0.8 + Math.sin(orb.age * 0.1) * 0.2;
-				const glow = ctx.createRadialGradient(ox, oy, 0, ox, oy, orb.radius * pulse);
-				glow.addColorStop(0, 'rgba(255,255,200,0.8)');
-				glow.addColorStop(0.5, 'rgba(255,220,100,0.3)');
-				glow.addColorStop(1, 'transparent');
-				ctx.fillStyle = glow;
-				ctx.beginPath(); ctx.arc(ox, oy, orb.radius * pulse, 0, Math.PI * 2); ctx.fill();
-			}
-		}
+		// Drifting motes, sky tears (phase 2) and the watching eye (phase 3)
+		if(window.VoidArbiter) VoidArbiter.drawSky();
 		
-		// Draw void abyss below platforms
-		const abyssY = RAID_BOTTOM_Y + 40 - camera.y;
-		if(abyssY < canvas.height){
-			const abyssGrad = ctx.createLinearGradient(0, abyssY, 0, abyssY + 400);
-			abyssGrad.addColorStop(0, 'rgba(10,0,20,0.3)');
-			abyssGrad.addColorStop(0.5, 'rgba(5,0,10,0.7)');
-			abyssGrad.addColorStop(1, '#000005');
-			ctx.fillStyle = abyssGrad;
-			ctx.fillRect(0, abyssY, canvas.width, canvas.height - abyssY + 200);
-			// Void tendrils rising
-			ctx.strokeStyle = `rgba(100,0,180,${0.1 + Math.sin(Date.now()/600)*0.05})`;
-			ctx.lineWidth = 2;
-			for(let i = 0; i < 8; i++){
-				const tx = ((i * 523.7 + Date.now() * 0.005) % WORLD_W) - camera.x;
-				if(tx > -50 && tx < canvas.width + 50){
-					ctx.beginPath();
-					ctx.moveTo(tx, abyssY + 100);
-					ctx.quadraticCurveTo(tx + Math.sin(Date.now()/800 + i) * 30, abyssY + 20, tx + Math.sin(i*2.1) * 15, abyssY - 20);
-					ctx.stroke();
+		// The Arbiter's Court: void maelstrom, chained obsidian platforms (void-arbiter-kit.js)
+		if(window.VoidArbiter && VoidArbiter.drawArena) VoidArbiter.drawArena();
+		else {
+			// Draw void abyss below platforms
+			const abyssY = RAID_BOTTOM_Y + 40 - camera.y;
+			if(abyssY < canvas.height){
+				const abyssGrad = ctx.createLinearGradient(0, abyssY, 0, abyssY + 400);
+				abyssGrad.addColorStop(0, 'rgba(10,0,20,0.3)');
+				abyssGrad.addColorStop(0.5, 'rgba(5,0,10,0.7)');
+				abyssGrad.addColorStop(1, '#000005');
+				ctx.fillStyle = abyssGrad;
+				ctx.fillRect(0, abyssY, canvas.width, canvas.height - abyssY + 200);
+				// Void tendrils rising
+				ctx.strokeStyle = `rgba(100,0,180,${0.1 + Math.sin(Date.now()/600)*0.05})`;
+				ctx.lineWidth = 2;
+				for(let i = 0; i < 8; i++){
+					const tx = ((i * 523.7 + Date.now() * 0.005) % WORLD_W) - camera.x;
+					if(tx > -50 && tx < canvas.width + 50){
+						ctx.beginPath();
+						ctx.moveTo(tx, abyssY + 100);
+						ctx.quadraticCurveTo(tx + Math.sin(Date.now()/800 + i) * 30, abyssY + 20, tx + Math.sin(i*2.1) * 15, abyssY - 20);
+						ctx.stroke();
+					}
 				}
 			}
-		}
-		
-		// Draw raid platforms
-		for(const plat of sandboxPlatforms){
-			if(plat.isWall) continue;
-			const px = plat.x - camera.x, py = plat.y - camera.y;
-			if(px + plat.w < -50 || px > canvas.width + 50) continue;
-			// Color based on layer
-			const layerColor = plat.layer === 'top' ? '#2a2a4f' : plat.layer === 'middle' ? '#2a2a3f' : '#2a2a35';
-			ctx.fillStyle = layerColor;
-			ctx.fillRect(px, py, plat.w, plat.h);
-			// Top edge glow
-			ctx.fillStyle = plat.layer === 'top' ? '#4a4a6f' : plat.layer === 'middle' ? '#3a3a5f' : '#3a3a4a';
-			ctx.fillRect(px, py, plat.w, 3);
-			// Underside dripping void effect
-			ctx.strokeStyle = `rgba(100,0,180,${0.15 + Math.sin(Date.now()/500 + plat.x*0.01)*0.05})`;
-			ctx.lineWidth = 1;
-			for(let di = 0; di < plat.w; di += 40){
-				const dLen = 8 + Math.sin(Date.now()/700 + di*0.1) * 4;
-				ctx.beginPath();
-				ctx.moveTo(px + di, py + plat.h);
-				ctx.lineTo(px + di + Math.sin(di*0.2)*3, py + plat.h + dLen);
-				ctx.stroke();
+			
+			// Draw raid platforms
+			for(const plat of sandboxPlatforms){
+				if(plat.isWall) continue;
+				const px = plat.x - camera.x, py = plat.y - camera.y;
+				if(px + plat.w < -50 || px > canvas.width + 50) continue;
+				// Color based on layer
+				const layerColor = plat.layer === 'top' ? '#2a2a4f' : plat.layer === 'middle' ? '#2a2a3f' : '#2a2a35';
+				ctx.fillStyle = layerColor;
+				ctx.fillRect(px, py, plat.w, plat.h);
+				// Top edge glow
+				ctx.fillStyle = plat.layer === 'top' ? '#4a4a6f' : plat.layer === 'middle' ? '#3a3a5f' : '#3a3a4a';
+				ctx.fillRect(px, py, plat.w, 3);
+				// Underside dripping void effect
+				ctx.strokeStyle = `rgba(100,0,180,${0.15 + Math.sin(Date.now()/500 + plat.x*0.01)*0.05})`;
+				ctx.lineWidth = 1;
+				for(let di = 0; di < plat.w; di += 40){
+					const dLen = 8 + Math.sin(Date.now()/700 + di*0.1) * 4;
+					ctx.beginPath();
+					ctx.moveTo(px + di, py + plat.h);
+					ctx.lineTo(px + di + Math.sin(di*0.2)*3, py + plat.h + dLen);
+					ctx.stroke();
+				}
 			}
 		}
 		
@@ -31301,19 +30788,17 @@ function render(){
 			ctx.globalAlpha = 1;
 		}
 		
+		// Void Arbiter telegraphs, pillars, rifts, wells, eyes (behind the boss)
+		if(window.VoidArbiter) VoidArbiter.drawBack();
+		
 		// Draw raid boss
 		if(raidBoss && !raidBoss.dead){
 			const bx = raidBoss.x - camera.x, by = raidBoss.y - camera.y;
 			const p = raidBoss.phase;
 			
-			// Boss glow (intensifies with phase)
-			const cx = bx + raidBoss.w/2, cy = by + raidBoss.h/2;
-			ctx.save();
-			ctx.beginPath(); ctx.arc(cx, cy, raidBoss.w * (p >= 3 ? 1.2 : p >= 2 ? 1.0 : 0.7), 0, Math.PI * 2);
-			const ag = ctx.createRadialGradient(cx, cy, 20, cx, cy, raidBoss.w);
-			ag.addColorStop(0, p >= 3 ? '#ff0022' : p >= 2 ? '#ff2244' : '#882244');
-			ag.addColorStop(1, 'transparent');
-			ctx.fillStyle = ag; ctx.fill(); ctx.restore();
+			// Aura, rune halo and orbiting motes
+			if(window.VoidArbiter) VoidArbiter.drawAura(raidBoss);
+			const _vaA = window.VoidArbiter ? VoidArbiter.bossAlpha() : 1;
 			
 			// Sprite sheet draw
 			if(BOSS_SPRITE.complete && BOSS_SPRITE.naturalWidth > 0){
@@ -31328,19 +30813,14 @@ function render(){
 				const fh = BOSS_SPRITE.naturalHeight / BOSS_SPRITE_ROWS;
 				const sx = bossAnimFrame * fw, sy = row * fh;
 				// Draw sprite scaled to boss w/h, flip based on facing
-				ctx.save();
+				ctx.save(); ctx.globalAlpha = _vaA;
 				if(raidBoss.facing > 0){ ctx.translate(bx + raidBoss.w, by); ctx.scale(-1, 1); ctx.drawImage(BOSS_SPRITE, sx, sy, fw, fh, 0, 0, raidBoss.w, raidBoss.h); }
 				else { ctx.drawImage(BOSS_SPRITE, sx, sy, fw, fh, bx, by, raidBoss.w, raidBoss.h); }
 				ctx.restore();
-				// Phase overlay tint
-				if(p >= 2){
-					ctx.save(); ctx.globalAlpha = p >= 3 ? 0.15 : 0.08;
-					ctx.fillStyle = p >= 3 ? '#ff0022' : '#ff2244'; ctx.fillRect(bx, by, raidBoss.w, raidBoss.h);
-					ctx.restore();
-				}
-				// Flash on hit
-				if(raidBoss.flash > 0){
-					ctx.save(); ctx.globalAlpha = raidBoss.flash / 6 * 0.4; ctx.fillStyle = '#fff'; ctx.fillRect(bx, by, raidBoss.w, raidBoss.h); ctx.restore();
+				// Phase tint and hit flash, clipped to the sprite's silhouette
+				if(window.VoidArbiter){
+					if(p >= 2) VoidArbiter.tintSprite(sx, sy, fw, fh, bx, by, raidBoss, p >= 3 ? '#ff0022' : '#ff2244', (p >= 3 ? 0.2 : 0.1) * _vaA);
+					if(raidBoss.flash > 0) VoidArbiter.tintSprite(sx, sy, fw, fh, bx, by, raidBoss, '#ffffff', raidBoss.flash / 6 * 0.5 * _vaA);
 				}
 			} else {
 				// Fallback: simple rectangle if sprite not loaded
@@ -31350,54 +30830,7 @@ function render(){
 				ctx.beginPath(); ctx.moveTo(bx + raidBoss.w/2, by); ctx.lineTo(bx + 20, by + 60); ctx.lineTo(bx + raidBoss.w - 20, by + 60); ctx.closePath(); ctx.fill();
 				ctx.fillStyle = '#cc2244'; ctx.fillRect(bx + raidBoss.w/2 - 20, by + 35, 40, 8);
 			}
-			
-			// Boss HP bar (at top of screen)
-			const hpPct = raidBoss.hp / raidBoss.maxHp;
-			ctx.fillStyle = 'rgba(0,0,0,0.7)';
-			ctx.fillRect(canvas.width/2 - 200, 50, 400, 20);
-			const hpColor = hpPct > 0.65 ? '#cc2244' : hpPct > 0.3 ? '#ff6644' : '#ff0033';
-			ctx.fillStyle = hpColor;
-			ctx.fillRect(canvas.width/2 - 200, 50, 400 * hpPct, 20);
-			ctx.strokeStyle = '#440022';
-			ctx.lineWidth = 2;
-			ctx.strokeRect(canvas.width/2 - 200, 50, 400, 20);
-			ctx.fillStyle = '#fff';
-			ctx.font = 'bold 12px Arial';
-			ctx.textAlign = 'center';
-			ctx.fillText(Math.round(raidBoss.hp) + ' / ' + raidBoss.maxHp + ' (Phase ' + raidBoss.phase + ')', canvas.width/2, 65);
-			
-			// Laser beam rendering
-			if(raidBoss.laserActive){
-				const lx = (raidBoss.laserOriginX || (raidBoss.x + raidBoss.w/2)) - camera.x;
-				const ly = (raidBoss.laserOriginY || (raidBoss.y + raidBoss.h/2)) - camera.y;
-				const laserLen = raidBoss.laserBeamLen || 0;
-				if(laserLen > 2){
-					const ex = lx + Math.cos(raidBoss.laserAngle) * laserLen;
-					const ey = ly + Math.sin(raidBoss.laserAngle) * laserLen;
-					ctx.save();
-					ctx.globalAlpha = 0.85;
-					ctx.strokeStyle = '#ff0044';
-					ctx.lineWidth = 30;
-					ctx.beginPath();
-					ctx.moveTo(lx, ly);
-					ctx.lineTo(ex, ey);
-					ctx.stroke();
-					ctx.strokeStyle = '#ff6688';
-					ctx.lineWidth = 14;
-					ctx.beginPath();
-					ctx.moveTo(lx, ly);
-					ctx.lineTo(ex, ey);
-					ctx.stroke();
-					ctx.strokeStyle = '#ffffff';
-					ctx.lineWidth = 4;
-					ctx.globalAlpha = 0.7;
-					ctx.beginPath();
-					ctx.moveTo(lx, ly);
-					ctx.lineTo(ex, ey);
-					ctx.stroke();
-					ctx.restore();
-				}
-			}
+
 		} else if(raidBoss && raidBoss.dead && raidBoss.deathTimer < 120){
 			// Death animation with sprite
 			const bx = raidBoss.x - camera.x, by = raidBoss.y - camera.y;
@@ -34890,6 +34323,7 @@ function render(){
 
 		// Draw enemies
 		if(typeof drawIgnarothWorld === 'function') drawIgnarothWorld();
+		if(window.MiniBossKit) MiniBossKit.drawWorld();
 		if(typeof drawFrostboundWorld === 'function') drawFrostboundWorld();
 		if(typeof drawKryonaxWorld === 'function') drawKryonaxWorld();
 		if(typeof drawFireDungeonWorld === 'function') drawFireDungeonWorld();
@@ -34898,11 +34332,13 @@ function render(){
 		if(typeof drawForgeKitWorld === 'function') drawForgeKitWorld();
 		if(typeof drawWildesWorld === 'function') drawWildesWorld();
 		if(typeof drawLateWorld === 'function') drawLateWorld();
+		if(window.EFX) EFX.drawBack();
 		for(const en of enemies){
 			if(en.dead) continue;
 			drawEnemy(en);
 		}
 		if(typeof drawStormRaptorWorld === 'function') drawStormRaptorWorld();
+		if(window.EFX) EFX.drawFront();
 		if(typeof drawRosterWorld === 'function') drawRosterWorld();
 
 		// Draw training dummies
@@ -37226,6 +36662,7 @@ function render(){
 	_renderAura();
 	/* Render enemies */
 	if(typeof drawIgnarothWorld === 'function') drawIgnarothWorld();
+		if(window.MiniBossKit) MiniBossKit.drawWorld();
 	if(typeof drawFrostboundWorld === 'function') drawFrostboundWorld();
 	if(typeof drawKryonaxWorld === 'function') drawKryonaxWorld();
 	if(typeof drawFireDungeonWorld === 'function') drawFireDungeonWorld();
@@ -37234,6 +36671,7 @@ function render(){
 	if(typeof drawForgeKitWorld === 'function') drawForgeKitWorld();
 	if(typeof drawWildesWorld === 'function') drawWildesWorld();
 	if(typeof drawLateWorld === 'function') drawLateWorld();
+	if(window.EFX) EFX.drawBack();
 	for(const en of enemies){
 		if(en.dead){
 			if(en.deathTimer<60){
@@ -37780,6 +37218,7 @@ break;}
 	for(const p of enemyProjectiles){
 		const px=p.x-camera.x,py=p.y-camera.y;
 		if(!p._isLaser&&(px<-200||px>canvas.width+200||py<-200||py>canvas.height+200))continue;
+		if(p._vaStyle && window.VoidArbiter && VoidArbiter.drawProj(p)) continue;
 		if(p._vcStyle && typeof drawVerdantProj === 'function'){
 			drawVerdantProj(p);
 			continue;
@@ -38083,6 +37522,7 @@ break;}
 		}
 		ctx.globalAlpha=1;
 	}
+	if(window.EFX) EFX.drawFront();
 
 	/* Particles */
 	if(particles.length>MAX_PARTICLES)particles.splice(0,particles.length-MAX_PARTICLES);
@@ -39106,8 +38546,12 @@ break;}
 		ctx.fillText('CHARGING...',pcx,pcy-maxR-22);
 	}
 
+	/* Void Arbiter: beams, shockwaves, tide, darkness and the raid HUD over the player */
+	if(IS_RAID && window.VoidArbiter) VoidArbiter.drawFront();
+
 	/* Boss telegraphs */
 	for(const tel of bossTelegraphs){
+		if(tel.efx && window.EFX){ EFX.drawTelegraph(tel); continue; }
 		const prog=tel.timer/tel.duration;
 		const flash=Math.sin(tel.timer*0.3)*0.15;
 		const alpha=Math.min(0.5,0.15+prog*0.35)+flash;
@@ -39951,6 +39395,7 @@ function drawEnemy(en){
 			if(vx + vr.w < 0 || vx > canvas.width || vy + vr.h < 0 || vy > canvas.height) return;
 		}
 	} else if(ex+en.w<-50||ex>canvas.width+50||ey+en.h<-50||ey>canvas.height+50)return;
+	if(window.MiniBossKit && MiniBossKit.draw(en)){ if(!en.dead) drawEnemyHpBar(en); return; }      // new mini-boss sheets (miniboss-kit.js)
 	if(en.typeDef && en.typeDef.customDraw){ en.typeDef.customDraw(ctx, en, camera); if(!en.dead) drawEnemyHpBar(en); return; }
 
 	// ---- Seraphel custom multi-sheet sprite rendering ----
@@ -43292,20 +42737,25 @@ function updateDebugPanel(){
 })();
 </script>
 <script src="spell-parry.js?v=2"></script>
-<script src="fire-dungeon-kit.js?v=5"></script>
+<script src="enemy-fx.js?v=3"></script>
+<script src="void-arbiter-kit.js?v=7"></script>
+<script src="fire-dungeon-kit.js?v=8"></script>
 <script src="ignaroth-rig.js?v=3"></script>
-<script src="ignaroth-kit.js?v=10"></script>
-<script src="frostbound-knight-kit.js?v=8"></script>
-<script src="ice-dungeon-kit.js?v=4"></script>
+<script src="ignaroth-kit.js?v=11"></script>
+<script src="frostbound-knight-kit.js?v=9"></script>
+<script src="ice-dungeon-kit.js?v=6"></script>
 <script src="kryonax-kit.js?v=3"></script>
-<script src="earth-dungeon-kit.js?v=3"></script>
-<script src="forge-wildes-kit.js?v=3"></script>
-<script src="wildes-dungeon-kit.js?v=1"></script>
+<script src="earth-dungeon-kit.js?v=5"></script>
+<script src="forge-wildes-kit.js?v=5"></script>
+<script src="wildes-dungeon-kit.js?v=4"></script>
 <script src="jungle-dungeon-kit.js?v=6"></script>
 <script src="verdant-colossus-kit.js?v=11"></script>
 <script src="storm-raptor-kit.js?v=3"></script>
-<script src="late-dungeon-kit.js?v=1"></script>
-<script src="advanced-roster-kit.js?v=3"></script>
+<script src="late-dungeon-kit.js?v=4"></script>
+<script src="advanced-roster-kit.js?v=6"></script>
+<script src="elite-variants.js?v=3"></script>
+<script src="miniboss-kit.js?v=1"></script>
+<script src="spawn-menu.js?v=5"></script>
 <script src="ice-props.js?v=3"></script>
 <script src="ice-world.js?v=15"></script>
 <script src="jungle-props.js?v=27"></script>
@@ -43326,7 +42776,7 @@ function updateDebugPanel(){
 <script src="where-map.js?v=2"></script>
 <script src="tutorial-coach.js?v=1"></script>
 <script src="challenger-raid.js?v=40"></script>
-<script src="survival-mode.js?v=6"></script>
+<script src="survival-mode.js?v=9"></script>
 <script>
 const DUNGEON_MAP_KEY = 'magicBattle_showDungeonMap';
 const DUNGEON_MAP_VIEW = 10;
@@ -43681,6 +43131,7 @@ if(typeof IS_COLOSSEUM !== 'undefined' && IS_COLOSSEUM && window.PvpArena) PvpAr
 	var ALLY_W = 38, ALLY_H = 56;
 	var allies = {};          // id -> ally record
 	window.__coopAllies = allies;
+	window.__coopSelf = function(){ return (net && net.id) || null; };      // this client's own co-op id
 	var net = null, connecting = false;
 	var coopStatus = 'Connecting to co-op…';
 	var lastStateSent = 0, lastWorldSent = 0;
@@ -43838,6 +43289,7 @@ if(typeof IS_COLOSSEUM !== 'undefined' && IS_COLOSSEUM && window.PvpArena) PvpAr
 				var e = w.en[i];
 				var en = findCoopEnemy(e.k) || spawnFromSnapshot(e);
 				if(!en) continue;
+				if(e.el && !en._elite && window.EliteVariants) EliteVariants.apply(en, e.el, { visualOnly: true });
 				en._netX = e.x; en._netY = e.y;
 				if(!en._coopPlaced){ en.x = e.x; en.y = e.y; en._coopPlaced = true; }
 				en.facing = e.f;
@@ -43882,6 +43334,7 @@ if(typeof IS_COLOSSEUM !== 'undefined' && IS_COLOSSEUM && window.PvpArena) PvpAr
 				if(ev.type === 'warn') showRaidWarning(d.text, d.duration);
 				else if(ev.type === 'ind') addRaidIndicator(d.x, d.y, d.w, d.h, d.d, d.c, d.t);
 				else if(ev.type === 'beamInd'){ if(typeof addRaidBeamIndicator === 'function') addRaidBeamIndicator(d.ox, d.oy, d.angle, d.length, d.d, d.c); }
+				else if(ev.type === 'va'){ if(window.VoidArbiter) VoidArbiter.onNet(d); }
 				else if(ev.type === 'chit'){ if(typeof window.__challengerAddHit === 'function') window.__challengerAddHit(d); }
 				else if(ev.type === 'hit'){
 					// an enemy the host runs went after YOU: the damage is applied here, with your own defences and i-frames
@@ -44012,6 +43465,7 @@ if(typeof IS_COLOSSEUM !== 'undefined' && IS_COLOSSEUM && window.PvpArena) PvpAr
 					f: en.facing, hp: Math.round(en.hp), d: !!en.dead,
 					mh: en.maxHp, w: en.w, h: en.h,
 				};
+				if(en._elite) rec.el = en._elite.tier;      // boss version: guests draw its crown, aura and nova
 				// Dungeon bosses: phase drives their attack set and visuals.
 				if(en.typeDef && en.typeDef.isBoss){
 					rec.bp = en.bossPhase;
@@ -44114,6 +43568,6 @@ if(typeof IS_COLOSSEUM !== 'undefined' && IS_COLOSSEUM && window.PvpArena) PvpAr
 
 })();
 </script>
-<script src="coop-combat.js?v=1"></script>
+<script src="coop-combat.js?v=2"></script>
 </body>
 </html>

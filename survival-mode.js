@@ -51,9 +51,15 @@
 		// boss buffs by wave: faster moves, quicker casts
 		bossSpeedPerWave: 0.0015, bossSpeedMax: 1.35, bossCdPerWave: 0.003, bossCdMin: 0.6,
 		// crowd size
-		crowd: { base: 6, per: 0.35, cap: 60, aliveBase: 10, aliveEvery: 12, aliveCap: 22 },
+		// aliveBase/aliveEvery/aliveCap = the most enemies on the field at once (more waves → a bigger cap; co-op adds 3 per extra player).
+		// Extra enemies of the wave WAIT in a queue and only arrive once a kill brings the field back under the cap.
+		// gap* = frames between arrivals: gapBase − gapPerWave·wave (never below gapMin) plus up to gapJitter random frames,
+		// so a wave trickles in over time instead of appearing all at once. refill = the shortest pause after a kill opens a slot.
+		crowd: { base: 6, per: 0.35, cap: 60, aliveBase: 6, aliveEvery: 8, aliveCap: 18, gapBase: 95, gapPerWave: 0.5, gapMin: 38, gapJitter: 45, refill: 30 },
 		prepFrames: 300, prepBossFrames: 420, prepHiddenFrames: 660, wipeFrames: 300,
 		checkpointEvery: 25, bossEvery: 5, cycle: 250,
+		// mini-boss tiers in Survival: HP on top of the boss curve for that wave (base, Alpha, Elder, Tyrant)
+		miniTierHp: [1, 1.35, 1.8, 2.6],
 	};
 	const HIDDEN = { 100: 'infernalKitten', 150: 'seraphel', 200: 'zenith', 250: 'challenger' };
 
@@ -364,6 +370,12 @@
 		} else {
 			ST.total = Math.min(18, 4 + Math.floor(w / 12)); ST.maxAlive = Math.min(6, 2 + Math.floor(w / 40));
 			ST.bossEn = makeEnemy(inf.boss, w, { boss: true, hp: bossHpFor(inf.boss, w), x: B.mid + (Math.random() < 0.5 ? -900 : 900) });
+			// mini-bosses climb through their tiers as the run goes on: ★ Alpha from wave 15, ★★ Elder from 30, ★★★ Tyrant from 45
+			// (and always Tyrant after the first lap). HP is on top of the wave's boss curve, so a Tyrant outlasts that wave's boss.
+			if(ST.bossEn && root.MiniBossKit && MiniBossKit.owns(ST.bossEn) && root.EliteVariants){
+				const c = cyc(w), tier = w > BAL.cycle ? 3 : c >= 45 ? 3 : c >= 30 ? 2 : c >= 15 ? 1 : 0;
+				if(tier) EliteVariants.apply(ST.bossEn, tier, { hp: BAL.miniTierHp[tier] });
+			}
 		}
 		shakeScreen(6, 14);
 	}
@@ -468,8 +480,11 @@
 		} else if(ST.phase === 'fight'){
 			const inf = info();
 			if(inf.kind === 'normal' || ST.total > 0){
-				if(ST.spawned < ST.total && aliveMinions() < ST.maxAlive && --ST.spawnCd <= 0){
-					makeEnemy(pickType(ST.wave), ST.wave); ST.spawned++; ST.spawnCd = 20 + (Math.random() * 40 | 0);
+				if(ST.spawned < ST.total && aliveMinions() >= ST.maxAlive) ST.spawnCd = Math.max(ST.spawnCd, BAL.crowd.refill);   // at the cap the rest wait; a kill reopens a slot after a short beat
+					if(ST.spawned < ST.total && aliveMinions() < ST.maxAlive && --ST.spawnCd <= 0){
+					const _C = BAL.crowd;
+					const _ne = makeEnemy(pickType(ST.wave), ST.wave); ST.spawned++; ST.spawnCd = Math.max(_C.gapMin, _C.gapBase - _C.gapPerWave * ST.wave) + (Math.random() * _C.gapJitter | 0);
+					if(_ne && root.EliteVariants) EliteVariants.maybePromote(_ne, ST.wave);      // boss versions, more and stronger as waves climb
 				}
 			}
 			if(inf.kind === 'normal'){
@@ -710,6 +725,7 @@
 			jump(w){ ST.wave = w; ST.phase = 'prep'; ST.t = 0; enemies.length = 0; },
 			jumpTo, waveDescribe,
 			spawn(type, w, boss){ return makeEnemy(type, w || ST.wave, boss ? { boss: true, hp: bossHpFor(type, w || ST.wave) } : {}); },
+			spawnElite(type, tier, w){ const e = makeEnemy(type, w || ST.wave); if(e && root.EliteVariants) EliteVariants.apply(e, tier || 1); return e; },
 			skipPrep(){ ST.t = ST.prepLen; },
 		},
 	};

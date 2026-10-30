@@ -534,7 +534,12 @@
 			intro: 'Two reference books in the inventory.',
 			sections: [
 				{ h: 'Bestiary', p: 'Every creature you have met, with its health, attacks and where it lives. Unknown creatures show as ❓ until you find them.' },
-				{ h: 'Spell Dictionary', p: 'Shapes, behaviours, effects, domains and classes, explained one by one.' }
+				{ h: 'Spell Dictionary', p: 'Shapes, behaviours, effects, domains and classes, explained one by one.' },
+				{ h: 'Reading enemy attacks', p: 'Creatures warn you before a big attack. A glow gathering on them means a cast is coming. A coloured circle, line or box on the ground marks where it will land, and it fills in as the hit gets closer. Rings that shrink around you usually have a gap: get out through the gap before they close. A decoy can still burst when the real attack lands, so do not stand on any marked spot.' },
+				{ h: 'Mini-bosses', p: 'The Frostbound Knight, Magma Warden, Storm Raptor and Elder Treant each fight with their own moveset, and every big attack is marked first: a filling warning shape on the ground or in the air. Ground waves can be jumped. After a heavy attack they need a moment to recover, which is your chance to strike. The Knight can raise his GUARD: strike him then and he counters.' },
+				{ h: 'Mini-boss tiers', p: '★ Alpha versions chain attacks together and make bigger patterns. ★★ Elder versions look different and learn new attacks (ice sigils, eruption vents, storm clouds, spore bombs and more). ★★★ Tyrants are a different sight altogether (the Winter Tyrant, Molten Tyrant, Tempest Sovereign and Blighted Elder). They use every attack, reach a second phase under 55% health with an ultimate (Absolute Zero, Meltdown, Eye of the Storm, the World Tree), and are tougher than a dungeon boss. In Survival they climb tiers as the waves go on: Alpha from wave 15, Elder from 30, Tyrant from 45. You can spawn any tier from the Spawn Menu.' },
+				{ h: 'Fair warning', p: 'Hazards that appear on top of you cannot hurt for about half a second, and show a warning ring while they are harmless. Rushes, leaps and strikes from range now charge up first, with a gathering glow and a ! over the enemy. Stand in a hazard after the ring fades and it still hits in full, and enemies already next to you strike without delay.' },
+				{ h: 'Boss versions', p: 'In Survival, some enemies come as boss versions, from wave 5 on. You can tell them by the crown, the name plate and the glowing ring at their feet. They are bigger, tougher and faster, and their attacks are larger, quicker and hit harder, with split shots. <b>★ Alpha</b> (wave 5+) is the first step. <b>★★ Elder</b> (wave 15+) also repeats each attack a moment later and sends out a shockwave along the ground (jump over it when the ground glows). <b>★★★ Tyrant</b> (wave 30+) also becomes enraged at half health and bursts into a ring of shards. They show up more often as the waves climb, and they drop extra loot.' }
 			] },
 
 		/* ============================== WORLD */
@@ -596,7 +601,8 @@
 			intro: 'The place to experiment.',
 			sections: [
 				{ h: 'Sandbox', list: ['Training dummies to test damage.', 'No risk: try every spell and weapon.', 'Press P for the training yard, F8 for hitboxes.'] },
-				{ h: '⚔ Mage Arena', p: 'A huge open floor where the rune mages and melee fighters are summoned in the middle. The best practice for PvP.' }
+				{ h: '⚔ Mage Arena', p: 'A huge open floor where the rune mages and melee fighters are summoned in the middle. The best practice for PvP.' },
+				{ h: '☰ Spawn Menu', p: 'In the Sandbox and the Mage Arena, the green Spawn Menu button opens a list of every enemy, mini-boss and boss (plus the rune mages). Pick a version (Alpha, Elder or Tyrant), add Nightmare mutations, choose how many, and click an entry. Passive makes them stand still and ∞ Training makes them unkillable, so you can test a spell on them. Clear spawned removes them again.' }
 			] },
 
 		{ id: 'pvp', cat: 'modes', icon: '🤺', title: 'PvP duels',
@@ -614,7 +620,7 @@
 			intro: 'Huge bosses with tens of thousands of HP, several phases and attacks you have to learn.',
 			sections: [
 				{ h: 'The raids', keys: [
-					['🌑 The Void Arbiter', '50,000 HP, 3 phases — lasers, spikes, void storms and rifts'],
+					['🌑 The Void Arbiter', '50,000 HP, 3 phases — sweeping lances, marching eruptions, mirror reflections, a sentence you share by stacking, a damage check and an encroaching void. In co-op he hunts a new player after every attack; he enrages after 7 minutes'],
 					['⌛ The Chrono Tyrant', '60,000 HP, 3 phases — time vortices, chrono dashes and rewinds'],
 					['✦ Zenith', 'Four stages; its seven Wills adapt to the way you play']
 				] },

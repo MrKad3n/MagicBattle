@@ -40,9 +40,11 @@ function rosterFloor(x, y){ return (typeof fireKitFloorY === 'function') ? fireK
 function rosterBlocked(x, y){ return (typeof fireKitBlocked === 'function') ? fireKitBlocked(x, y) : false; }
 function rosterShake(a, t){ if(typeof shakeScreen === 'function') shakeScreen(a, t); }
 function rosterTele(x, y, w, h, frames, color, label){
-	if(typeof spawnTelegraph === 'function') spawnTelegraph(x, y, w, h, frames, color || 'rgba(255,140,40,0.28)', 'rect', label || '');
+	if(typeof efxTelegraph === 'function') efxTelegraph(x, y, w, h, frames, color || 'rgba(255,140,40,0.28)', 'rect', label || '');
+	else if(typeof spawnTelegraph === 'function') spawnTelegraph(x, y, w, h, frames, color || 'rgba(255,140,40,0.28)', 'rect', label || '');
 }
 function rosterSpark(x, y, n, color){
+	if(window.EFX){ EFX.sparkRGB(x, y, n, color, 'fire'); return; }
 	if(typeof particles === 'undefined') return;
 	const c = color || { r: 255, g: 120, b: 50 };
 	for(let i = 0; i < Math.min(n || 10, 20); i++){
@@ -60,12 +62,27 @@ function rosterSpawn(en, x, y, vx, vy, opts){
 	if(p){
 		p._rosterStyle = opts._rosterStyle || 'orb';
 		p._rosterEn = en;
+		p._efxEl = rosterStyleEl(p._rosterStyle, en);
 		if(rosterFriend(en)){
 			if(typeof markNecroFriendlyProj === 'function') markNecroFriendlyProj(p, en);
 			else p.necroFriendly = true;
 		}
 	}
 	return p;
+}
+function rosterKitEl(en){
+	const t = rosterType(en);
+	if(t === 'cinderBeetle' || t === 'furnaceLeech' || t === 'magmaHarvester') return 'magma';
+	if(t === 'ashRevenant') return 'fire';
+	if(t === 'frostMantis' || t === 'glacierEel' || t === 'snowboundMimic') return 'ice';
+	if(t === 'crystalScarab') return 'crystal';
+	if(t === 'pollenMoth') return 'spore';
+	if(t === 'rootParasite' || t === 'barkbackBeetle' || t === 'jungleChameleon') return 'nature';
+	return 'fire';
+}
+function rosterStyleEl(st, en){
+	const map = { siphon: 'magma', ember: 'fire', ash: 'fire', shard: 'crystal', ice: 'ice', frost: 'ice', crystal: 'crystal', pollen: 'spore', spore: 'spore', splinter: 'nature', bark: 'nature', thorn: 'nature', seed: 'nature', tongue: 'nature', mana: 'shadow' };
+	return map[st] || rosterKitEl(en);
 }
 function rosterHit(en, x, y, r, dmg, effects){
 	r = rosterAtkS(r);
@@ -85,7 +102,9 @@ function rosterHit(en, x, y, r, dmg, effects){
 	}
 	if(player.iFrames > 0) return false;
 	if(circRect(x, y, r, player.x, player.y, player.w, player.h)){
+		if(window.EFX && EFX.armed(en, x, y, r)) return false;      // fair arming (enemy-fx.js)
 		damagePlayer(dmg, effects || []);
+		if(window.EFX) EFX.hit(player.x + player.w / 2, player.y + player.h / 2, rosterKitEl(en), dmg * 0.5);
 		return true;
 	}
 	return false;
@@ -126,6 +145,7 @@ function beginRosterKit(en, kind, extra){
 	en.attackAnimTimer = Math.max(en.attackAnimTimer || 0, 48);
 	const aim = rosterAim(en);
 	en.facing = aim.x >= en.x + en.w / 2 ? 1 : -1;
+	if(window.EFX) EFX.charge(en.x + en.w / 2, en.y + en.h / 2, rosterKitEl(en), Math.max(40, en.w * 1.3), 8, 16);
 	return en.rosterKit;
 }
 
@@ -151,8 +171,17 @@ function rosterEnsure(en){
 	return r;
 }
 
+let rosterChildUid = 0;
+function rosterChildCount(type){
+	if(typeof enemies === 'undefined') return 0;
+	let n = 0;
+	for(let i = 0; i < enemies.length; i++){ const e = enemies[i]; if(e && !e.dead && e._rosterChild && (!type || e.type === type)) n++; }
+	return n;
+}
 function rosterSpawnEnemy(type, x, y, extra){
 	if(typeof ENEMY_TYPES === 'undefined' || !ENEMY_TYPES[type] || typeof enemies === 'undefined') return null;
+	// hard ceiling on split-off children alive at once, whatever spawns them
+	if(rosterChildCount() >= 10) return null;
 	const t = ENEMY_TYPES[type];
 	const sizeM = (typeof DIFF_SIZE_MULT === 'number') ? DIFF_SIZE_MULT : 1.4;
 	const hpM = (typeof DIFF_HP_MULT === 'number') ? DIFF_HP_MULT : 1;
@@ -177,6 +206,14 @@ function rosterSpawnEnemy(type, x, y, extra){
 		if(extra.puzzleSeg != null) en.puzzleSeg = extra.puzzleSeg;
 		if(extra.small) en._rosterSmall = true;
 		if(extra.noBestiary) en._rosterNoBestiary = true;
+		// children belong to the parent's survival wave, so the wave waits for them and clears them;
+		// before this they were never counted or cleared and piled up wave after wave
+		const par = extra.parent;
+		if(par){
+			if(par._surv){ en._surv = true; en._wave = par._wave; }
+			if(par._worldFoe) en._worldFoe = par._worldFoe;
+			if(par._coopKey) en._coopKey = par._coopKey + '_c' + (++rosterChildUid);
+		}
 	}
 	enemies.push(en);
 	return en;
@@ -279,6 +316,20 @@ function castLeechFurnaceFeeding(en){
 	beginRosterKit(en, 'furnaceFeeding', { busy: true });
 }
 function castLeechMoltenSplit(en){
+	if(en._rosterSmall || en.hp > en.maxHp * 0.5){
+		// not hurt enough to split yet: lob three molten globs instead
+		const aim = rosterAim(en);
+		beginRosterKit(en, 'moltenSplit', { busy: false });
+		for(let i = 0; i < 3; i++){
+			const tx = aim.x + (i - 1) * 60, ox = en.x + en.w / 2, oy = en.y + en.h / 2, T = 32 + i * 4;
+			rosterSpawn(en, ox, oy, (tx - ox) / T, (aim.y - oy) / T - 0.5 * 0.25 * T, {
+				color: '#ff6622', color2: '#ffe080', power: 18, width: 26, height: 26,
+				shape: 'circle', effects: ['burn'], trail: 'flame', gravity: 0.25, maxAge: 90, _rosterStyle: 'glob'
+			});
+		}
+		setTimeout(function(){ if(en && en.rosterKit && en.rosterKit.kind === 'moltenSplit') rosterEnd(en); }, 300);
+		return;
+	}
 	beginRosterKit(en, 'moltenSplit', { busy: false });
 	leechDoSplit(en);
 }
@@ -317,7 +368,9 @@ function castHarvesterMoltenSweep(en){
 }
 function castHarvesterCoreDischarge(en){
 	const r = rosterEnsure(en);
-	beginRosterKit(en, 'coreDischarge', { busy: true, ang: -1.2, heat: r.heat });
+	const aim = rosterAim(en);
+	const base = Math.atan2(aim.y - (en.y + en.h * 0.38), aim.x - (en.x + en.w / 2)), dir = Math.random() < 0.5 ? 1 : -1;
+	beginRosterKit(en, 'coreDischarge', { busy: true, ang: base - dir * 1.1, dir, heat: r.heat });
 }
 function castHarvesterOverheated(en){
 	beginRosterKit(en, 'overheated', { busy: true, interrupted: 0 });
@@ -427,7 +480,14 @@ function castMothFlutterBurst(en){
 	beginRosterKit(en, 'flutterBurst', { busy: true, hops: 0, next: 6 });
 }
 function castMothMigration(en){
-	rosterEnsure(en).migrated = true;
+	// Migration splits the moth into three small ones. It is on the normal spell list too,
+	// so without these guards every small moth could split again and the swarm grew without limit.
+	const r0 = rosterEnsure(en);
+	if(en._rosterSmall || r0.migrated || en.hp > en.maxHp * 0.6 || rosterChildCount('pollenMoth') >= 6){
+		castMothFlutterBurst(en);
+		return;
+	}
+	r0.migrated = true;
 	const room = (typeof dungeon !== 'undefined' && dungeon && dungeon.rooms && en.roomId != null) ? dungeon.rooms[en.roomId] : null;
 	const destX = room ? room.x + room.w - 80 : en.x + 420;
 	beginRosterKit(en, 'migration', { busy: true, destX: destX, spawned: false });
@@ -590,7 +650,8 @@ function tickFurnaceLeech(en, kit){
 		}
 		if(kit.t === 8){
 			for(let i = 0; i < 5; i++){
-				const a = -1.1 + i * 0.55;
+				const base = Math.atan2(aim.y - (en.y + en.h / 2), aim.x - (en.x + en.w / 2));
+				const a = base + (i - 2) * 0.22;
 				rosterSpawn(en, en.x + en.w / 2, en.y + en.h / 2, Math.cos(a) * 9.2, Math.sin(a) * 9.2, {
 					color: '#ff8844', color2: '#ffe080', power: 20, width: 28, height: 28,
 					shape: 'circle', effects: ['burn'], trail: 'flame', maxAge: 70, _rosterStyle: 'siphon'
@@ -606,9 +667,13 @@ function tickAshRevenant(en, kit){
 	const aim = rosterAim(en);
 	if(kit.kind === 'ashenStrike'){
 		if(kit.t < 10){
-			en.vx = (aim.x >= en.x + en.w / 2 ? 1 : -1) * 8.5;
+			// a smoky rush that covers most of the gap
+			const gap = Math.abs(aim.x - (en.x + en.w / 2)) - 60;
+			en.vx = (aim.x >= en.x + en.w / 2 ? 1 : -1) * Math.max(4, Math.min(22, gap / (10 - kit.t + 1)));
 			en.x += en.vx;
+			if(window.EFX && kit.t % 2 === 0) EFX.smoke(en.x + en.w / 2, en.y + en.h * 0.6, 1, { size: 12, c: '#3a302a', a: 0.5 });
 		} else if(kit.t === 10){
+			if(window.EFX) EFX.slash(en.x + en.w / 2 + en.facing * en.w * 0.5, en.y + en.h * 0.45, en.facing > 0 ? 0 : Math.PI, 56, 2.4, 'fire', { dir: en.facing, width: 20 });
 			kit.hit = rosterHit(en, en.x + en.w * (en.facing > 0 ? 0.95 : 0.05), en.y + en.h * 0.4, 72, rosterDmg(34), ['burn']);
 			if(!kit.hit){
 				const pile = { kind: 'ashPile', x: en.x + en.w * (en.facing > 0 ? 1.1 : -0.2), y: rosterFloor(en.x, en.y) - 10, hp: 28, age: 0, max: 420, en: en };
@@ -651,13 +716,17 @@ function tickAshRevenant(en, kit){
 			rosterEnd(en);
 		}
 	} else if(kit.kind === 'lastEmber'){
-		if(kit.t === 6){
+		if(kit.t < 14){ const dx = aim.x - (en.x + en.w / 2); en.x += Math.sign(dx) * Math.min(Math.max(0, Math.abs(dx) - 40), 14); if(window.EFX && kit.t % 2 === 0) EFX.emit('fire', en.x + en.w / 2, en.y + en.h / 2, 3, { speed: 1.5 }); }
+		if(kit.t === 14){
+			if(window.EFX){ EFX.burst(en.x + en.w / 2, en.y + en.h / 2, 'fire', 2.6); EFX.ring(en.x + en.w / 2, en.y + en.h / 2, 20, rosterAtkS(110), 'fire', 20, { width: 8 }); }
 			rosterHit(en, en.x + en.w / 2, en.y + en.h / 2, 110, rosterDmg(36), ['burn']);
 			rosterSpark(en.x + en.w / 2, en.y + en.h / 2, 22, { r: 255, g: 90, b: 30 });
 		}
-		if(kit.t > 18) rosterEnd(en);
+		if(kit.t > 26) rosterEnd(en);
 	}
 }
+
+function tickMagmaHarvester(en, kit){
 	const r = rosterEnsure(en);
 	const aim = rosterAim(en);
 	if(kit.kind === 'heatCollection'){
@@ -675,17 +744,24 @@ function tickAshRevenant(en, kit){
 			kit.swung = true;
 			const dir = aim.x >= en.x + en.w / 2 ? 1 : -1;
 			rosterHit(en, en.x + en.w / 2 + dir * kit.rad * 0.5, en.y + en.h * 0.65, kit.rad * 0.95, rosterDmg(32 + r.heat * 0.2), ['burn']);
+			if(window.EFX){ EFX.slash(en.x + en.w / 2, en.y + en.h * 0.55, dir > 0 ? 0.3 : Math.PI - 0.3, kit.rad * 0.7, 2.6, 'magma', { dir, width: 26, life: 16 }); for(let k = 0; k < 6; k++) EFX.debris('magma', en.x + en.w / 2 + dir * kit.rad * (0.3 + k * 0.12), en.y + en.h - 6, 1, { speed: 5 }); }
 			rosterShake(8, 12);
 		}
 		if(kit.t > 32) rosterEnd(en);
 	} else if(kit.kind === 'coreDischarge'){
-		kit.ang += 0.07;
 		const ox = en.x + en.w / 2, oy = en.y + en.h * 0.38;
-		for(let d = 16; d < 420; d += 18){
-			const x = ox + Math.cos(kit.ang) * d, y = oy + Math.sin(kit.ang) * d;
-			if(kit.t % 2 === 0) rosterHit(en, x, y, 28, rosterDmg(18 + r.heat * 0.12), ['burn']);
+		kit.len = 0;
+		if(kit.t > 12){
+			kit.ang += 0.045 * (kit.dir || 1);
+			for(let d = 16; d < 440; d += 18){
+				const x = ox + Math.cos(kit.ang) * d, y = oy + Math.sin(kit.ang) * d;
+				kit.len = d;
+				if(rosterBlocked(x, y)) break;
+				if(kit.t % 8 === 0) rosterHit(en, x, y, 16, rosterDmg(14 + r.heat * 0.1), ['burn']);
+			}
+			if(window.EFX && kit.t % 2 === 0) EFX.sparks('magma', ox + Math.cos(kit.ang) * kit.len, oy + Math.sin(kit.ang) * kit.len, 2, { speed: 5 });
 		}
-		if(kit.t > 55){ r.heat = Math.max(0, r.heat - 40); rosterEnd(en); }
+		if(kit.t > 62){ r.heat = Math.max(0, r.heat - 40); rosterEnd(en); }
 	} else if(kit.kind === 'overheated'){
 		en.vx = 0;
 		en._rosterVulnerable = true;
@@ -697,7 +773,8 @@ function tickAshRevenant(en, kit){
 			return;
 		}
 		if(kit.t > 90){
-			rosterHit(en, en.x + en.w / 2, en.y + en.h / 2, 240, rosterDmg(48), ['burn']);
+			rosterHit(en, en.x + en.w / 2, en.y + en.h / 2, 150, rosterDmg(48), ['burn']);
+			if(window.EFX){ EFX.burst(en.x + en.w / 2, en.y + en.h / 2, 'magma', 3); EFX.ring(en.x + en.w / 2, en.y + en.h / 2, 30, rosterAtkS(150), 'magma', 24, { width: 10 }); EFX.groundWave(en.x + en.w / 2, en.y + en.h, rosterAtkS(150), 'magma', 26); }
 			rosterShake(12, 18);
 			r.heat = 0;
 			en._rosterVulnerable = false;
@@ -715,8 +792,10 @@ function tickFrostMantis(en, kit){
 	} else if(kit.kind === 'iceStep'){
 		if(kit.t >= kit.next && kit.steps < 3){
 			rosterFX({ kind: 'foot', x: en.x + en.w / 2, y: en.y + en.h, age: 0, max: 90 });
-			en.x += kit.side * 72;
+			const fwd = aim.x >= en.x + en.w / 2 ? 1 : -1;
+			en.x += fwd * Math.min(100, Math.abs(aim.x - (en.x + en.w / 2)) * 0.45 + 30) + kit.side * 10;
 			en.y += (kit.steps === 1 ? -16 : 8);
+			if(window.EFX){ EFX.emit('ice', en.x + en.w / 2, en.y + en.h, 5, { speed: 1.5 }); EFX.slash(en.x + en.w / 2, en.y + en.h * 0.5, fwd > 0 ? 0 : Math.PI, 40, 2, 'ice', { dir: kit.side, width: 12, life: 10 }); }
 			if(typeof unstuckFromTiles === 'function') unstuckFromTiles(en);
 			rosterHit(en, en.x + en.w / 2, en.y + en.h * 0.5, 54, rosterDmg(18), ['freeze']);
 			kit.steps++;
@@ -725,7 +804,13 @@ function tickFrostMantis(en, kit){
 		}
 		if(kit.t > 32) rosterEnd(en);
 	} else if(kit.kind === 'frostblade'){
+		if(!kit.closed){
+			const dx = aim.x - (en.x + en.w / 2);
+			if(Math.abs(dx) > 80 && kit.t < 24){ en.x += Math.sign(dx) * 15; kit.next = kit.t + 1; if(window.EFX && kit.t % 2 === 0) EFX.emit('ice', en.x + en.w / 2, en.y + en.h * 0.6, 2, { speed: 1 }); return; }
+			kit.closed = true;
+		}
 		if(kit.t >= kit.next && kit.slash < 3){
+			if(window.EFX){ const fd = aim.x >= en.x + en.w / 2 ? 1 : -1; EFX.slash(en.x + en.w / 2 + fd * 20, en.y + en.h * 0.4, Math.atan2(aim.y - (en.y + en.h * 0.4), aim.x - (en.x + en.w / 2)), 48, 2.4, 'ice', { dir: kit.slash % 2 ? -1 : 1, width: 16, life: 10 }); }
 			const pred = kit.slash === 2;
 			const tx = pred ? aim.x + aim.vx * 12 : aim.x;
 			const ty = pred ? aim.y + aim.vy * 6 : aim.y;
@@ -736,7 +821,8 @@ function tickFrostMantis(en, kit){
 			kit.slash++;
 			kit.next = kit.t + 6;
 		}
-		if(kit.t > 28) rosterEnd(en);
+		if(kit.slash >= 3 && kit.t >= kit.next + 4) rosterEnd(en);
+		if(kit.t > 60) rosterEnd(en);
 	} else if(kit.kind === 'winterCounter'){
 		en.vx = 0;
 		if(kit.struck && kit.t < kit.struck + 12){
@@ -762,16 +848,18 @@ function tickGlacierEel(en, kit){
 		}
 		if(kit.t > 40) rosterEnd(en);
 	} else if(kit.kind === 'snapTurn'){
-		en.vx = 0;
+		if(!kit.dashed) en.vx = 0;
 		if(kit.t === 8 && !kit.dashed){
 			kit.dashed = true;
-			en.vx = Math.cos(kit.ang) * 16;
-			en.vy = Math.sin(kit.ang) * 7;
+			kit.ang = Math.atan2(aim.y - (en.y + en.h / 2), aim.x - (en.x + en.w / 2));
+			kit.dvx = Math.cos(kit.ang) * 16; kit.dvy = Math.sin(kit.ang) * 7;
 		}
 		if(kit.dashed){
-			en.x += en.vx;
-			en.y += en.vy * 0.45;
-			rosterHit(en, en.x + en.w / 2, en.y + en.h / 2, 48, rosterDmg(26), ['freeze']);
+			en.x += kit.dvx;
+			en.y += kit.dvy * 0.45;
+			if(!kit.hit && rosterHit(en, en.x + en.w / 2, en.y + en.h / 2, 30, rosterDmg(26), ['freeze'])) kit.hit = true;
+			if(window.EFX && kit.t % 2 === 0) EFX.emit('ice', en.x + en.w / 2, en.y + en.h / 2, 2, { speed: 1 });
+			if(rosterBlocked(en.x + en.w / 2 + Math.sign(kit.dvx) * (en.w * 0.6 + 4), en.y + en.h / 2)) kit.t = 999;
 		}
 		if(kit.t > 28) rosterEnd(en);
 	} else if(kit.kind === 'frostLoop'){
@@ -868,13 +956,19 @@ function tickSnowboundMimic(en, kit){
 		r.disguised = true;
 		en._rosterCamo = true;
 		en._rosterCamoAlpha = 0.95;
-		if(Math.hypot(aim.x - (en.x + en.w / 2), aim.y - (en.y + en.h / 2)) < 110 || kit.t > 80){
+		if(!kit.leap && (Math.hypot(aim.x - (en.x + en.w / 2), aim.y - (en.y + en.h / 2)) < 160 || kit.t > 70)){
 			r.disguised = false;
 			en._rosterCamo = false;
 			en._rosterCamoAlpha = 1;
-			en.vy = -8;
-			rosterHit(en, en.x + en.w / 2, en.y + en.h / 2, 80, rosterDmg(28), ['freeze']);
-			rosterEnd(en);
+			kit.leap = { t0: kit.t, x0: en.x, y0: en.y, tx: aim.x - en.w / 2 };
+			if(window.EFX){ EFX.burst(en.x + en.w / 2, en.y + en.h / 2, 'ice', 1.6); EFX.debris('ice', en.x + en.w / 2, en.y + en.h / 2, 10, { kind: 'shard', speed: 7 }); }
+		}
+		if(kit.leap){
+			const u = Math.min(1, (kit.t - kit.leap.t0) / 18);
+			en.x = kit.leap.x0 + (kit.leap.tx - kit.leap.x0) * u;
+			en.y = kit.leap.y0 - Math.sin(u * Math.PI) * 90;
+			if(!kit.hit && rosterHit(en, en.x + en.w / 2, en.y + en.h / 2, 30, rosterDmg(28), ['freeze'])) kit.hit = true;
+			if(u >= 1){ en.y = kit.leap.y0; if(window.EFX) EFX.groundWave(en.x + en.w / 2, en.y + en.h, 80, 'ice'); rosterEnd(en); }
 		}
 	} else if(kit.kind === 'frozenEcho'){
 		if(kit.t === 4){
@@ -888,9 +982,11 @@ function tickSnowboundMimic(en, kit){
 			r.echo.y += (en.y - r.echo.y) * 0.15;
 		}
 		if(kit.t === 18){
-			en.x += kit.side * 110;
+			if(window.EFX) EFX.flash(en.x + en.w / 2, en.y + en.h / 2, 26, 'ice', 8);
+			en.x = aim.x - (aim.x >= en.x + en.w / 2 ? 50 : -50) - en.w / 2;
 			if(typeof unstuckFromTiles === 'function') unstuckFromTiles(en);
-			rosterHit(en, en.x + en.w / 2, en.y + en.h / 2, 64, rosterDmg(28), ['freeze']);
+			rosterHit(en, en.x + en.w / 2 + (aim.x >= en.x + en.w / 2 ? 30 : -30), en.y + en.h / 2, 40, rosterDmg(28), ['freeze']);
+			if(window.EFX){ EFX.flash(en.x + en.w / 2, en.y + en.h / 2, 26, 'ice', 8); EFX.slash(en.x + en.w / 2, en.y + en.h / 2, aim.x >= en.x + en.w / 2 ? 0 : Math.PI, 40, 2.4, 'ice', { width: 14 }); }
 		}
 		if(kit.t > 36){ if(r.echo) r.echo.dead = true; rosterEnd(en); }
 	} else if(kit.kind === 'avalancheFeint'){
@@ -941,7 +1037,7 @@ function tickBarkbackBeetle(en, kit){
 	} else if(kit.kind === 'splinterBurst'){
 		if(!kit.popped){
 			kit.popped = true;
-			const side = kit.side || 1;
+			const side = rosterAim(en).x >= en.x + en.w / 2 ? 1 : -1;
 			for(let i = -3; i <= 3; i++){
 				rosterSpawn(en, en.x + en.w / 2, en.y + en.h * 0.4, side * 10.5, i * 2.4, {
 					color: '#8a6230', color2: '#c9a066', power: 22, width: 26, height: 18,
@@ -978,6 +1074,14 @@ function tickPollenMoth(en, kit){
 			en._rosterNoHit = true;
 			kit.hidden = true;
 		}
+		if(kit.t > 30 && kit.t % 45 === 0){
+			// the decoy blooms puff stinging pollen at anyone close
+			for(let i = 0; i < kit.blooms.length; i++){
+				const b = kit.blooms[i];
+				if(b.dead || b.real) continue;
+				rosterFX({ kind: 'pollen', x: b.x, y: b.y, r: 56, age: 0, max: 40, en: en, dmg: true });
+			}
+		}
 		for(let i = 0; i < kit.blooms.length; i++){
 			const b = kit.blooms[i];
 			if(b.dead && b.real){
@@ -1012,7 +1116,7 @@ function tickPollenMoth(en, kit){
 			for(let i = 0; i < 3; i++){
 				rosterSpawnEnemy('pollenMoth', en.x + (i - 1) * 28, en.y + 8, {
 					scale: 0.62, hpMul: 0.28, small: true, noBestiary: true,
-					roomId: en.roomId, puzzleSeg: en.puzzleSeg
+					roomId: en.roomId, puzzleSeg: en.puzzleSeg, parent: en
 				});
 			}
 			rosterEnd(en);
@@ -1154,7 +1258,7 @@ function leechDoSplit(en){
 	for(let i = 0; i < 3; i++){
 		rosterSpawnEnemy('furnaceLeech', en.x + (i - 1) * 22, en.y, {
 			scale: 0.7, hpMul: 0.32, small: true, noBestiary: true,
-			roomId: en.roomId, puzzleSeg: en.puzzleSeg
+			roomId: en.roomId, puzzleSeg: en.puzzleSeg, parent: en
 		});
 	}
 	rosterSpark(en.x + en.w / 2, en.y + en.h / 2, 16);
@@ -1314,7 +1418,7 @@ function rosterThink(en){
 	const fn = (typeof CAST_FNS !== 'undefined' && CAST_FNS[sp.castFn])
 		|| (typeof window !== 'undefined' && window[sp.castFn]);
 	if(!fn) return;
-	fn(en);
+	if(window.EFX && EFX.cast) EFX.cast(en, fn, sp.castFn); else { en._castTick = (typeof _simTick === 'number') ? _simTick : 0; fn(en); }
 	en.attackAnimTimer = Math.max(en.attackAnimTimer || 0, 48);
 	en.spellCooldowns[pick] = Math.round((sp.cooldown || 120) * ((typeof DIFF_CD_MULT === 'number') ? DIFF_CD_MULT : 1));
 	en._rosterGcd = 72;
@@ -1348,7 +1452,7 @@ function updateRosterWorld(){
 		if(fx.kind === 'root' && !fx.dead && player.iFrames <= 0){
 			if(circRect(fx.x + fx.w / 2, fx.y + fx.h / 2, 28, player.x, player.y, player.w, player.h)){
 				player._kitSlow = Math.max(player._kitSlow || 0, 0.55);
-				if(fx.age % 8 === 0) damagePlayer(rosterDmg(10), []);
+				if(fx.age >= 30 && fx.age % 8 === 0) damagePlayer(rosterDmg(10), []);      // 30 frames to step off a root that just sprouted under you
 			}
 		}
 		if(fx.kind === 'icePatch' && !fx.shattered && !fx.dead){
@@ -1359,7 +1463,7 @@ function updateRosterWorld(){
 		}
 		if(fx.kind === 'pollen' && circRect(fx.x, fx.y, fx.r, player.x, player.y, player.w, player.h)){
 			player._pollenDrift = Math.max(player._pollenDrift || 0, 110);
-			if(fx.dmg && player.iFrames <= 0 && fx.age % 8 === 0) damagePlayer(rosterDmg(12), []);
+			if(fx.dmg && player.iFrames <= 0 && fx.age >= 30 && fx.age % 8 === 0) damagePlayer(rosterDmg(12), []);
 		}
 		if(fx.kind === 'frozenShot' && !fx.dead && !fx.launched && fx.age >= 48){
 			fx.launched = true;
@@ -1605,173 +1709,292 @@ function rosterKitSheetGrid(en, img){
 }
 
 function drawRosterWorld(){
-	if(typeof ctx === 'undefined' || typeof camera === 'undefined') return;
+	if(typeof ctx === 'undefined' || typeof camera === 'undefined' || !window.EFX) return;
+	EFX.bind();
 	for(let i = 0; i < rosterWorldFX.length; i++){
 		const fx = rosterWorldFX[i];
 		if(!fx || fx.dead) continue;
+		const u = fx.max ? Math.min(1, fx.age / fx.max) : 0, fade = u > 0.85 ? (1 - u) / 0.15 : 1;
 		const x = fx.x - camera.x, y = (fx.y || 0) - camera.y;
-		ctx.save();
 		if(fx.kind === 'ring'){
-			ctx.strokeStyle = fx.color || 'rgba(255,90,20,0.5)';
-			ctx.lineWidth = 3;
-			ctx.beginPath(); ctx.arc(x, y, fx.r * (0.65 + fx.age / fx.max * 0.4), 0, Math.PI * 2); ctx.stroke();
+			// a heat ring pulsing out of the cinder beetle
+			const rr = fx.r * (0.55 + u * 0.5);
+			ctx.save(); ctx.globalCompositeOperation = 'lighter';
+			ctx.strokeStyle = 'rgba(255,90,20,' + (0.6 * (1 - u)) + ')'; ctx.lineWidth = 12 * (1 - u) + 2;
+			ctx.beginPath(); ctx.arc(x, y, rr, 0, Math.PI * 2); ctx.stroke();
+			ctx.strokeStyle = 'rgba(255,230,140,' + (0.8 * (1 - u)) + ')'; ctx.lineWidth = 2;
+			ctx.beginPath(); ctx.arc(x, y, rr, 0, Math.PI * 2); ctx.stroke();
+			ctx.restore();
 		} else if(fx.kind === 'ashPile'){
-			ctx.fillStyle = 'rgba(70,50,40,0.9)';
-			ctx.beginPath(); ctx.ellipse(x, y, 16, 7, 0, 0, Math.PI * 2); ctx.fill();
-			ctx.fillStyle = 'rgba(255,120,40,0.35)';
-			ctx.beginPath(); ctx.arc(x, y - 4, 4, 0, Math.PI * 2); ctx.fill();
+			// a smouldering heap of ash with embers breathing inside
+			const breath = 0.5 + 0.5 * Math.sin(fx.age * 0.12 + i);
+			ctx.save();
+			const g = ctx.createRadialGradient(x, y - 4, 2, x, y, 20);
+			g.addColorStop(0, '#5a4a40'); g.addColorStop(1, 'rgba(30,24,20,0.2)');
+			ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x, y, 20, 9, 0, Math.PI, 0); ctx.quadraticCurveTo(x, y + 3, x - 20, y); ctx.fill();
+			ctx.globalCompositeOperation = 'lighter';
+			EFX.glowS(x - 4, y - 3, 8, '#ff6a12', 0.4 + 0.4 * breath, true);
+			EFX.glowS(x + 6, y - 2, 5, '#ffa526', 0.3 + 0.3 * (1 - breath), true);
+			ctx.restore();
+			if(fx.reform && fx.age % 6 === 0) EFX.mote('fire', fx.x, fx.y - 6, 0, -1, 0.7);
 		} else if(fx.kind === 'ember'){
-			const g = 0.5 + Math.sin(fx.age * 0.2) * 0.5;
-			ctx.fillStyle = 'rgba(255,' + Math.round(80 + g * 80) + ',20,0.95)';
-			ctx.beginPath(); ctx.arc(x, y, 5 + g * 2, 0, Math.PI * 2); ctx.fill();
+			// the revenant's last ember — break it before it rekindles
+			const k = Math.min(1, fx.age / (fx.max || 480)), beat = 0.5 + 0.5 * Math.sin(fx.age * (0.15 + k * 0.4));
+			ctx.save(); ctx.globalCompositeOperation = 'lighter';
+			EFX.glowS(x, y - 6, 22 + 14 * k, '#ff4a0a', 0.5 + 0.3 * beat);
+			EFX.glowS(x, y - 6, 8 + 3 * beat, '#fff4c8', 0.9, true);
+			ctx.restore();
+			if(fx.age % 3 === 0) EFX.mote('fire', fx.x, fx.y - 8, 0, -1);
 		} else if(fx.kind === 'icePatch'){
-			if(fx.shattered){ ctx.restore(); continue; }
-			ctx.fillStyle = 'rgba(180,220,255,0.35)';
-			ctx.fillRect(x, y, fx.w || 70, fx.h || 10);
+			if(fx.shattered) continue;
+			const a = Math.min(1, fx.age / 8) * fade, w = fx.w || 70;
+			ctx.save(); ctx.globalAlpha = a;
+			const g = ctx.createLinearGradient(0, y, 0, y + 10);
+			g.addColorStop(0, 'rgba(240,252,255,0.85)'); g.addColorStop(1, 'rgba(120,190,255,0.5)');
+			ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x + w / 2, y + 6, w / 2, 6, 0, 0, Math.PI * 2); ctx.fill();
+			ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 1;
+			ctx.beginPath(); ctx.moveTo(x + w * 0.2, y + 4); ctx.lineTo(x + w * 0.45, y + 6); ctx.moveTo(x + w * 0.6, y + 3); ctx.lineTo(x + w * 0.75, y + 7); ctx.stroke();
+			ctx.restore();
 		} else if(fx.kind === 'foot'){
-			ctx.fillStyle = fx.leaf ? 'rgba(80,140,50,0.45)' : 'rgba(200,230,255,0.4)';
-			ctx.beginPath(); ctx.ellipse(x, y, 7, 3, 0, 0, Math.PI * 2); ctx.fill();
+			const a = (1 - u) * 0.6;
+			ctx.save(); ctx.globalAlpha = a;
+			if(fx.leaf){ ctx.fillStyle = '#3f8a22'; ctx.beginPath(); ctx.ellipse(x, y, 6, 2.5, 0.3, 0, Math.PI * 2); ctx.fill(); }
+			else { ctx.fillStyle = '#e8f8ff'; for(let k = 0; k < 3; k++){ ctx.beginPath(); ctx.ellipse(x - 5 + k * 5, y, 2.2, 1.4, 0, 0, Math.PI * 2); ctx.fill(); } }
+			ctx.restore();
 		} else if(fx.kind === 'pollen'){
-			ctx.fillStyle = 'rgba(220,210,80,' + (0.18 + (1 - fx.age / fx.max) * 0.2) + ')';
-			ctx.beginPath(); ctx.arc(x, y, fx.r, 0, Math.PI * 2); ctx.fill();
+			// a drifting golden haze
+			const a = (1 - u) * 0.75;
+			ctx.save(); ctx.globalAlpha = a;
+			for(let k = 0; k < 5; k++){
+				const ox = Math.cos(k * 1.3 + fx.age * 0.02) * fx.r * 0.4, oy = Math.sin(k * 2.1 + fx.age * 0.03) * fx.r * 0.25, rr = fx.r * (0.5 + (k % 2) * 0.15);
+				ctx.drawImage(EFX.smokeSprite('#e8d870'), x + ox - rr, y + oy - rr, rr * 2, rr * 2);
+			}
+			ctx.restore();
+			if(fx.age % 2 === 0) EFX.mote('spore', fx.x + (Math.random() - 0.5) * fx.r * 1.4, fx.y + (Math.random() - 0.5) * fx.r * 0.8, 0, 0);
 		} else if(fx.kind === 'bloom'){
-			ctx.fillStyle = fx.real ? '#e8c84a' : '#7ecb5a';
-			ctx.beginPath(); ctx.arc(x, y, 12, 0, Math.PI * 2); ctx.fill();
+			// a flower bud — one hides the moth
+			const sway = Math.sin(fx.age * 0.08 + i) * 0.15, petals = 6, R = 12;
+			ctx.save(); ctx.translate(x, y); ctx.rotate(sway);
+			ctx.strokeStyle = '#3f8a22'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(4, 18, 0, 34); ctx.stroke();
+			for(let k = 0; k < petals; k++){
+				const a = k / petals * Math.PI * 2 + fx.age * 0.01;
+				ctx.fillStyle = k % 2 ? '#f0a8d0' : '#e878b0';
+				ctx.beginPath(); ctx.ellipse(Math.cos(a) * R * 0.6, Math.sin(a) * R * 0.6, R * 0.6, R * 0.32, a, 0, Math.PI * 2); ctx.fill();
+			}
+			ctx.fillStyle = '#ffe070'; ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI * 2); ctx.fill();
+			ctx.restore();
 		} else if(fx.kind === 'echo'){
-			ctx.globalAlpha = 0.4;
-			ctx.fillStyle = '#c8e8ff';
-			ctx.fillRect(x, y, fx.w || 30, fx.h || 36);
+			EFX.ghost(fx.x + (fx.w || 30) / 2, fx.y + (fx.h || 36) / 2, fx.w || 30, fx.h || 36, 'frost', 0.8 * fade, fx.age);
 		} else if(fx.kind === 'whiteout'){
-			ctx.fillStyle = 'rgba(230,240,255,' + (0.22 + (1 - fx.age / fx.max) * 0.2) + ')';
-			ctx.beginPath(); ctx.arc(x, y, fx.r, 0, Math.PI * 2); ctx.fill();
+			// a burst of blinding snow
+			const rr = fx.r * (0.4 + u * 0.7), a = (1 - u) * 0.8;
+			ctx.save(); ctx.globalAlpha = a;
+			for(let k = 0; k < 6; k++){
+				const ang = k / 6 * Math.PI * 2 + fx.age * 0.03, d = rr * 0.5;
+				ctx.drawImage(EFX.smokeSprite('#f4faff'), x + Math.cos(ang) * d - rr * 0.6, y + Math.sin(ang) * d * 0.6 - rr * 0.6, rr * 1.2, rr * 1.2);
+			}
+			ctx.restore();
+			if(fx.age % 2 === 0) EFX.mote('ice', fx.x + (Math.random() - 0.5) * rr * 2, fx.y + (Math.random() - 0.5) * rr, 0, 0);
 		} else if(fx.kind === 'root'){
-			ctx.fillStyle = 'rgba(70,50,30,0.85)';
-			ctx.fillRect(x, y, fx.w || 16, fx.h || 18);
+			// thick roots bursting out of the floor
+			const k = Math.min(1, fx.age / 6), a = fade, w = fx.w || 36, h = (fx.h || 30) * k;
+			const bx = fx.x + w / 2, by = fx.y + (fx.h || 30);
+			for(let j = -1; j <= 1; j++){
+				if(typeof earthDrawVine === 'function') earthDrawVine(bx + j * w * 0.3, by, bx + j * w * 0.45 + Math.sin(fx.age * 0.2 + j) * 3, by - h * (1 - Math.abs(j) * 0.25), 5, a, fx.age + j);
+			}
+			if(fx.age === 1) EFX.debris('earth', bx, by - 4, 4, { speed: 5, floor: by });
 		} else if(fx.kind === 'pulse'){
-			ctx.strokeStyle = 'rgba(90,200,70,0.7)';
-			ctx.lineWidth = 2;
-			ctx.beginPath(); ctx.arc(x, y, 10 + fx.age * 2, 0, Math.PI * 2); ctx.stroke();
+			const a = 1 - u;
+			ctx.save(); ctx.globalCompositeOperation = 'lighter';
+			ctx.strokeStyle = 'rgba(140,230,90,' + (0.8 * a) + ')'; ctx.lineWidth = 3;
+			ctx.beginPath(); ctx.arc(x, y, 10 + fx.age * 3, 0, Math.PI * 2); ctx.stroke();
+			EFX.glowS(x, y, 30, '#8edc48', 0.3 * a);
+			ctx.restore();
 		} else if(fx.kind === 'vineSwing'){
-			ctx.strokeStyle = '#4a8a38';
-			ctx.lineWidth = 4;
-			ctx.beginPath(); ctx.moveTo(x, y - 20); ctx.quadraticCurveTo(x + 40, y, x + 70, y + 30); ctx.stroke();
+			const a = 1 - u, sw = u * 1.6;
+			if(typeof earthDrawVine === 'function') earthDrawVine(fx.x, fx.y - 20, fx.x + Math.cos(sw) * 80, fx.y - 20 + Math.sin(sw) * 70, 6, a, fx.age);
 		} else if(fx.kind === 'frozenShot'){
-			ctx.fillStyle = '#dff6ff';
-			ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI * 2); ctx.fill();
+			// a parried bolt hangs frozen in place, then is flung back
+			const k = Math.min(1, fx.age / 48), sx = x, sy = y;
+			EFX.bolt(fx, fx.x, fx.y, 10 + k * 4, 'ice', { trail: false, ang: fx.age * 0.1 });
+			ctx.save(); ctx.strokeStyle = 'rgba(220,245,255,0.8)'; ctx.lineWidth = 1.5;
+			ctx.beginPath(); ctx.arc(sx, sy, 18, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * k); ctx.stroke(); ctx.restore();
 		}
-		ctx.restore();
 	}
 	if(typeof enemies === 'undefined') return;
 	for(let i = 0; i < enemies.length; i++) drawRosterOverlay(enemies[i]);
 }
 
 function drawRosterOverlay(en){
-	if(!en || en.dead || en._rosterHidden) return;
+	if(!en || en.dead || en._rosterHidden || !window.EFX) return;
 	if(!ROSTER_KIT_TYPES[rosterType(en)]) return;
 	const r = en._roster;
 	if(!r) return;
-	const cx = en.x + en.w / 2 - camera.x, cy = en.y + en.h / 2 - camera.y;
-	ctx.save();
+	const kit = en.rosterKit;
+	const wcx = en.x + en.w / 2, wcy = en.y + en.h / 2;
+	const cx = wcx - camera.x, cy = wcy - camera.y;
 	const type = rosterType(en);
+	ctx.save();
 	if(type === 'cinderBeetle' && r.heat > 8){
-		ctx.strokeStyle = 'rgba(255,80,20,' + (0.25 + r.heat / 200) + ')';
-		ctx.lineWidth = 2;
-		ctx.beginPath(); ctx.arc(cx, cy, 20 + r.heat * 0.12, 0, Math.PI * 2); ctx.stroke();
+		// stored heat glows through the shell
+		ctx.globalCompositeOperation = 'lighter';
+		EFX.glowS(cx, cy, 24 + r.heat * 0.35, '#ff4a0a', 0.25 + r.heat / 200);
+		ctx.globalCompositeOperation = 'source-over';
+		if(kit && kit.kind === 'heatShell' && kit.t % 3 === 0) EFX.charge(wcx, wcy, 'magma', 60, 1, 14);
 	}
-	if(type === 'cinderBeetle' && en.rosterKit && en.rosterKit.kind === 'furnaceBack' && r.plates){
+	if(type === 'cinderBeetle' && kit && kit.kind === 'furnaceBack' && r.plates){
 		for(let i = 0; i < r.plates.length; i++){
 			const pl = r.plates[i];
 			if(!pl || pl.hp <= 0) continue;
-			ctx.fillStyle = '#ff6622';
-			ctx.fillRect(en.x + en.w * pl.x - 5 - camera.x, en.y + en.h * pl.y - 4 - camera.y, 10, 8);
+			const px = en.x + en.w * pl.x - camera.x, py = en.y + en.h * pl.y - camera.y;
+			ctx.save(); ctx.globalCompositeOperation = 'lighter'; EFX.glowS(px, py, 12, '#ff6a12', 0.5 + 0.3 * Math.sin(kit.t * 0.4 + i)); ctx.restore();
+			ctx.fillStyle = '#2a1206'; ctx.fillRect(px - 6, py - 4, 12, 8);
+			ctx.fillStyle = '#ffb040'; ctx.fillRect(px - 4, py - 2, 8, 4);
 		}
 	}
+	if(type === 'cinderBeetle' && kit && kit.kind === 'emberRoll'){
+		if(kit.t % 2 === 0) EFX.emit('fire', wcx, en.y + en.h - 4, 2, { speed: 1.2 });
+	}
+	if(type === 'cinderBeetle' && kit && kit.kind === 'cinderBurst' && kit.t < 48){
+		EFX.warnCircle(wcx, wcy, rosterAtkS(210), kit.t / 48, 'fire', { alpha: 0.5 });
+	}
 	if(type === 'magmaHarvester'){
-		const glow = 0.25 + (r.heat || 0) / 140;
-		ctx.fillStyle = 'rgba(255,90,20,' + glow + ')';
-		ctx.beginPath(); ctx.arc(cx, en.y + en.h * 0.28 - camera.y, 8 + (r.heat || 0) * 0.06, 0, Math.PI * 2); ctx.fill();
+		const heat = (r.heat || 0) / 100, coreY = en.y + en.h * 0.28 - camera.y;
+		ctx.save(); ctx.globalCompositeOperation = 'lighter';
+		EFX.glowS(cx, coreY, 14 + heat * 26, '#ff6a12', 0.35 + heat * 0.5);
+		EFX.glowS(cx, coreY, 6 + heat * 5, '#fff0a0', 0.6 + heat * 0.4, true);
+		ctx.restore();
+		if(kit && kit.kind === 'heatCollection' && kit.t % 2 === 0) EFX.charge(wcx, en.y + en.h * 0.28, 'magma', 110, 1, 18);
+		if(kit && kit.kind === 'coreDischarge'){
+			const ox = wcx, oy = en.y + en.h * 0.38;
+			if(kit.t <= 12){ EFX.warnLine(ox, oy, ox + Math.cos(kit.ang) * 400, oy + Math.sin(kit.ang) * 400, 18, kit.t / 12, 'magma', { alpha: 0.6 }); EFX.charge(ox, oy, 'magma', 40, 2, 10); }
+			else EFX.beam(ox, oy, ox + Math.cos(kit.ang) * (kit.len || 300), oy + Math.sin(kit.ang) * (kit.len || 300), 7, 'magma', { speed: 10 });
+		}
+		if(kit && kit.kind === 'overheated'){
+			EFX.warnCircle(wcx, wcy, rosterAtkS(150), kit.t / 90, 'magma', { alpha: 0.7 });
+			if(kit.t % 2 === 0) EFX.sparks('magma', wcx, wcy, 2, { speed: 4 });
+		}
+		if(kit && kit.kind === 'moltenSweep' && !kit.swung){
+			const dir = rosterAim(en).x >= wcx ? 1 : -1;
+			EFX.charge(wcx + dir * 20, en.y + en.h * 0.5, 'magma', 50, 1, 10);
+		}
 	}
 	if(type === 'crystalScarab' && r.armor){
-		const dirs = [[0, -18], [20, 0], [0, 16], [-20, 0]];
+		// four crystal plates; the bare side is the weak point
+		const dirs = [[0, -1], [1, 0], [0, 1], [-1, 0]];
 		for(let i = 0; i < 4; i++){
-			if(!r.armor[i]) continue;
-			ctx.fillStyle = 'rgba(180,230,255,0.55)';
-			ctx.fillRect(cx + dirs[i][0] - 6, cy + dirs[i][1] - 4, 12, 8);
+			const ox = cx + dirs[i][0] * (en.w * 0.55), oy = cy + dirs[i][1] * (en.h * 0.55);
+			if(!r.armor[i]){
+				ctx.save(); ctx.globalCompositeOperation = 'lighter'; EFX.glowS(ox, oy, 10, '#ff8080', 0.35 + 0.2 * Math.sin((kit ? kit.t : 0) * 0.3)); ctx.restore();
+				continue;
+			}
+			ctx.save(); ctx.translate(ox, oy); ctx.rotate(Math.atan2(dirs[i][1], dirs[i][0]) + Math.PI / 2);
+			const g = ctx.createLinearGradient(-8, 0, 8, 0); g.addColorStop(0, '#9a5cff'); g.addColorStop(0.5, '#ffffff'); g.addColorStop(1, '#e6b8ff');
+			ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(-9, 3); ctx.lineTo(0, -8); ctx.lineTo(9, 3); ctx.lineTo(0, 6); ctx.closePath(); ctx.fill();
+			ctx.restore();
 		}
 	}
 	if(type === 'frostMantis' && en._rosterParry){
-		ctx.strokeStyle = 'rgba(160,220,255,0.8)';
-		ctx.lineWidth = 2;
-		ctx.beginPath(); ctx.arc(cx, cy, 26, 0, Math.PI * 2); ctx.stroke();
+		// crossed ice blades held in a parry stance
+		ctx.save(); ctx.globalCompositeOperation = 'lighter';
+		ctx.strokeStyle = 'rgba(220,245,255,0.9)'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+		ctx.beginPath(); ctx.moveTo(cx - 16, cy - 18); ctx.lineTo(cx + 16, cy + 6); ctx.moveTo(cx + 16, cy - 18); ctx.lineTo(cx - 16, cy + 6); ctx.stroke();
+		EFX.glowS(cx, cy - 6, 30, '#4aa6ff', 0.35);
+		ctx.restore();
 	}
 	if(type === 'frostMantis' && en._rosterCounter){
-		ctx.strokeStyle = 'rgba(80,160,255,0.7)';
-		ctx.setLineDash([6, 4]);
-		ctx.beginPath(); ctx.arc(cx, cy, 30, 0, Math.PI * 2); ctx.stroke();
+		const k = kit ? Math.min(1, kit.t / 40) : 1;
+		ctx.save(); ctx.globalCompositeOperation = 'lighter';
+		ctx.strokeStyle = 'rgba(120,190,255,0.75)'; ctx.lineWidth = 2; ctx.setLineDash([6, 5]); ctx.lineDashOffset = -(kit ? kit.t : 0);
+		ctx.beginPath(); ctx.arc(cx, cy, 34 - 6 * k, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+		ctx.restore();
 	}
 	if(type === 'jungleChameleon' && en._rosterCamo){
-		ctx.fillStyle = 'rgba(255,255,200,0.7)';
-		ctx.beginPath(); ctx.arc(cx + 6, cy - 6, 2.2, 0, Math.PI * 2); ctx.fill();
+		// only a glinting eye gives it away
+		ctx.save(); ctx.globalCompositeOperation = 'lighter'; EFX.glowS(cx + en.facing * 8, cy - 6, 5, '#fff8b0', 0.8, true); ctx.restore();
 	}
 	if(type === 'furnaceLeech' && en._leechAttached){
-		ctx.strokeStyle = 'rgba(255,100,40,0.7)';
-		ctx.lineWidth = 2;
-		ctx.beginPath();
-		ctx.moveTo(player.x + player.w / 2 - camera.x, player.y + player.h / 2 - camera.y);
-		ctx.lineTo(cx, cy);
-		ctx.stroke();
+		EFX.beam(wcx, wcy, player.x + player.w / 2, player.y + player.h / 2, 2, 'magma', { alpha: 0.6, speed: -6 });
+		if((kit ? kit.t : 0) % 3 === 0) EFX.add({ k: 'gather', x: player.x + player.w / 2, y: player.y + player.h / 2, sx: player.x + player.w / 2, sy: player.y + player.h / 2, tx: wcx, ty: wcy, size: 2, c: '#c8a0ff', c2: '#7040d0', max: 16 });
 	}
-	if(en.rosterKit && en.rosterKit.kind === 'ashStep' && en.rosterKit.cloud){
-		const c = en.rosterKit.cloud;
-		ctx.fillStyle = 'rgba(80,60,50,0.55)';
-		ctx.beginPath(); ctx.arc(c.x - camera.x, c.y - camera.y, 16, 0, Math.PI * 2); ctx.fill();
+	if(kit && kit.kind === 'ashStep' && kit.cloud && kit.phase === 'throw'){
+		const c = kit.cloud;
+		ctx.save(); ctx.globalAlpha = 0.85;
+		ctx.drawImage(EFX.smokeSprite('#3a302a'), c.x - camera.x - 26, c.y - camera.y - 26, 52, 52);
+		ctx.globalCompositeOperation = 'lighter'; EFX.glowS(c.x - camera.x, c.y - camera.y, 12, '#ff6a12', 0.6);
+		ctx.restore();
+		EFX.warnCircle(kit.tx, kit.ty + en.h, 50, Math.min(1, kit.t / 18), 'fire', { flat: 0.3 });
 	}
-	if(en.rosterKit && en.rosterKit.kind === 'shardToss' && en.rosterKit.shards && !en.rosterKit.fired){
-		for(let i = 0; i < en.rosterKit.shards.length; i++){
-			const s = en.rosterKit.shards[i];
-			ctx.fillStyle = '#d8f4ff';
-			ctx.beginPath(); ctx.arc(s.x - camera.x, s.y - camera.y, 5, 0, Math.PI * 2); ctx.fill();
+	if(kit && kit.kind === 'shardToss' && kit.shards && !kit.fired){
+		for(let i = 0; i < kit.shards.length; i++){
+			const sh = kit.shards[i];
+			sh.age = kit.t; EFX.bolt(sh, sh.x, sh.y + Math.sin(kit.t * 0.3 + i) * 3, 8, 'crystal', { trail: false, ang: Math.atan2((kit.lockY || 0) - sh.y, (kit.lockX || 0) - sh.x), motes: false });
 		}
+		if(kit.lockX != null) EFX.warnCircle(kit.lockX, kit.lockY, 30, (kit.t - 8) / 14, 'crystal');
 	}
-	if(en.rosterKit && en.rosterKit.kind === 'snapTurn'){
-		ctx.strokeStyle = 'rgba(180,220,255,0.7)';
-		ctx.lineWidth = 3;
-		ctx.beginPath();
-		ctx.moveTo(cx, cy);
-		ctx.lineTo(cx + Math.cos(en.rosterKit.ang) * 220, cy + Math.sin(en.rosterKit.ang) * 220);
-		ctx.stroke();
+	if(kit && kit.kind === 'crystalCharge' && kit.t % 2 === 0) EFX.sparks('crystal', wcx - kit.dir * en.w * 0.4, wcy, 2, { speed: 4 });
+	if(kit && kit.kind === 'snapTurn' && !kit.dashed){
+		EFX.warnLine(wcx, wcy, wcx + Math.cos(kit.ang) * 260, wcy + Math.sin(kit.ang) * 260, 30, kit.t / 8, 'ice');
 	}
-	if(en.rosterKit && en.rosterKit.kind === 'tongueStrike'){
-		ctx.strokeStyle = '#e87878';
-		ctx.lineWidth = 10;
-		ctx.lineCap = 'round';
-		ctx.beginPath();
-		ctx.moveTo(cx, en.y + 8 - camera.y);
-		ctx.lineTo(en.rosterKit.tx - camera.x, en.rosterKit.ty - camera.y);
-		ctx.stroke();
+	if(kit && (kit.kind === 'iceCurrent')){
+		const ox = wcx, oy = wcy;
+		EFX.beam(ox, oy, ox + Math.cos(kit.ang) * 360, oy + Math.sin(kit.ang) * 360, 10, 'water', { alpha: 0.7, speed: 12 });
+		if(kit.t % 2 === 0) EFX.mote('ice', ox + Math.cos(kit.ang) * Math.random() * 360, oy + Math.sin(kit.ang) * Math.random() * 360, 0, 0);
+	}
+	if(kit && (kit.kind === 'breakingCharge' || kit.kind === 'frostLoop' || kit.kind === 'rootCharge' || kit.kind === 'barkRoll') && kit.t % 2 === 0){
+		const el = rosterKitEl(en);
+		EFX.emit(el, wcx, en.y + en.h - 4, 2, { speed: 1.2 });
+		if(kit.kind === 'barkRoll' || kit.kind === 'rootCharge') EFX.debris('earth', wcx, en.y + en.h - 4, 1, { speed: 3, scale: 0.6 });
+	}
+	if(kit && kit.kind === 'tongueStrike'){
+		// a sticky tongue that snaps out and back
+		const k = kit.t < 6 ? kit.t / 6 : Math.max(0, 1 - (kit.t - 6) / 10);
+		const ox = wcx, oy = en.y + 8, tx = ox + ((kit.tx || ox) - ox) * k, ty = oy + ((kit.ty || oy) - oy) * k;
+		ctx.save(); ctx.lineCap = 'round';
+		ctx.strokeStyle = '#a83a4a'; ctx.lineWidth = 7; ctx.beginPath(); ctx.moveTo(ox - camera.x, oy - camera.y); ctx.lineTo(tx - camera.x, ty - camera.y); ctx.stroke();
+		ctx.strokeStyle = '#f0909c'; ctx.lineWidth = 3; ctx.stroke();
+		ctx.fillStyle = '#e86878'; ctx.beginPath(); ctx.arc(tx - camera.x, ty - camera.y, 7, 0, Math.PI * 2); ctx.fill();
+		ctx.restore();
+	}
+	if(kit && kit.kind === 'flutterBurst' && kit.t % 2 === 0) EFX.mote('spore', wcx, wcy, 0, 0, 1.2);
+	if(kit && kit.kind === 'falseCrystal' && !kit.leap && r.disguised){
+		// the mimic's disguise: an ice crystal that sometimes blinks an eye
+		EFX.spike(wcx, en.y + en.h + 2, en.h * 1.1, en.w * 0.9, 'ice', {});
+		if(Math.sin(kit.t * 0.07) > 0.95){ ctx.save(); ctx.globalCompositeOperation = 'lighter'; EFX.glowS(cx, cy, 6, '#ff5050', 0.8, true); ctx.restore(); }
+	}
+	if(kit && kit.kind === 'avalancheFeint' && kit.t < 16) EFX.charge(wcx, wcy, 'ice', 60, 2, 12);
+	if(kit && kit.kind === 'forcedBloom' && (kit.host || r.host) && !kit.slammed){
+		const h = kit.host || r.host;
+		EFX.warnCircle(h.x, h.y, rosterAtkS(110) * 0.6, kit.t / 22, 'nature');
+	}
+	if(type === 'barkbackBeetle' && r.armored && r.armor > 0){
+		ctx.save(); ctx.globalAlpha = 0.55 + 0.45 * (r.armor / 140);
+		ctx.strokeStyle = '#5a3a1a'; ctx.lineWidth = 4;
+		ctx.beginPath(); ctx.ellipse(cx, cy - 2, en.w * 0.62, en.h * 0.55, 0, Math.PI * 1.05, Math.PI * 1.95); ctx.stroke();
+		ctx.strokeStyle = '#a8794a'; ctx.lineWidth = 1.5; ctx.stroke();
+		ctx.restore();
 	}
 	ctx.restore();
 }
 
 function drawRosterKitProj(p){
 	if(!p || !p._rosterStyle) return false;
-	const px = p.x - camera.x, py = p.y - camera.y;
-	ctx.save();
-	if(p._rosterStyle === 'siphon'){
-		const r = 16 + Math.sin((p.age || 0) * 0.3) * 4;
-		ctx.fillStyle = '#ff6622';
-		ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.fill();
-	} else if(p._rosterStyle === 'shard' || p._rosterStyle === 'return'){
-		ctx.fillStyle = '#e8f6ff';
-		ctx.beginPath(); ctx.moveTo(px, py - 14); ctx.lineTo(px + 9, py + 10); ctx.lineTo(px - 9, py + 10); ctx.fill();
-	} else if(p._rosterStyle === 'splinter'){
-		ctx.fillStyle = '#8a6230';
-		ctx.fillRect(px - 9, py - 4, 18, 8);
-	} else {
-		ctx.fillStyle = p.color || '#ff8844';
-		ctx.beginPath(); ctx.arc(px, py, 12, 0, Math.PI * 2); ctx.fill();
+	if(!window.EFX) return false;
+	const st = p._rosterStyle, r = Math.max(p.width, p.height) * 0.42;
+	if(st === 'siphon') EFX.bolt(p, p.x, p.y, r * 0.8, p._stolen ? 'magma' : 'fire', { trailLen: 9 });
+	else if(st === 'glob') EFX.bolt(p, p.x, p.y, r * 0.85, 'magma', { trailLen: 6 });
+	else if(st === 'shard') EFX.bolt(p, p.x, p.y, r * 0.8, rosterType(p._rosterEn) === 'crystalScarab' ? 'crystal' : 'ice', { trailLen: 7 });
+	else if(st === 'return') EFX.bolt(p, p.x, p.y, r * 0.8, 'ice', { trailLen: 9 });
+	else if(st === 'splinter'){
+		// a jagged splinter of bark
+		const ang = Math.atan2(p.vy || 0, p.vx || 1), sx = p.x - camera.x, sy = p.y - camera.y, L = p.width * 0.6;
+		ctx.save(); ctx.translate(sx, sy); ctx.rotate(ang);
+		ctx.fillStyle = '#6a4220'; ctx.beginPath(); ctx.moveTo(L, 0); ctx.lineTo(-L * 0.6, -4); ctx.lineTo(-L, 0); ctx.lineTo(-L * 0.6, 4); ctx.closePath(); ctx.fill();
+		ctx.strokeStyle = '#c9a066'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(L * 0.8, 0); ctx.lineTo(-L * 0.8, -1); ctx.stroke();
+		ctx.restore();
+		if((p.age & 3) === 0) EFX.debris('earth', p.x, p.y, 1, { speed: 1, scale: 0.4 });
 	}
-	ctx.restore();
+	else EFX.bolt(p, p.x, p.y, r * 0.8, rosterStyleEl(st, p._rosterEn));
 	return true;
 }
 

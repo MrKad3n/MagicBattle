@@ -7500,7 +7500,7 @@
 				if(!b.hideBody && (x < -R || y < -R || x > viewW + R || y > viewH + R)) continue;
 				vis.push(b);
 			}
-			LOD_CROWD = vis.length;
+			LOD_CROWD = vis.length; SPRITE.budget = 4;
 			const crowd = LOD_CROWD > CONFIG.perf.crowdAt && LOD_ENABLED.on && typeof document !== 'undefined';
 			STAMP_M.m = null;
 			for(let i = 0; i < vis.length; i++){
@@ -8239,7 +8239,7 @@
 	   alike apart from colour, size and density, so their animation is rendered once per look into small
 	   canvases and stamped with drawImage. Additive ('lighter') blending makes the stamp identical to drawing
 	   the layers in place. */
-	const SPRITE = { R: 22, frames: 24, fps: 15, cache: new Map() };
+	const SPRITE = { R: 22, frames: 24, fps: 15, cache: new Map(), budget: 4 };
 	let LOD_CROWD = 0;     // visible bodies this frame (set by W.draw) — more bodies → more of them use the fast path
 	function spriteScaleBucket(scale){ return clamp(Math.round(scale * 4) / 4, 0.25, 3); }
 	function spriteSet(col, sb){
@@ -8274,8 +8274,16 @@
 	function drawBodySprite(ctx, b, x, y, t, R, alpha, col){
 		const set = spriteSet(col, spriteScaleBucket(b.scale));
 		if(!set) return false;
-		const fi = Math.floor(t * SPRITE.fps + b.seed * 7.3) % SPRITE.frames;
-		const img = spriteFrame(set, fi < 0 ? fi + SPRITE.frames : fi);
+		let fi = Math.floor(t * SPRITE.fps + b.seed * 7.3) % SPRITE.frames;
+		if(fi < 0) fi += SPRITE.frames;
+		let img = set.frames[fi];
+		if(!img){
+			// new looks are rendered a few frames at a time (a cast with five colours used to build
+			// dozens of animation frames in its first moments); until then a neighbouring frame stands in
+			if(SPRITE.budget > 0){ SPRITE.budget--; img = spriteFrame(set, fi); }
+			else { for(let k = 1; k < SPRITE.frames && !img; k++) img = set.frames[(fi + k) % SPRITE.frames]; }
+			if(!img) return false;
+		}
 		const k = R / SPRITE.R, h = set.half * k;
 		ctx.globalCompositeOperation = 'lighter';
 		ctx.globalAlpha = alpha;
@@ -8561,9 +8569,69 @@
 		}
 		// small or crowded loose energy → stamped frames; big single blobs and anything taking a shape → full detail
 		if(!b.over && canSprite(b) && (R <= 26 || LOD_CROWD > 24) && drawBodySprite(ctx, b, x, y, t, R, alpha, col)) return;
+		if(canShapeSprite(b, R) && drawShapeSprite(ctx, b, x, y, t, R, alpha, col)) return;
 		drawBodyFull(ctx, b, x, y, t, R, alpha, col);
 	}
-	function drawBodyFull(ctx, b, x, y, t, R, alpha, col){
+	/* ---------- fast path for fully formed shapes (a spear, an arrow, a star …) ----------
+	   Once energy has settled into its shape, its look only depends on shape, colour, density and size, and the
+	   whole drawing turns with the body. So the shape (mass, inner currents, heart, edge) is rendered once per look
+	   into a few animation frames at angle 0 and stamped rotated; only the soft outer glow is drawn live.
+	   A full shaped body was three gradients, a clip and three ~200-point paths every frame. */
+	const SHAPE_SPRITE = { frames: 8, fps: 10, cache: new Map(), max: 48 };
+	function canShapeSprite(b, R){
+		if(!LOD_ENABLED.on || typeof document === 'undefined') return false;
+		if(b.over > 0 || b.flash > 0 || (b.morph != null && b.morph < 1) || (b.form || 0) < 0.97) return false;
+		if(R > 34 || R < 3 || b.scale < 0.1 || b.scale > 3.2) return false;
+		const sh = SHAPES[b.shape];
+		return !!(sh && sh.poly);
+	}
+	function shapeSpriteSet(b, R, col){
+		const sb = clamp(Math.round(b.scale * 8) / 8, 0.125, 3);
+		const Rc = clamp(Math.round(R / 4) * 4, 8, 32);
+		const key = b.shape + '|' + col.core + col.mid + col.outer + '|' + sb + '|' + Rc;
+		let set = SHAPE_SPRITE.cache.get(key);
+		if(!set){
+			if(SHAPE_SPRITE.cache.size >= SHAPE_SPRITE.max) SHAPE_SPRITE.cache.clear();
+			const sh = SHAPES[b.shape];
+			const ext = Math.max(sh.front || 1, sh.back || 1, 1.6);
+			set = { half: Math.ceil(Rc * ext * 1.25 + 6), frames: new Array(SHAPE_SPRITE.frames), shape: b.shape, sb, Rc, col };
+			SHAPE_SPRITE.cache.set(key, set);
+		}
+		return set;
+	}
+	function drawShapeSprite(ctx, b, x, y, t, R, alpha, col){
+		const set = shapeSpriteSet(b, R, col);
+		let fi = Math.floor(t * SHAPE_SPRITE.fps + b.seed * 3.1) % SHAPE_SPRITE.frames;
+		if(fi < 0) fi += SHAPE_SPRITE.frames;
+		let img = set.frames[fi];
+		if(!img){
+			if(SPRITE.budget > 0){
+				SPRITE.budget--;
+				img = document.createElement('canvas');
+				img.width = img.height = set.half * 2;
+				const g = img.getContext('2d');
+				const fake = { shape: set.shape, shapePrev: set.shape, form: 1, formPrev: 1, morph: 1, scale: set.sb, angle: 0, seed: 0, flash: 0, alive: true };
+				drawBodyFull(g, fake, set.half, set.half, fi / SHAPE_SPRITE.fps, set.Rc, 1, set.col, 2);
+				set.frames[fi] = img;
+			} else {
+				for(let k = 1; k < SHAPE_SPRITE.frames && !img; k++) img = set.frames[(fi + k) % SHAPE_SPRITE.frames];
+				if(!img) return false;
+			}
+		}
+		drawBodyFull(ctx, b, x, y, t, R, alpha, col, 1);      // the soft outer glow, live
+		const k = R / set.Rc, h = set.half * k;
+		const ca = Math.cos(b.angle), sa = Math.sin(b.angle);
+		ctx.globalCompositeOperation = 'lighter';
+		ctx.globalAlpha = alpha;
+		ctx.save();
+		ctx.transform(ca, sa, -sa, ca, x, y);
+		ctx.drawImage(img, -h, -h, h * 2, h * 2);
+		ctx.restore();
+		ctx.globalAlpha = 1;
+		return true;
+	}
+	// part: 0/undefined everything · 1 the outer glow only · 2 everything but the outer glow
+	function drawBodyFull(ctx, b, x, y, t, R, alpha, col, part){
 		const dense = clamp(1 / b.scale, 0.2, 8);
 		ctx.globalCompositeOperation = 'lighter';
 		// outer glow
@@ -8573,7 +8641,8 @@
 		const gr = R * (oG > 0 ? 1.5 : 2.1 + 0.25 / Math.max(0.25, b.scale)) * (shG.front ? 1 + (shG.front - 1) * fG * 0.6 : 1);
 		let g = ctx.createRadialGradient(x, y, R * 0.2, x, y, gr);
 		g.addColorStop(0, hexA(col.mid, 0.9)); g.addColorStop(0.45, hexA(col.outer, 0.35)); g.addColorStop(1, hexA(col.outer, 0));
-		ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, gr, 0, Math.PI * 2); ctx.fill();
+		if(part !== 2){ ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, gr, 0, Math.PI * 2); ctx.fill(); }
+		if(part === 1){ ctx.globalAlpha = 1; return; }
 
 		// the mass
 		const pts = buildOutline(b, x, y, R, t);

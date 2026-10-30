@@ -574,6 +574,15 @@
 		for(const e of T.allies) if(e && !e.dead && out.indexOf(e) < 0) out.push(e);
 		return out;
 	}
+	/* c82: at most 4 portals per caster at a time — opening a 5th closes the oldest. Portals fed by a Spatial Infinity source are not counted. */
+	const MAX_PORTALS = 4;
+	function capPortals(T, b){
+		if(b.infDerived || b.infSource || b.infFrom || b.infFromList) return;
+		const mine = T.bodies().filter(o => o !== b && o.alive && o.ownerId === b.ownerId && o.spatial && o.spatial.kind === 'portal' && !o.spatial.masters && !o.spatial.home && !o.infDerived && !o.infSource);
+		if(mine.length < MAX_PORTALS) return;
+		mine.sort((p, q) => (p.spatial.born || 0) - (q.spatial.born || 0));
+		for(let i = 0; i <= mine.length - MAX_PORTALS; i++){ T.ring(mine[i].x, mine[i].y, 4, 30, 14, '#b48cff'); T.kill(mine[i], 'leak'); }
+	}
 	/* stored Spatial energy opens a one-way portal home: to the Spatial Infinity source(s) it came from, or to its zone */
 	function formHomePortal(T, b){
 		const ids = (b.infFromList || (b.infFrom ? [ b.infFrom ] : [])).filter(id => { const m = T.bodies().find(q => q.id === id && q.alive && q.infSource); return m && ME.techOf(m, 'spatial') > 0; });
@@ -816,6 +825,7 @@
 			const dur = formDuration(b.amount);
 			if(s > 0){
 				const land = P.land;
+				capPortals(T, b);
 				b.spatial = { kind: 'portal', x1: land.x, y1: land.y, ox: land.x - b.x, oy: land.y - b.y, end: T.time + dur, born: T.time, cool: new Map(), flash: 1, r: portalRadius(b.amount) };
 				b.formRadius = b.spatial.r;
 				warpFx(T, b.x, b.y, land.x, land.y);
@@ -1341,40 +1351,54 @@
 		if(typeof document === 'undefined') return null;
 		const key = kind + R0 + TC('#8a6bff') + TC('#ffffff') + TC('#c9b8ff');
 		let c = GSPR.get(key); if(c) return c;
-		const half = Math.ceil(R0 * 2.9), cv = document.createElement('canvas'); cv.width = cv.height = half * 2;
+		const half = Math.ceil(R0 * 2.25) + 2, cv = document.createElement('canvas'); cv.width = cv.height = half * 2;
 		const g = cv.getContext('2d'); if(!g) return null;
 		if(kind === 'sing') drawSingularityFull(g, { seed: 0 }, half, half, R0, 1, 0, 1, true);
 		else drawRepulsorFull(g, { seed: 0 }, half, half, R0, 1, 0, 1, true);
 		c = { cv, half, R0 }; if(GSPR.size > 60) GSPR.clear(); GSPR.set(key, c); return c;
 	}
-	const gravBucket = (R) => clamp(Math.round(R / 8) * 8, 8, 64);
+	const gravBucket = (R) => clamp(Math.round(R / (R > 40 ? 8 : 4)) * (R > 40 ? 8 : 4), 8, 120);
+	const GCNT = { t: -1, n: 0 };      // how many gravity bodies were drawn in full this frame
+	function gravCheap(ctx, x, y, R, s, alpha){      // the fallback when the screen is full of them: one dark disc and one thin ring
+		ctx.globalAlpha = alpha; ctx.globalCompositeOperation = 'source-over';
+		ctx.fillStyle = s > 0 ? TC('#05010f') : TC('#f3efff'); ctx.beginPath(); ctx.arc(x, y, Math.max(2, R * 0.7), 0, TAU); ctx.fill();
+		ctx.strokeStyle = s > 0 ? TC('#9d85ff') : TC('#ffffff'); ctx.lineWidth = Math.max(1, R * 0.12); ctx.beginPath(); ctx.arc(x, y, Math.max(3, R * 1.05), 0, TAU); ctx.stroke(); ctx.globalAlpha = 1;
+	}
+	function gravBlit(ctx, sp, x, y, R, alpha, comp){
+		ctx.globalCompositeOperation = comp; ctx.globalAlpha = alpha;
+		const sc = R / sp.R0;
+		if(sc > 0.93 && sc < 1.07) ctx.drawImage(sp.cv, Math.round(x - sp.half), Math.round(y - sp.half));      // native size, no resampling
+		else { const w = sp.half * 2 * sc; ctx.drawImage(sp.cv, x - w / 2, y - w / 2, w, w); }
+	}
 	function drawSingularity(ctx, b, x, y, R, k, t, alpha){
-		const sp = R >= 3 ? gravSprite('sing', gravBucket(R)) : null;
+		if(t !== GCNT.t){ GCNT.t = t; GCNT.n = 0; }
+		const n = GCNT.n++;
+		if(n > 12 || R < 3) return gravCheap(ctx, x, y, R, 1, alpha);
+		const sp = gravSprite('sing', gravBucket(R));
 		if(!sp) return drawSingularityFull(ctx, b, x, y, R, k, t, alpha, false);
-		const sd = b.seed || 0, tilt = -0.2 + 0.12 * Math.sin(sd) + 0.04 * Math.sin(t * 0.6 + sd), sc = R / sp.R0;
-		ctx.save(); ctx.translate(x, y); ctx.rotate(tilt); ctx.scale(sc, sc);
-		ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = alpha;
-		ctx.drawImage(sp.cv, -sp.half, -sp.half);
-		ctx.restore();
-		if(R < 7) return;
+		const sd = b.seed || 0;
+		gravBlit(ctx, sp, x, y, R, alpha, 'source-over');
+		if(R < 7 || n > 6) return;
 		// a few motes of matter spiralling in (plain strokes — no gradients)
+		const tilt = -0.2 + 0.04 * Math.sin(t * 0.6 + sd);
 		ctx.save(); ctx.translate(x, y); ctx.rotate(tilt); ctx.scale(1, 0.3); ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'round';
-		for(let i = 0; i < 6; i++){
-			const u = ((t * 0.4 + i / 6 + sd * 0.13) % 1 + 1) % 1, r1 = R * (2.6 - 1.5 * u), a1 = sd * 3 + i * 2.39 + u * 5;
-			const u2 = Math.max(0, u - 0.06), r2 = R * (2.6 - 1.5 * u2), a2 = sd * 3 + i * 2.39 + u2 * 5;
+		for(let i = 0; i < 5; i++){
+			const u = ((t * 0.4 + i / 5 + sd * 0.13) % 1 + 1) % 1, r1 = R * (2.1 - 1.2 * u), a1 = sd * 3 + i * 2.39 + u * 5;
+			const u2 = Math.max(0, u - 0.06), r2 = R * (2.1 - 1.2 * u2), a2 = sd * 3 + i * 2.39 + u2 * 5;
 			ctx.globalAlpha = alpha * Math.sin(u * Math.PI) * 0.8; ctx.strokeStyle = u > 0.6 ? TC('#ffffff') : TC('#cbb8ff'); ctx.lineWidth = Math.max(0.8, R * 0.06);
 			ctx.beginPath(); ctx.moveTo(Math.cos(a2) * r2, Math.sin(a2) * r2); ctx.lineTo(Math.cos(a1) * r1, Math.sin(a1) * r1); ctx.stroke();
 		}
 		ctx.restore(); ctx.globalAlpha = 1;
 	}
 	function drawSingularityFull(ctx, b, x, y, R, k, t, alpha, still){
-		const sd = b.seed || 0, spin = 1, tilt = still ? 0 : -0.2 + 0.12 * Math.sin(sd) + 0.04 * Math.sin(t * 0.6 + sd), flat = 0.3;
+		const sd = b.seed || 0, spin = 1, tilt = still ? -0.2 : -0.2 + 0.12 * Math.sin(sd) + 0.04 * Math.sin(t * 0.6 + sd), flat = 0.3;
 		const H = R * (0.6 + 0.08 * Math.min(1, k));             // the event horizon
 		// space darkens around it
 		ctx.globalCompositeOperation = 'source-over';
-		let g = ctx.createRadialGradient(x, y, H * 0.6, x, y, R * 2.8);
+		const HX = still ? 2.2 : 2.8;
+		let g = ctx.createRadialGradient(x, y, H * 0.6, x, y, R * HX);
 		g.addColorStop(0, 'rgba(4,1,14,' + (0.7 * alpha) + ')'); g.addColorStop(0.4, 'rgba(10,4,32,' + (0.3 * alpha) + ')'); g.addColorStop(1, 'rgba(10,4,32,0)');
-		ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, R * 2.8, 0, TAU); ctx.fill();
+		ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, R * HX, 0, TAU); ctx.fill();
 		ctx.globalCompositeOperation = 'lighter';
 		g = ctx.createRadialGradient(x, y, H, x, y, R * 2.3);
 		g.addColorStop(0, hexA('#8a6bff', 0.4 * alpha)); g.addColorStop(0.45, hexA('#4a2bb8', 0.14 * alpha)); g.addColorStop(1, hexA('#24135e', 0));
@@ -1423,23 +1447,22 @@
 		ctx.globalAlpha = 1;
 	}
 	function drawRepulsor(ctx, b, x, y, R, k, t, alpha){
-		const sp = R >= 3 ? gravSprite('rep', gravBucket(R)) : null;
+		if(t !== GCNT.t){ GCNT.t = t; GCNT.n = 0; }
+		const n = GCNT.n++;
+		if(n > 12 || R < 3) return gravCheap(ctx, x, y, R, -1, alpha);
+		const sp = gravSprite('rep', gravBucket(R));
 		if(!sp) return drawRepulsorFull(ctx, b, x, y, R, k, t, alpha, false);
-		const sd = b.seed || 0, sc = R / sp.R0;
-		ctx.save(); ctx.translate(x, y); ctx.rotate(t * 0.4 + sd); ctx.scale(sc, sc);
-		ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = alpha; ctx.drawImage(sp.cv, -sp.half, -sp.half);
-		ctx.restore();
-		if(R < 7) return;
+		const sd = b.seed || 0;
+		gravBlit(ctx, sp, x, y, R, alpha, 'lighter');
+		if(R < 7 || n > 6) return;
 		ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = TC('#f1ecff');
-		for(let i = 0; i < 2; i++){      // two soft shockwaves of pushed space (plain rings)
-			const ph = ((t * 0.6 + i / 2 + sd * 0.1) % 1 + 1) % 1;
-			ctx.globalAlpha = alpha * Math.pow(1 - ph, 1.5) * 0.6; ctx.lineWidth = Math.max(1, R * (0.05 + 0.07 * ph));
-			ctx.beginPath(); ctx.arc(x, y, R * (0.7 + 1.9 * ph), 0, TAU); ctx.stroke();
-		}
+		const ph = ((t * 0.6 + sd * 0.1) % 1 + 1) % 1;      // one soft shockwave of pushed space (a plain ring)
+		ctx.globalAlpha = alpha * Math.pow(1 - ph, 1.5) * 0.55; ctx.lineWidth = Math.max(1, R * (0.05 + 0.07 * ph));
+		ctx.beginPath(); ctx.arc(x, y, R * (0.7 + 1.5 * ph), 0, TAU); ctx.stroke();
 		ctx.lineCap = 'round'; ctx.strokeStyle = TC('#ffffff'); ctx.lineWidth = Math.max(0.8, R * 0.06);
-		for(let i = 0; i < 6; i++){      // motes thrown outward
-			const u = ((t * 0.55 + i / 6 + sd * 0.17) % 1 + 1) % 1, a = sd * 2 + i * 2.39 + u * 0.6;
-			const r0 = R * (0.55 + 2 * u), r1 = Math.max(R * 0.5, r0 - R * (0.25 + 0.35 * u));
+		for(let i = 0; i < 5; i++){      // motes thrown outward
+			const u = ((t * 0.55 + i / 5 + sd * 0.17) % 1 + 1) % 1, a = sd * 2 + i * 2.39 + u * 0.6;
+			const r0 = R * (0.55 + 1.6 * u), r1 = Math.max(R * 0.5, r0 - R * (0.25 + 0.3 * u));
 			ctx.globalAlpha = alpha * Math.sin(u * Math.PI) * 0.7;
 			ctx.beginPath(); ctx.moveTo(x + Math.cos(a) * r1, y + Math.sin(a) * r1); ctx.lineTo(x + Math.cos(a) * r0, y + Math.sin(a) * r0); ctx.stroke();
 		}

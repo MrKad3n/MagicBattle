@@ -84,7 +84,10 @@
 		let key = null;
 		for(const k in moves) if(moves[k] && moves[k].name === atk.def.name){ key = k; break; }
 		if(!key) return;
-		n.sendCast({ ma: { k: key, w: w.id || MM.weaponId, ax: +(atk.aim ? atk.aim.x : player.facing).toFixed(2), ay: +(atk.aim ? atk.aim.y : 0).toFixed(2) } });
+		const ma = { k: key, w: w.id || MM.weaponId, ax: +(atk.aim ? atk.aim.x : player.facing).toFixed(2), ay: +(atk.aim ? atk.aim.y : 0).toFixed(2) };
+		// a Spatial-reinforced weapon strikes through a portal at the cursor — tell the others where, so they see it too
+		try { const ps = MM.portalStrike && MM.portalStrike(); if(ps) ma.pt = [ Math.round(ps.x), Math.round(ps.y) ]; } catch(e){}
+		n.sendCast({ ma });
 	}
 	/* extra fields for each state message (the base fields live in dungeon.html) */
 	root.__coopStateExtra = function(){
@@ -119,7 +122,7 @@
 		const w = weaponDef(m.w); if(!w || !w.moves || !w.moves[m.k]) return;
 		const base = w.moves[m.k];
 		const def = Object.assign({}, base);
-		R.atk = { key: m.k, def, t: 3, aim: { x: m.ax, y: m.ay }, phase: 'startup' };
+		R.atk = { key: m.k, def, t: 3, aim: { x: m.ax, y: m.ay }, phase: 'startup', portal: Array.isArray(m.pt) ? { x: m.pt[0], y: m.pt[1] } : null };
 		R.atk.phase = phaseOf(R.atk);
 		R.weapon = m.w; R.armed = true;
 		const a = allyRec(R.id); if(a && Math.abs(m.ax) > 0.16) a.facing = m.ax > 0 ? 1 : -1;
@@ -199,7 +202,9 @@
 		const aim = A2 ? A2.aim : { x: f, y: 0 };
 		const proxy = Object.create(MM);
 		Object.assign(proxy, { atk: A2 ? { def: A2.def, t: A2.t, aim: A2.aim, missExtra: 0, pulse: 0 } : null, phase: A2 ? A2.phase : '', charge: 0 });
-		proxy.weapon = () => w; proxy.sampleAim = () => aim; proxy.toArm = (vec) => -Math.atan2((vec && vec.x || 0) * f, vec && vec.y || 0);
+		proxy.weapon = () => w; proxy.sampleAim = () => aim;
+		proxy.portalStrike = () => (A2 && A2.portal) ? { x: A2.portal.x, y: A2.portal.y, active: true } : null;      // THEIR portal, not yours
+		proxy.portalCut = () => null; proxy.toArm = (vec) => -Math.atan2((vec && vec.x || 0) * f, vec && vec.y || 0);
 		try { return { swing: MM.weaponSwing.call(proxy), aim }; } catch(e){ return { swing: null, aim }; }
 	}
 	function reachOf(w){
@@ -230,6 +235,7 @@
 			castT: Math.max(R.castT, a.castFlash || 0), castColor: a.castColor || '#9fe6ff', aim: { x: sw.aim.x * (a.facing || 1), y: sw.aim.y }, reachPx: style ? reachOf(w) : 0,
 			squash: 0, angleLegs: !!R.atk, angleArms: !!R.atk, tint
 		};
+		if(R.atk && R.atk.portal && style && style !== 'whip' && style !== 'chain' && style !== 'gauntlets' && R.atk.phase !== 'recovery') o.portal = { x: R.atk.portal.x - camera.x, y: R.atk.portal.y - camera.y };      // their Spatial weapon's portal
 		try { res = Rig.draw(ctx, sx, sy, who, pose(R, a), o); } catch(e){ res = null; }
 		if(res && res.tip && R.atk && (R.atk.phase === 'active' || R.atk.phase === 'startup')) R.trail.push({ x: res.tip.x + camera.x, y: res.tip.y + camera.y, t: R.t });
 		while(R.trail.length && (R.t - R.trail[0].t > 0.12 || R.trail.length > 14)) R.trail.shift();

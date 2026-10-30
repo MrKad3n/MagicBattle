@@ -2973,3 +2973,179 @@ More than 24 energies on screen → cached-frame stamps; a spatial grid for meet
 
 ## c81 — Foes stand over the domain
 - The domain's colour grade and drifting particles used to be painted after creatures (`paintForeground`), tinting enemies. They are now `paintAmbient`, painted with the backdrop (behind terrain and every creature) whenever the host sets `hostDrawsDomainBackdrop` (dungeon.html does). Only the edge ring, countdown arc, marks and burst stay on top. The designer thumbnails are unchanged. magic-domain-art v4.
+
+## c82 — Gravity drawing pass 2, co-op weapon portals, portal cap
+- **Gravity visuals:** headless profiling showed `drawSingularity` was still the cost (≈0.4 ms per body, ≈14 ms for 30). The cached sprite is now smaller (halo 2.25 R instead of 2.9 R), has the tilt baked in, is blitted at native size (no rotation or resampling within ±7%), sizes step by 4 px (8 px past 40), and each frame adds only 5 plain strokes (6 bodies max) — the white hole adds one ring + 5 streaks. Past 12 gravity bodies in one frame the rest draw as a dark disc and a thin ring. Result: 30 bodies 13.7 ms → 0.5 ms in the same test.
+- **Co-op:** an ally's Spatial-reinforced weapon now shows its portal on your screen. The sender adds the portal position (`pt`) to its swing message; the ally's rig draws the portal and the swing uses THEIR portal (before, the ally's swing proxy read your own cursor, or none). coop-combat v2.
+- **Portal cap:** a caster keeps at most 4 portals; opening a 5th closes the oldest (`capPortals` in magic-techniques.js). Portals fed by a Spatial Infinity source (infDerived/infSource/infFrom), the Infinity master portal and one-way home portals are not counted. New tools/portal-tests.js. techniques v47.
+
+## c83 — Domain lag: the backdrop is drawn far cheaper
+- Headless profiling (forced raster each frame) showed the domain backdrop cost 10–40 ms per frame (the 1400 px radius meant huge gradients and fills being rasterised mostly off-screen), while the JS time looked like ~1 ms because canvas work is deferred.
+- **Visible-part drawing:** the cached static layer is blitted with a source rectangle cut to the screen; the ambience and vignette fills are clipped to the screen (`viewRect`, `fillVis`).
+- **Baked lighting:** light rays, the vignette and (for non-pulsing looks) the ambience are now painted once into the cached layer (`paintLighting` mode `bake`) instead of every frame. While the domain is still expanding they are drawn live, and the layer is rebuilt once when it reaches full size.
+- Measured per frame with forced raster: default 20→10 ms, abyss 33→20 ms, toxic 30→17 ms, heaven 10→5.5 ms.
+- Rays no longer sway slightly (they are baked at t = 0).
+- magic-domain-art v5. A first-frame hitch of ~2 s seen only in the headless software renderer was not reproducible once the layer was flushed (the layer itself builds in ~25 ms), so it is likely a software-GPU shader-compile artifact.
+
+## c84 — Basic enemy attacks reworked (looks, hit-feel, fixes)
+Covers every basic dungeon enemy except slimes and bandits/wizards. Bosses and mini-bosses (including elderTreant and babyDragon) are unchanged.
+
+- **New shared effects layer `enemy-fx.js` (`window.EFX`):**
+  - Per-element palettes (fire, magma, ice, earth, crystal, nature, spore, mud, necro, sand, water, coral, poison, wind, metal, and others).
+  - Cached glow, smoke and rock sprites, so nothing builds a gradient per particle.
+  - One pooled particle system, capped at 650 particles (220 in online-lite): embers, sparks, shards, debris that lands on the floor, smoke, rings, ground waves, slashes, decals.
+  - Shared drawing for projectiles (with trails), beams, lightning, flame strips, cracks, spikes, ghosts and telegraphs.
+  - Enemy telegraphs now go through `efxTelegraph`, which draws element-coloured warning circles, lines and boxes. Large circles get fainter as they grow.
+  - Hooked into dungeon.html: `EFX.update` in the update loop, `drawBack` before enemies, `drawFront` after enemy projectiles. Kit projectiles tagged `_efxEl` get an element burst when they hit.
+- **Every kit's drawing has been rewritten:** fire, ice, earth, forge, wildes, advanced roster and late. The old flat circles and rectangles are now proper bolts, arrows, icicles, boulders, vines, webs, coral, twisters, bugs, ghosts and so on, with charge-up, impact and debris effects.
+- **Attacks that now actually connect:** many attacks used to fly the wrong way, stop short or never hit. They now aim at, lead, chase or bracket the player. Examples:
+  - Fire: the imp dive locks on its target, and ember mines are lobbed toward you.
+  - Ice: frostquake spike waves; the snow beast pounces.
+  - Earth: decoy shrapnel.
+  - Forge: drone sweep beam; wolf circle-and-lunge.
+  - Wildes: spore cloud chases you; vine lash reaches you; dark-fade strikes from behind.
+  - Roster: furnace leech, mantis zig-zag, eel snap turn.
+  - Late: phase strike passes through you, soul echo copies converge on you, imp leap shadows track you, coral shards bracket you, depth crush / sandstorm prison crush the centre, abyssal current swims past and rams back, sand jet rakes down across you, living-carpet safe rings are beside you, whirlwinds drift in, tomb rage closes distance.
+- **Bugs fixed:**
+  - `advanced-roster-kit.js` was missing a function header, so the whole file never loaded. The 12 roster enemies (cinder beetle, furnace leech, ash revenant, magma harvester, frost mantis, glacier eel, crystal scarab, snowbound mimic, barkback beetle, pollen moth, root parasite, jungle chameleon) had no kit attacks at all.
+  - `tickSentinel` was defined in both the ice kit and the forge kit, so the glacier sentinel ran the iron sentinel's code. They are now renamed `tickGlacierSentinel` and `tickIronSentinel`.
+  - `fireKitFloorY` now respects the sandbox platform.
+- **Co-op:** kit style tags are plain strings, so guests draw the same projectiles as the host.
+- **Versions:** enemy-fx v1, fire kit v6, ice v5, earth v4, forge-wildes v4, wildes v2, late v2, advanced-roster v4.
+
+## c85 — Lag fixes (pollen moth, spore fungus, imp, Mirror War) and boss versions of enemies
+**Pollen moth duplicates**
+- Migration (split into three small moths) was also on the moth's normal spell list, so every small moth could split again. The swarm grew without limit.
+- Fix: migration now only works for a full-size moth below 60% health, once, and only while fewer than 6 small moths are alive. Otherwise the moth does Flutter Burst instead.
+- Kit-spawned children (moths, leeches) are capped at 10 alive.
+- Children now inherit the parent's survival wave (`_surv`, `_wave`, a co-op key). Before, they were never counted or cleared, so they piled up wave after wave.
+
+**Hotbar rebuilt every frame**
+- While any spell was on cooldown, the whole hotbar was rebuilt every frame: DOM plus a full `MagicEngine.validate` of every rune spell. That was a steady cost, and largest for big spells like Mirror War (61 runes).
+- Ticking cooldowns now only move the overlay bars (`updateHotbarCooldowns`). The full rebuild happens when a cooldown ends.
+
+**Mirror War spike**
+- Fully formed shaped energy (spear, arrow, star …) is now drawn from cached animation frames (`drawShapeSprite`), rendered once per look at angle 0 and stamped rotated. Only the outer glow is drawn live.
+- New sprite frames are built at most 4 per frame (a neighbouring frame stands in until then).
+- Headless measurements:
+  - First-cast worst frame: 66 → 33 ms.
+  - Spell drawing per frame with 13 bodies: 8–13 → 3–5 ms.
+  - Second-cast worst frame: 50 → 24 ms.
+- magic-engine v77.
+
+**Spore fungus**
+- Mycelium spawned a burst and a projectile for every close pair of tendrils every 16 frames. The tendrils were all bunched at the root, and every mycelium looped over all effects.
+- The tendrils now race toward the player at different lengths, and each erupts once where it stops.
+- Mushrooms puff every 34 frames (was 22), only while you're within 280 px. They now live 220 frames (was 320).
+- The cloud drops 13 heavier spores (was 24 light ones).
+- No more than 26 spore drops can be in the air.
+- Result: 8 fungi went from 209 live effects to 65.
+
+**Imp**
+- Wildfire Trail now drops one burning patch per patch width (every 9 frames, was 5). The burning patches are drawn with fewer flames.
+- Result: 8 imps went from 90 trail pieces to 22.
+
+**Enemy effects quality**
+- EFX watches the real frame time. If frames stay above ~23 ms it steps down: a smaller particle pool, shorter trails, and plain two-glow bolts once 20–40 or more are in flight. It steps back up when the game is smooth again.
+- `EFX.quality` can be read or set (0.35–1).
+- Repeated hit bursts on the same spot merge.
+- enemy-fx v2.
+
+**Boss versions of enemies** (new `elite-variants.js`)
+
+| Tier | Size | HP | Move | Attack pace | Attack size | Damage | Projectile speed | Extra |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ★ Alpha | ×1.32 | ×4 | ×1.18 | ×0.72 | ×1.28 | ×1.25 | ×1.12 | split shots |
+| ★★ Elder | ×1.5 | ×7 | ×1.26 | ×0.62 | ×1.42 | ×1.45 | ×1.2 | + Echo (repeats each attack 0.9 s later) and Nova (a 0.75 s charge, then a jumpable ground shockwave, 230 px) |
+| ★★★ Tyrant | ×1.68 | ×11 | ×1.34 | ×0.52 | ×1.56 | ×1.7 | ×1.28 | + Enrage under 50% (faster again, Nova twice as often, a ring of 10 shards) |
+
+- **How it works across the kits:** while a boss version acts, `window.__eliteEn` points at it.
+  - The attack-size helpers (`atkS`, `lAtkS`, `wAtkS`, `rosterAtkS`) read that pointer, and so do `spawnEnemyProj` and `damagePlayer`.
+  - The kit `*Hit` / `*Spawn` helpers re-enter that scope when lingering effects act later.
+  - Split shots are copied a frame later, so they keep the kit's projectile style.
+- **Visuals:** an element aura, a rotating rune ring at the feet, a crown with one horn per tier, a "★★ Elder Imp" name plate, drifting motes, a glowing ground during the Nova charge, and a red aura when enraged.
+- **Rewards:** boss versions drop loot 1 + tier times.
+- **Survival:**
+  - Promotion starts at wave 5. The chance is 5% + 0.4% per wave, capped at 24%.
+  - Elders appear from wave 15 and Tyrants from wave 30, with growing shares.
+  - At most 1 + wave/12 boss versions are alive at once (max 5).
+  - The first boss version of each tier is guaranteed when its band is reached, with a banner.
+  - Test hook: `SurvivalMode.debug.spawnElite(type, tier)`.
+- **Co-op:** the tier syncs in the enemy snapshot (`el`), so guests see the same crown, aura and shockwave.
+
+**Versions:** survival-mode v7, advanced-roster v5, wildes v3, fire v7, late v3, elite-variants v1, tutorials v11.
+
+## c86 — Survival spawn queue and cap; Spawn Menu in the Sandbox / Mage Arena
+**Survival: enemies arrive over time, with a cap**
+- A wave's enemies no longer fill the field at once. They arrive one at a time, `gapBase − gapPerWave·wave` frames apart (95 at wave 1, never under 38) plus up to 45 random frames.
+- `BAL.crowd` now holds the cap: `aliveBase` 6, +1 per 8 waves, `aliveCap` 18 (co-op adds 3 per extra player). Before it was 10 / 12 / 22.
+- When the cap is reached the rest of the wave waits in a queue. After a kill opens a slot, the next enemy arrives after at least `refill` (30) frames.
+- The wave still ends only when the whole queue has arrived and everything is dead. The remaining-enemies count includes the queue.
+- Test (wave 20, killing one enemy every 3 s): 13 enemies arrived about 100 frames apart; the live count never went above the cap of 8.
+
+**Spawn Menu** (`spawn-menu.js`, new)
+- A green ☰ Spawn Menu button next to the Mage Arena button (Sandbox and Mage Arena) opens a side drawer. The game keeps running behind it.
+- Tabs: Enemies (54), Mini-bosses (3), Bosses (11), and the Rune Mages (Mage Arena only). Search box; each row shows colour, HP and whether it flies.
+- Options: version (Normal, ★ Alpha, ★★ Elder, ★★★ Tyrant, using `EliteVariants.apply`), count (×1/3/5/10), health (Normal, ×10, ∞ Training), Hostile or Passive, place (next to you or arena centre), and Nightmare mutations (from `NightmareSystem`, with tooltips).
+- Clear spawned / Clear everything. Dead spawned enemies leave the list after 4 seconds.
+- Test: all 68 types spawned at Normal, Alpha and Tyrant with no errors; 68 Elders at once ran fine.
+
+## c87 — Rune mage list moved into the Spawn Menu
+- The left-hand "Summon a rune mage" panel is gone. The Mage Arena now opens with the Spawn Menu already showing its Rune mages tab, which also holds the Grand Arcanist trial link and Clear mages.
+
+## c88 — Spawn Menu fixes
+- Enemies spawned from the menu are now valid targets in the Sandbox / Mage Arena (`getAllTargets` only listed dummies and mages there), so spells and weapons hit them.
+- Menu drawer made opaque, without a blurred shadow, on its own layer, and built hidden at start; groups arrive 70 ms apart. (Lag could not be reproduced in the headless test: opening ~1 ms, frames normal.)
+
+## c89 — Fair arming and wind-ups for instant hits; Spawn Menu bosses use their real attacks; menu built once
+**Instant hits made fair (all basic enemies; bosses already passed the check)**
+- Found with a harness: every attack of every enemy was cast at 300 px and 650 px from a standing player, and the ticks until the first hit were measured. 62 attacks landed in under about 0.4 s (a few in under 0.1 s).
+- **Arming (enemy-fx.js `armed`)**: all seven kit hit helpers (`fireKitHit`, `iceHit`, `earthHit`, `forgeHit`, `wHit`, `rosterHit`, `lHit`) now ask first. For the first 36 frames of an attack, a hazard cannot hurt unless the enemy is within melee reach (210 px). The hazard is already drawn, and a warning ring shows the time left (once per spot). Stand in it afterwards and it hits for full damage.
+- **Projectiles born on you** (`armProjectile`, in `spawnEnemyProj`): a projectile that appears within 190 px of the player, with no enemy next to them, cannot hurt for 28 frames. Boss attacks and close-quarters shots are exempt. Roots and pollen clouds from the roster kit wait 30 frames before their first tick.
+- **Wind-ups (`EFX.cast`, `WINDUP` table, ~40 attacks)**: rolls, dives, leaps, bites and strikes used from range now charge up first (14–26 frames): gathering glow plus a ! over the enemy. Enemies already within 120 px skip it. Stun cancels the wind-up. `en._castTick` marks when an attack really started (kit casts, Echo casts and the roster kit's own casts all set it).
+- Result: attacks hitting in under about 0.5 s went from 62 to 3 (Frost Loop, Venomous Fang and Dune Ambush, at 27–29 frames from 650 px, which is the wind-up plus travel). Full sweeps of 216 attacks (normal and all-Tyrant): 0 errors.
+
+**Spawn Menu: bosses use their own attacks**
+- Ignaroth and the Frostbound Knight only ran their kits in dungeons or Survival, so in the Sandbox they used a fallback. The kit gates now also accept the Sandbox, and a boss room is built on first boss spawn (`sandboxBossRoom`).
+- Seraphel and the Infernal Kitten keep a fight state machine: `sandboxBossStart` runs it (cutscene, then the real phases). Seraphel hovers relative to the Sandbox floor (it was hard-coded to the cathedral's height).
+- Not listed any more: Zenith (a raid boss with its own fight) and the Magma Warden (needs the Fire Dungeon's room).
+- Checked per boss, 25 s each: Ignaroth, Kryonax, Frostbound Knight and Storm Raptor run their kits; Seraphel, the Kitten, Ferrox, Deep Root Horror, Void Arbiter, Pyraxis, Terravox and the Frost Hatchling fire their attack lists.
+
+**Spawn Menu speed**
+- Everything is built once at start. Switching tabs, picking options and searching only change visibility and colours; nothing is created or destroyed afterwards. The check-up timer runs only while something is spawned. Hovering an entry loads and decodes its art first. A "worst frame" readout in the header shows how the game is doing while it is open.
+
+## c90 — Mini-boss overhaul: new sprites, movesets, Alpha/Elder/Tyrant tiers
+**New sprites** (`images/minibosses/<boss>-<tier>.png`, 16 sheets, about 5.5 MB in all)
+- Frostbound Knight, Magma Warden, Storm Raptor and Elder Treant are drawn from code by `tools/miniboss-art/` (a rig per boss: nested joints, painted parts with cel shading, rim light and glows, and an animation curve per row). `node tools/miniboss-art/build.js` renders them; `python3 tools/miniboss-art/shrink.py` palette-compresses them.
+- Each sheet has 8 rows × 8 frames at 216 px: idle, move, attack A, attack B, cast, special, hurt, death.
+- Four looks per boss:
+  - Base and Alpha: Alpha adds gilded trim and blossoms.
+  - Elder: runes, crystal growths, vents, mushrooms.
+  - Tyrant, a redesign: the Winter Tyrant (black ice, glacier crown and horns, shattered cape, jagged blade); the Molten Tyrant (white-hot core, burning crown and huge horns); the Tempest Sovereign (silver plumage, violet lightning, four wings, storm halo, streamers); the Blighted Elder (charred bark, burning crimson canopy, black antler crown, amber sap).
+
+**miniboss-kit.js (new): one engine for the four**
+- Takes over once the fight starts. Waking stays with the old code: the ice court, the Warden's lever, Living Wilds arenas (their arena events keep running), the Sylvaris cave cutscene. Open world: engages within detection range and gives up if you run far away.
+- Every damaging thing is telegraphed (a warning shape fills up first): strikes, zones, jumpable ground waves, erupting pillars, beams, meteors, clouds, rods, cages and glyphs. Heavy attacks leave recovery windows.
+- Movesets:
+  - Knight: Cleave combos, Lunge, Frost Wave, Hailbreaker leap, Guard and counter. Elder adds Blizzard Sigils and Frozen Echo. Tyrant adds Shatter Rush and Absolute Zero.
+  - Warden: Haymaker combos, Magma Slam geyser lines, Slag Hurl, Overheat Charge (dazes itself on the stop), Furnace Breath. Elder adds Eruption Vents and Core Overdrive beam. Tyrant adds Meltdown.
+  - Raptor: Thunder Dive, Talon Rake, Feather Volley, Static Orbs, Gale Blast. Elder adds Storm Cell and Chain Lightning rods. Tyrant adds Eye of the Storm.
+  - Treant: Ancient Smash, Root Upheaval, Bark Barrage, Stomp Charge, Entangling Roots. Elder adds Spore Bloom and Saplings. Tyrant adds World Tree.
+- Tiers (`TIER` table):
+
+| Tier | HP | Damage | Speed | Cooldowns | Recovery | Chains |
+| --- | --- | --- | --- | --- | --- | --- |
+| Alpha | ×2.6 | ×1.25 | ×1.12 | ×0.85 | ×0.72 | up to 2 |
+| Elder | ×4.5 | ×1.5 | ×1.22 | ×0.72 | ×0.5 | up to 3 |
+| Tyrant | ×10 | ×1.85 | ×1.32 | ×0.58 | ×0.3 | up to 4 |
+
+- **Tyrant phase 2 (under 55%)**: the ultimate fires at once and then about every 25 s, with 50% damage reduction while it runs. Each also gets a lasting threat:
+  - Knight: two frost wraiths and a 30% frost shell while they live.
+  - Warden: a scorching aura.
+  - Raptor: storm after-images that copy its dive.
+  - Treant: burning leaves keep falling.
+- At Tyrant base numbers the mini-bosses have 40k–96k HP (dungeon bosses: 15k–25k).
+- `EliteVariants.apply` hands mini-bosses to `MiniBossKit.applyTier`. The generic Nova, Echo, split shots, crown and aura are switched off for them; damage scales through the same scope.
+- Survival mini-boss waves get tiers: Alpha from wave 15, Elder from 30, Tyrant from 45, and always Tyrant after wave 250. HP is ×1.35 / 1.8 / 2.6 on top of that wave's boss curve (`BAL.miniTierHp`).
+- The Spawn Menu lists all four under Mini-bosses (the Magma Warden works anywhere now).
+- Tests: every boss × tier ran in the Sandbox with no errors (all attacks seen across runs, phase 2 reached); the Ice dungeon knight and the Fire dungeon warden (via its lever) hand over cleanly; Survival waves 10/15/30/55/80 spawn Normal/Alpha/Elder/Tyrant/Tyrant. Four phase-2 Tyrants at once: about 21 ms per frame in the software-rendered test browser.
